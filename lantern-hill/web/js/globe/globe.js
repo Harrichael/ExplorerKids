@@ -18,7 +18,7 @@ import { makeGlobe } from './stage.js';
 
 const css = document.createElement('style');
 css.textContent = `
-.at-globe #world,.at-globe .vignette,.at-globe .hud,.at-globe #stick,.at-globe #talk,.at-globe #use,.at-globe #prompt,.at-globe #dialog{display:none!important}
+.at-globe #world,.at-globe .vignette,.at-globe .hud,.at-globe #stick,.at-globe #talk,.at-globe .use,.at-globe #prompt,.at-globe #dialog{display:none!important}
 #globe{position:fixed;inset:0;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);animation:fadein .35s ease-out;
   background:radial-gradient(1.5px 1.5px at 12% 18%,#fff9 50%,transparent),radial-gradient(1px 1px at 78% 12%,#fff8 50%,transparent),radial-gradient(1.5px 1.5px at 64% 82%,#fff7 50%,transparent),radial-gradient(1px 1px at 30% 70%,#fff6 50%,transparent),radial-gradient(1px 1px at 88% 56%,#fff7 50%,transparent),radial-gradient(ellipse at 50% 40%,#3b2f63,#1a1430 72%)}
 #globe header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px max(16px,env(safe-area-inset-left,0px)) 4px}

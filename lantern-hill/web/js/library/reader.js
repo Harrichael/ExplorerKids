@@ -21,7 +21,7 @@ const saved = load('books'), state = saved && typeof saved === 'object' ? saved 
 const saveState = () => save('books', state);
 const css = document.createElement('style');
 css.textContent = `
-.reading-book .hud,.reading-book #stick,.reading-book #talk,.reading-book #use,.reading-book #prompt,.reading-book #dialog{display:none!important}
+.reading-book .hud,.reading-book #stick,.reading-book #talk,.reading-book .use,.reading-book #prompt,.reading-book #dialog{display:none!important}
 #reader{position:fixed;inset:0;display:flex;flex-direction:column;touch-action:none;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);animation:rfade .6s ease-out}
 @keyframes rfade{from{opacity:0}}
 #reader header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px max(16px,env(safe-area-inset-left,0px)) 12px;background:linear-gradient(rgba(26,19,32,.75),rgba(26,19,32,0))}
