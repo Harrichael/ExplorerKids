@@ -125,12 +125,13 @@ box(.32,.05,.32,T(C.woodDk),0,.03,0,libLantern); box(.26,.4,.26,glowM(0xffcf73,1
 for (const [sx,sz] of [[-.14,-.14],[.14,-.14],[-.14,.14],[.14,.14]]) box(.04,.42,.04,T(C.woodDk),sx,.26,sz,libLantern);
 add(new THREE.ConeGeometry(.24,.18,4), T(C.woodDk), 0,.55,0, libLantern).rotation.y = Math.PI/4;
 const libLight = new THREE.PointLight(0xffb85c, .9, 7, 2); libLight.position.set(-7.6, 1, 2.6); scene.add(libLight);
-const globe = grp(-5.6, 0, -.2);
+export const GLOBE = {x:-5.6, y:1.05, z:-.2};
+const globe = grp(GLOBE.x, 0, GLOBE.z);
 cyl(.25,.32,.08,T(C.woodDk),0,.04,0,globe); for (let i=0;i<3;i++) cyl(.025,.025,.7,T(C.woodDk),Math.cos(i*2.1)*.15,.38,Math.sin(i*2.1)*.15,globe,5);
 const globeTex = tex(256,128,(g,w,h)=>{ g.fillStyle='#3a5f8a'; g.fillRect(0,0,w,h); g.fillStyle='#c9b48a'; for (let i=0;i<14;i++){ g.beginPath(); g.ellipse(rand()*w, rr(20,h-20), rr(10,30), rr(8,18), rand()*3, 0, 7); g.fill(); } });
 // the Explorer's Globe repaints it with the real map once someone has used it
-export const globeBall = add(new THREE.SphereGeometry(.4,22,16), T(0xffffff,{map:globeTex}), 0,1.05,0, globe); outline(globeBall, 1.04);
-const gring = add(new THREE.TorusGeometry(.46,.02,6,30), T(C.gold), 0,1.05,0, globe); gring.rotation.y = Math.PI/2;
+export const globeBall = add(new THREE.SphereGeometry(.4,22,16), T(0xffffff,{map:globeTex}), 0,GLOBE.y,0, globe); outline(globeBall, 1.04);
+export const globeRing = add(new THREE.TorusGeometry(.46,.02,6,30), T(C.gold), 0,GLOBE.y,0, globe); globeRing.rotation.y = Math.PI/2;
 col(-5.95, -5.25, -.55, .15);
 
 // ===== HEARTH ROOM (x -4.5..4.5) =====
