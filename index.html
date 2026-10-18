@@ -1067,6 +1067,19 @@ embers.frustumCulled = false; scene.add(embers);
 // =====================================================================
 // CHARACTERS
 // =====================================================================
+// rounded limb: tapered tube with domed ends, centered on its middle (length L between cap centers)
+function limbGeo(r1, r2, L, seg=14){
+  const pts = [], n = 6;
+  for (let i = 0; i <= n; i++) { const a = -Math.PI/2 + i/n*Math.PI/2; pts.push(new THREE.Vector2(Math.max(.0001, r2*Math.cos(a)), -L/2 + r2*Math.sin(a))); }
+  for (let i = 0; i <= n; i++) { const a = i/n*Math.PI/2; pts.push(new THREE.Vector2(Math.max(.0001, r1*Math.cos(a)), L/2 + r1*Math.sin(a))); }
+  return new THREE.LatheGeometry(pts, seg);
+}
+// smooth body profile [[y, r], ...] spun around Y, recentred on cy
+function latheGeo(prof, cy, seg=22){
+  const curve = new THREE.SplineCurve(prof.map(([y, r]) => new THREE.Vector2(r, y - cy)));
+  const pts = curve.getPoints(28).map(v => new THREE.Vector2(Math.max(.0001, v.x), v.y));
+  return new THREE.LatheGeometry(pts, seg);
+}
 function human(o){
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
   body.scale.setScalar(o.scale || 1);
@@ -1082,20 +1095,22 @@ function human(o){
   const legs = [];
   for (const sx of [-1, 1]) {
     const L = new THREE.Group(); L.position.set(sx*legX, .74, 0); body.add(L);
-    if (o.shorts) { P(CG(.12,.11,.26,10), o.pants, 0, -.13, 0, L); P(CG(.08,.075,.3,8), o.skin, 0, -.4, 0, L); P(CG(.085,.085,.1,8), o.socks || C.cream, 0, -.55, 0, L, false); }
-    else P(o.slimLegs ? CG(.09,.075,.6,10) : CG(.11,.095,.6,10), o.pants, 0, -.3, 0, L);
+    if (o.shorts) { P(limbGeo(.125,.112,.16), o.pants, 0, -.1, 0, L); P(limbGeo(.074,.068,.3), o.skin, 0, -.36, 0, L); P(CG(.08,.078,.1,12), o.socks || C.cream, 0, -.55, 0, L, false); }
+    else P(o.slimLegs ? limbGeo(.098,.074,.5) : limbGeo(.118,.092,.5), o.pants, 0, -.28, 0, L);
     if (o.boots) P(CG(.115,.12,.32,10), o.boots, 0, -.52, 0, L);
     const shoe = P(SG(.12,10,8), o.shoe, 0, -.65, .05, L); shoe.scale.set(girl ? .85 : boy ? 1.08 : 1, .6, girl ? 1.3 : 1.5);
     if (o.strap) P(new THREE.BoxGeometry(.2,.03,.05), o.strap, 0, -.6, .1, L, false);
-    P(new THREE.BoxGeometry(.22,.04,.34), o.sole || 0x2a1e1a, 0, -.71, .05, L, false);
+    P(SG(.12,14,8), o.sole || 0x2a1e1a, 0, -.7, .05, L, false).scale.set(girl ? .9 : 1.02, .22, girl ? 1.35 : 1.55);
     legs.push(L);
   }
-  P(CG(girl ? .26 : boy ? .3 : .32, girl ? .3 : .3, .16, 12), o.pants, 0, .76, 0, body);
+  P(SG(girl ? .27 : boy ? .3 : .32, 18, 12), o.pants, 0, .8, 0, body).scale.set(1, .5, .9);
   if (o.skirt && !o.dress) P(CG(.27,.44,.42,16), o.skirt, 0, .66, 0, body);
   const flows = [];
   if (o.dress) { const df = o.dressFlare || .46; const dm = P(new THREE.CylinderGeometry(.25,df,.5,24,4), o.dress, 0, .66, 0, body); const tm = P(new THREE.CylinderGeometry(df+.005,df+.005,.04,24), o.dressTrim || C.cream, 0, .43, 0, body, false); flows.push([dm,.91,.5],[tm,.91,.5]); }
-  P(CG(shR, waistR, .66, 14), shirtMat, 0, 1.08, 0, body);
-  P(new THREE.SphereGeometry(shR,14,8,0,Math.PI*2,0,Math.PI/2), shirtMat, 0, 1.41, 0, body);
+  const mid = (shR + waistR)/2;
+  P(latheGeo([[.74, .0001], [.755, waistR*.9], [.84, waistR*1.03], [.98, waistR*1.03], [1.14, mid*1.01], [1.3, shR*1.05], [1.39, shR*.98], [1.46, shR*.74], [1.5, .11], [1.53, .0001]], 1.13), shirtMat, 0, 1.13, 0, body).scale.set(1, 1, .9);
+  // a soft hem band where the top meets the trousers (storybook stitching detail)
+  if (!o.dress && !(o.coat && o.closed)) { const hm = P(new THREE.TorusGeometry(waistR*.94, .028, 8, 22), o.hem || o.sleeve || o.shirt, 0, .79, 0, body, false); hm.rotation.x = Math.PI/2; hm.scale.set(1, .9, 1); }
   const cl = o.coatLen || .95, cf = o.coatFlare || .44;
   if (o.coat) {
     const gap = o.closed ? 0 : .45;
@@ -1127,12 +1142,13 @@ function human(o){
   P(CG(.085,.095,.12,10), o.skin, 0, 1.5, 0, body, false);
   const arms = [];
   for (const sx of [-1, 1]) {
-    const A = new THREE.Group(); A.position.set(sx*armX, 1.38, 0); A.rotation.z = sx*(girl ? .08 : .12); body.add(A);
+    const A = new THREE.Group(); A.position.set(sx*armX, 1.38, 0); A.rotation.z = sx*(girl ? .14 : .18); A.rotation.x = -.06; body.add(A);
     const sl = o.sleeve || o.coat || o.shirt;
     P(SG(.1,10,8), sl, 0, 0, 0, A, false);
-    P(girl ? CG(.072,.062, o.shortSleeve ? .24 : .52, 10) : CG(.085,.07, o.shortSleeve ? .24 : .52, 10), sl, 0, o.shortSleeve ? -.12 : -.26, 0, A);
+    const ar = girl ? [.078,.064] : boy ? [.092,.074] : [.09,.072];
+    P(o.shortSleeve ? limbGeo(ar[0]*1.08, ar[0]*1.02, .14) : limbGeo(ar[0], ar[1], .46), sl, 0, o.shortSleeve ? -.07 : -.24, 0, A);
     if (o.puffSleeve) P(SG(.12,10,8), sl, 0, -.04, 0, A, false).scale.set(1,.8,1);
-    if (o.shortSleeve) P(CG(.065,.06,.3,8), o.skin, 0, -.39, 0, A);
+    if (o.shortSleeve) P(limbGeo(ar[1]*.92, ar[1]*.85, .3), o.skin, 0, -.36, 0, A);
     if (o.cuff) { const c = P(new THREE.TorusGeometry(.072,.022,6,12), o.cuff, 0, -.52, 0, A, false); c.rotation.x = Math.PI/2; }
     P(SG(.092,12,10), o.skin, 0, -.61, .01, A).scale.set(.95, 1, .85);
     P(SG(.038,8,6), o.skin, -sx*.07, -.58, .05, A, false);
