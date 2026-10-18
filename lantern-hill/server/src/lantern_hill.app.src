@@ -1,6 +1,6 @@
 {application, lantern_hill,
  [{description, "Serves the Lantern Hill HQ game"},
-  {vsn, "0.1.1"},
+  {vsn, "0.1.2"},
   {registered, [lantern_hill_sup, lantern_hill_versions, lantern_hill_subscribers, lantern_hill_watch, lantern_hill_follow]},
   {mod, {lantern_hill_app, []}},
   {applications, [kernel, stdlib, cowboy]},

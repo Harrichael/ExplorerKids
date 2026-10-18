@@ -1,0 +1,83 @@
+#!/usr/bin/env escript
+%%! +Bd
+%% Serves Lantern Hill following a git branch: bin/follow <branch> [seconds between polls, 3-10]
+%%
+%% Most pushes go live inside the running node. One that upgrades a dependency can't, since two
+%% versions of cowboy can't share a node, so this script runs the server as a line of
+%% generations. When a generation needs replacing it asks for a successor; the successor
+%% starts from the new code and shares the port; only once it is serving does the old one stop.
+%% Browsers never find the port closed, and open tabs reconnect to the successor.
+%%
+%% The protocol is a line each way. A generation prints "lantern_hill handover <server dir>" to
+%% ask for a successor and "lantern_hill serving" once it listens. On its stdin it is told
+%% "stay" when its successor failed to start, and stdin closing means stop.
+-mode(compile).
+
+%% Long enough for a successor to fetch and build new dependencies.
+-define(START_LIMIT, 300000).
+
+main([Branch]) -> main([Branch, "5"]);
+main([Branch, Seconds]) ->
+    true = os:putenv("FOLLOW_BRANCH", Branch),
+    true = os:putenv("FOLLOW_INTERVAL", Seconds),
+    Here = filename:dirname(filename:dirname(filename:absname(escript:script_name()))),
+    %% Absolute and shared by every generation: one checkout, and snapshots of the versions open
+    %% tabs still run, whichever generation they reach.
+    Env = [{handover, true}, {follow_dir, filename:join(Here, "follow")},
+           {snapshot_dir, filename:join(Here, "snapshots")}],
+    loop(#{current => start(1, Here, Env), next => none, born => 1, env => Env});
+main(_) ->
+    io:format(standard_error, "usage: bin/follow <branch> [seconds between polls, 3-10]~n", []),
+    halt(2).
+
+start(N, Dir, Env) ->
+    Flags = lists:append([["-lantern_hill", atom_to_list(K), io_lib:format("~p", [V])] || {K, V} <- Env]),
+    Script = "rebar3 compile && exec erl -noshell +Bd -pa _build/default/lib/*/ebin \"$@\" "
+             "-eval '{ok, _} = application:ensure_all_started(lantern_hill)'",
+    Port = open_port({spawn_executable, "/bin/sh"},
+                     [{args, ["-c", Script, "sh" | Flags]}, {cd, Dir}, {line, 4096},
+                      exit_status, stderr_to_stdout, binary]),
+    {Port, N}.
+
+loop(S = #{current := {Cur, N}, next := Next, born := Born, env := Env}) ->
+    receive
+        {Port, {data, {_, Line}}} ->
+            Gen = gen(Port, S),
+            io:format("[~b] ~ts~n", [Gen, Line]),
+            case {Port, Line, Next} of
+                {Cur, <<"lantern_hill handover ", Dir/binary>>, none} ->
+                    {Succ, _} = Successor = start(Born + 1, binary_to_list(Dir), Env),
+                    erlang:send_after(?START_LIMIT, self(), {start_limit, Succ}),
+                    loop(S#{next := Successor, born := Born + 1});
+                {_, <<"lantern_hill serving">>, {Port, M}} ->
+                    io:format("[~b] taking over from [~b]~n", [M, N]),
+                    is_port(Cur) andalso port_close(Cur),
+                    loop(S#{current := Next, next := none});
+                _ ->
+                    loop(S)
+            end;
+        {Cur, {exit_status, Status}} when Next =:= none ->
+            io:format("[~b] stopped (~b)~n", [N, Status]),
+            halt(Status);
+        {Cur, {exit_status, Status}} ->
+            io:format("[~b] stopped (~b) while a successor starts~n", [N, Status]),
+            loop(S#{current := {gone, N}});
+        {Port, {exit_status, Status}} when element(1, Next) =:= Port ->
+            successor_failed(io_lib:format("stopped (~b)", [Status]), S);
+        {start_limit, Port} when element(1, Next) =:= Port ->
+            os:cmd("kill " ++ integer_to_list(element(2, erlang:port_info(Port, os_pid)))),
+            port_close(Port),
+            successor_failed("didn't start in time", S)
+    end.
+
+successor_failed(Why, #{current := {gone, N}, next := {_, M}}) ->
+    io:format("[~b] ~ts, and [~b] is gone~n", [M, Why, N]),
+    halt(1);
+successor_failed(Why, S = #{current := {Cur, N}, next := {_, M}}) ->
+    io:format("[~b] ~ts; [~b] stays on~n", [M, Why, N]),
+    port_command(Cur, "stay\n"),
+    loop(S#{next := none}).
+
+gen(Port, #{current := {Port, N}}) -> N;
+gen(Port, #{next := {Port, N}}) -> N;
+gen(_, _) -> 0.
