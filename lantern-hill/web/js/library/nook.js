@@ -36,7 +36,7 @@ export function pembrookTalk(){
 
 // with nothing to read they sit facing the room, back to the window: they walk up to the seat's front edge
 // and shuffle back onto it
-const FRONT = {x: WINDOW_SEAT.x + .8, z: WINDOW_SEAT.z}, BACK = .65;
+const FRONT = {x: WINDOW_SEAT.x + .95, z: WINDOW_SEAT.z}, BACK = .8;
 
 export async function sitInWindow(){
   const book = holding('book');
