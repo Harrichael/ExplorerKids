@@ -1,10 +1,11 @@
-// A thick storybook on a wooden desk, on a small three.js stage of its own. The book knows its
-// shape (page size, how thick each side's stack is, how a page curls as it turns, how its stiff
-// covers swing shut over the pages); callers choose what is printed on the pages and covers and
-// where the camera looks.
+// A thick storybook. The book knows its shape (page size, how thick each side's stack is, how a page
+// curls as it turns, how its stiff covers swing shut over the pages); callers choose what is printed
+// on the pages and covers. makeBook() is the book alone, as a group to place in any scene;
+// makeStorybook() lays it on a wooden desk on a small three.js stage of its own, with a camera the
+// caller points.
 //
 // The book lies in the XZ plane with its spine along z at x = 0: the right-hand page spans
-// x 0..W, the left-hand page -W..0, and the top of each page faces -z.
+// x 0..W, the left-hand page -W..0, and the top of each page faces -z. A page is H = 3 units tall.
 
 import * as THREE from 'three';
 import { C, T, outline, rrect, shade, tex } from '../core/kit.js';
@@ -88,16 +89,10 @@ function cornerGeo(leg){
 }
 const print = (m, t) => { m.visible = !!t; if (t && m.material.map !== t) { m.material.map = t; m.material.needsUpdate = true; } };
 
-export function makeStorybook(canvas){
-  const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.outputEncoding = THREE.sRGBEncoding;
-  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(35, 1, .05, 80);
-  scene.background = new THREE.Color(0x2a1a14);
-  scene.add(new THREE.HemisphereLight(0xfff2dd, 0x5a3a50, .6));
-  const key = new THREE.DirectionalLight(0xffe2bf, .5); key.position.set(-3, 6, 4); scene.add(key);
-  const desk = new THREE.Mesh(flatGeo(60, 60, 0), T(0xffffff, {map:deskTex()})); desk.material.map.repeat.set(14, 14); scene.add(desk);
+// desk: whether the book throws a soft shadow onto a surface beneath it
+export function makeBook({desk = true} = {}){
   const paper = paperTex(), edges = edgeTex(), fade = fadeTex(), shadowT = shadowTex();
-  const group = new THREE.Group(); scene.add(group);
+  const group = new THREE.Group();
   let W = H, stackL = .5, stackR = .5, dim = 0, turnP = 0, meshes = null;
   // where the front and back covers lie, as in curl(): 0 on the right, 1 on the left; and what is printed on them
   const boardP = [1, 0], coverMaps = [[null, null], [null, null]];
@@ -106,7 +101,7 @@ export function makeStorybook(canvas){
     while (group.children.length) { const o = group.children.pop(); o.traverse(m => { if (m.geometry) m.geometry.dispose(); }); }
     const bw = W + MARGIN, bd = H + 2*MARGIN, plum = T(shade(C.plum, .45)), gold = T(shade(C.gold, .8));
     const shadow = new THREE.Mesh(flatGeo(2*bw + 1.1, bd + 1.1, 0), new THREE.MeshBasicMaterial({map:shadowT, transparent:true, opacity:.6, depthWrite:false}));
-    shadow.position.y = .003; group.add(shadow);
+    shadow.position.y = .003; shadow.visible = desk; group.add(shadow);
     // the gold rule and corner caps framing a cover's inside, for a board lying on side sd with its top at y
     const trim = (parent, sd, y) => {
       const rule = new THREE.Mesh(frameGeo(bw, bd, .05, .03), gold); rule.position.set(sd*(bw/2 + .015), y, 0); parent.add(rule);
@@ -168,11 +163,10 @@ export function makeStorybook(canvas){
     const [l, r] = span();
     meshes.shadow.scale.x = ((l + r)*bw + 1.1)/(2*bw + 1.1); meshes.shadow.position.x = (r - l)*bw/2;
   }
-  const sb = {renderer, scene, camera, paper,
+  const sb = {root:group, paper,
     get W(){ return W; }, get H(){ return H; }, MARGIN,
     // page width over height; the transition matches it to the screen, the reader to its book
     setAspect(a){ if (meshes && Math.abs(H*a - W) < 1e-9) return; W = H*a; build(); },
-    resize(w, h){ renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix(); },
     // the pages lying on top of each side's stack; a null page leaves that side showing the cover board beneath
     setPages(left, right){ print(meshes.left, left); print(meshes.right, right); },
     // what is printed on each cover board, as [outside, inside]; null leaves that face bare
@@ -216,9 +210,23 @@ export function makeStorybook(canvas){
       for (const [g, o, open] of [[meshes.gutL, dim*.32 + lift*p, boardP[0] === 1], [meshes.gutR, dim*.32 + lift*(1 - p), boardP[1] === 0]]) {
         g.material.opacity = o; g.visible = open && o > .002;
       }
-    },
-    render(){ renderer.render(scene, camera); }
+    }
   };
   sb.setAspect(1);
   return sb;
+}
+
+export function makeStorybook(canvas){
+  const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.outputEncoding = THREE.sRGBEncoding;
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(35, 1, .05, 80);
+  scene.background = new THREE.Color(0x2a1a14);
+  scene.add(new THREE.HemisphereLight(0xfff2dd, 0x5a3a50, .6));
+  const key = new THREE.DirectionalLight(0xffe2bf, .5); key.position.set(-3, 6, 4); scene.add(key);
+  const desk = new THREE.Mesh(flatGeo(60, 60, 0), T(0xffffff, {map:deskTex()})); desk.material.map.repeat.set(14, 14); scene.add(desk);
+  const book = makeBook(); scene.add(book.root);
+  return Object.assign(book, {renderer, scene, camera,
+    resize(w, h){ renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix(); },
+    render(){ renderer.render(scene, camera); }
+  });
 }
