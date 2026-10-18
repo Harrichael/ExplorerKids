@@ -32,7 +32,7 @@ const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), tmpV = new TH
 const ray = new THREE.Raycaster();
 const areaEl = $('area'); let areaName = '';
 let lastNearest = null;
-const inReach = u => Math.hypot(player.x - u.x, player.z - u.z) < u.range && player.y < 1;
+const inReach = u => Math.hypot(player.x - u.x, player.z - u.z) < u.range && Math.abs(player.y - (u.y || 0)) < 1;
 
 function update(dt){
   game.elapsed += dt;

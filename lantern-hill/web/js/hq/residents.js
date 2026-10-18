@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { makeLabel } from '../characters/build.js';
 import { PERSONA } from '../characters/cast.js';
 import { C, T, add, col, cyl, grp, outlineMat, rand, rr } from '../core/kit.js';
+import { pipTalk } from '../travel/index.js';
 import { PLAT } from './garden.js';
 import { scene } from './scene.js';
 
@@ -35,7 +36,7 @@ addNPC(PERSONA.pembrook, -7.3, 0, -3.55, 0, [
   "Oh! Hello there, {name}, dear. Welcome to the Library Nook.",
   "Every book on these shelves is a door. The red ones open onto adventures, the blue ones onto sky and sea, and the green ones are full of animals.",
   "I keep a pencil in my hair so I never lose it. I have lost it anyway, twice today.",
-  "You can borrow a book at my desk, dear, and read it on the rug. Or curl up in the window seat; it's the coziest spot in the cottage."
+  "You can borrow a book at my desk, dear. Take it to the window seat; it's the coziest spot in the cottage to read."
 ]);
 
 addNPC(PERSONA.sparks, 7.6, 0, -4.7, 0, [
@@ -56,7 +57,7 @@ addNPC(PERSONA.pip, 19.5, PLAT, -4.4, Math.PI*.25, [
   "Hey {name}, you made it up the ramp! Welcome to the treehouse. Juniper and I built the railing ourselves. Mostly.",
   "From up here you can see the whole garden. I count fireflies every night. My record is forty-six!",
   "Inside the hut there's a map of every place we want to explore: volcanoes, coral reefs, even the Moon. Want to help us fill it in?"
-]);
+], {converse:pipTalk});
 
 addNPC(PERSONA.juniper, 23.2, PLAT, -1.3, -Math.PI*.6, [
   "Hi! I'm Juniper. I always wear my raincoat, because you never know what an adventure will bring.",
