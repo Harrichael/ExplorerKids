@@ -3,6 +3,7 @@ import { isNewExplorer } from './explorer.js';
 import { game } from './state.js';
 import { closeDialog, convo, talk } from './ui/dialogue.js';
 import { $ } from './ui/dom.js';
+import { openInventory } from './ui/inventory.js';
 import { dressing, openWardrobe, wardrobeKey } from './ui/wardrobe.js';
 
 export const coarse = matchMedia('(pointer: coarse)').matches;
@@ -16,7 +17,7 @@ function begin(){
     if (isNewExplorer) setTimeout(() => openWardrobe(true), 350); }
 }
 startEl.addEventListener('pointerdown', begin);
-// a full-screen activity (flashcards, book) or the block tower catches keys before this handler while it is open
+// flashcards, the globe, the book reader, the block tower and the backpack catch keys before this handler while they are open
 addEventListener('keydown', e => {
   const k = e.key;
   if (e.target && e.target.tagName === 'INPUT') { if (k === 'Enter' || k === 'Escape') e.target.blur(); return; }
@@ -30,6 +31,7 @@ addEventListener('keydown', e => {
   if ((k === ' ' || k === 'Enter') && !e.repeat) { const first = game.reach.findIndex(Boolean); if (convo || game.nearest || first < 0) talk(); else useSlot(first); }
   const slot = k.length === 1 ? USE_KEYS.indexOf(k.toLowerCase()) : -1;
   if (slot >= 0 && !e.repeat && !convo) useSlot(slot);
+  if ((k === 'z' || k === 'Z') && !e.repeat) openBag();
   if ((k === 'm' || k === 'M') && !e.repeat) toggleSound();
   if (k === 'Escape') closeDialog();
 });
@@ -69,3 +71,10 @@ export const useBtns = USE_KEYS.map((k, i) => {
   b.addEventListener('click', e => { e.stopPropagation(); Sound.init(); useSlot(i); });
   return b;
 });
+
+function openBag(){
+  if (convo || dressing || game.activity || game.cutscene || !startEl.hidden) return;
+  for (const k in keys) keys[k] = false;
+  openInventory();
+}
+$('bag').addEventListener('click', e => { e.stopPropagation(); Sound.init(); openBag(); $('bag').blur(); });

@@ -9,10 +9,11 @@ import * as THREE from 'three';
 import { T, clamp01, ease, outline, rrect, tex } from '../core/kit.js';
 import { camera } from '../core/render.js';
 import { Sound } from '../core/sound.js';
-import { GRIP, PLAY, crane } from '../hq/toy-crane.js';
 import { hqAnims, scene } from '../hq/scene.js';
+import { sitDown, standUp } from '../hq/sit.js';
+import { GRIP, PLAY, crane } from '../hq/toy-crane.js';
 import { keys } from '../input.js';
-import { blob, hero, player } from '../player.js';
+import { blob, hero } from '../player.js';
 import { load, save } from '../save.js';
 import { game } from '../state.js';
 import { closeDialog } from '../ui/dialogue.js';
@@ -21,7 +22,7 @@ import M from 'matter-js';
 
 const css = document.createElement('style');
 css.textContent = `
-.towering .hud,.towering #stick,.towering #talk,.towering #use,.towering #prompt,.towering #dialog{display:none!important}
+.towering .hud,.towering #stick,.towering #talk,.towering .use,.towering #prompt,.towering #dialog{display:none!important}
 #tower{position:fixed;inset:0;display:flex;flex-direction:column;touch-action:none;cursor:pointer;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);animation:tfade .6s ease-out}
 @keyframes tfade{from{opacity:0}}
 #tower header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px max(16px,env(safe-area-inset-left,0px)) 18px;background:linear-gradient(rgba(26,19,32,.75),rgba(26,19,32,0))}
@@ -172,8 +173,8 @@ function rules(dt){
 }
 
 // ---------- the explorer sits down by the mat, and the camera comes down to the rug ----------
-const SEAT = {x:PLAY.x, z:6.45}, LEGS = -1.4;
-let seat = null;
+const SEAT = {x:PLAY.x, z:6.45};
+let open = false;
 const chest = new THREE.Vector3();
 function rugCam(pos, look){
   // far enough back to see the whole swing across, and from a few blocks down the tower to above the hanging block
@@ -181,55 +182,30 @@ function rugCam(pos, look){
   const y = PLAY.top + craneH*S + .28;
   look.set(PLAY.x, y, PLAY.z); pos.set(PLAY.x, Math.max(PLAY.top + .06, y - .2), PLAY.z + d);
 }
-function pose(legs, lift){
-  hero.root.position.set(player.x, player.y, player.z); hero.root.rotation.y = player.angle;
-  hero.legL.rotation.x = hero.legR.rotation.x = legs; hero.body.position.y = lift;
-  hero.armL.rotation.x = hero.armR.rotation.x = 0;
-}
-function turnTo(a, k){ let d = a - player.angle; d = Math.atan2(Math.sin(d), Math.cos(d)); player.angle += d*Math.min(1, k); return Math.abs(d); }
-const sitLift = () => .02 - .66*hero.body.scale.y;
-function choreograph(dt){
-  const s = seat; s.t += dt;
-  if (s.phase === 'walk') {
-    const dx = SEAT.x - player.x, dz = SEAT.z - player.z, d = Math.hypot(dx, dz);
-    if (d < .04) { s.phase = 'turn'; s.t = 0; }
-    else { const st = Math.min(d, 3.2*dt); player.x += dx/d*st; player.z += dz/d*st; turnTo(Math.atan2(dx, dz), dt*12); s.walk += dt*9.5;
-      const sg = Math.sign(Math.sin(s.walk)); if (sg !== player.lastStepSign && sg !== 0) { player.lastStepSign = sg; Sound.step('wood'); } }
-    const sw = Math.sin(s.walk)*.7; pose(0, 0); hero.legL.rotation.x = sw; hero.legR.rotation.x = -sw;
-  } else if (s.phase === 'turn') {
-    if (turnTo(Math.PI, dt*9) < .05) { s.phase = 'sit'; s.t = 0; }
-    pose(0, 0);
-  } else if (s.phase === 'sit') {
-    const p = ease(clamp01(s.t/.5)); pose(LEGS*p, sitLift()*p);
-    if (s.t > .5) { s.phase = 'play'; game.cutCam = rugCam; el.hidden = false; playing = true; }
-  } else if (s.phase === 'play') pose(LEGS, sitLift());
-  else {
-    const p = ease(clamp01(s.t/.5)); pose(LEGS*(1 - p), sitLift()*(1 - p) + Math.sin(p*Math.PI)*.12);
-    if (s.t > .5) { seat = null; game.cutscene = false; }
-  }
-  // the camera sweeps down through where the explorer sits; they'd fill the view on the way past
-  hero.body.getWorldPosition(chest); chest.y += .5;
-  hero.root.visible = blob.visible = !seat || camera.position.distanceTo(chest) > 1.1;
-}
+// sat on the floor with their legs out in front
+function pose(p){ hero.legL.rotation.x = hero.legR.rotation.x = -1.4*p; hero.body.position.y = (.02 - .66*hero.body.scale.y)*p; }
 hqAnims.push(dt => {
-  if (seat) choreograph(dt);
+  if (open) {
+    // the camera sweeps down through where the explorer sits; they'd fill the view on the way past
+    hero.body.getWorldPosition(chest); chest.y += .5;
+    hero.root.visible = blob.visible = camera.position.distanceTo(chest) > 1.1;
+  }
   if (engine) { simulate(dt); if (playing) rules(dt); }
 });
 
 export function openTower(){
-  if (seat) return;
-  closeDialog(); for (const k in keys) keys[k] = false;
-  seat = {phase:'walk', t:0, walk:0}; game.cutscene = true;
+  if (!sitDown({x:SEAT.x, z:SEAT.z, angle:Math.PI, pose, seated:() => { game.cutCam = rugCam; el.hidden = false; playing = true; }})) return;
+  closeDialog(); for (const k in keys) keys[k] = false; open = true;
   document.documentElement.classList.add('towering'); reset();
   Sound.duck(true); [523, 659, 784].forEach((f, i) => Sound.tone(f, {type:'triangle', t:i*.07, dur:.2, vol:.08}));
 }
 function close(){
-  if (!seat || seat.phase === 'stand') return;
-  playing = false; el.hidden = true; bestLine.visible = false; document.documentElement.classList.remove('towering');
+  if (!open) return;
+  open = false; playing = false; el.hidden = true; bestLine.visible = false; document.documentElement.classList.remove('towering');
   if (hang) { dropMesh(hang.mesh); hang = null; crane.hold(null); }
   crane.aim(PLAY.top + craneH*S + CLEAR + 1.5*U*S + GRIP + .9, .9, .03);
   game.cutCam = null; hero.root.visible = blob.visible = true;
-  seat = {phase:'stand', t:0};
+  standUp();
   Sound.duck(false);
 }
 
@@ -237,7 +213,7 @@ el.addEventListener('pointerdown', e => { if (e.target.closest('button')) return
 el.querySelector('#tAgain').addEventListener('click', () => reset());
 el.querySelector('#tExit').addEventListener('click', () => close());
 addEventListener('keydown', e => {
-  if (!seat) return;
+  if (!open) return;
   e.stopPropagation();
   if (e.key === 'Escape') { close(); return; }
   if ((e.key === ' ' || e.key === 'Enter') && !e.repeat && e.target.tagName !== 'BUTTON') { e.preventDefault(); if (over) reset(); else drop(); }

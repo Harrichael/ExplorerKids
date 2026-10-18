@@ -21,7 +21,7 @@ const FREE_AFTER = 3;
 
 const css = document.createElement('style');
 css.textContent = `
-.labbing .hud .plate,.labbing .hud .keys,.labbing #stick,.labbing #talk,.labbing #use,.labbing #prompt{display:none!important}
+.labbing .hud .plate,.labbing .hud .keys,.labbing #stick,.labbing #talk,.labbing .use,.labbing #prompt{display:none!important}
 #labHud{position:fixed;inset:0;pointer-events:none}
 #labHud .lab-card{position:absolute;top:calc(12px + env(safe-area-inset-top,0px));left:max(16px,env(safe-area-inset-left,0px));max-width:min(340px,calc(100vw - 32px));background:rgba(26,19,32,.86);border:2px solid var(--gold);border-radius:14px;padding:8px 14px 10px;box-shadow:0 0 0 3px var(--ink),0 6px 18px rgba(0,0,0,.35)}
 #labHud .sub{font-weight:900;font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--gold)}
