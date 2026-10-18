@@ -3,6 +3,7 @@ import { isNewExplorer } from './explorer.js';
 import { game } from './state.js';
 import { closeDialog, convo, talk } from './ui/dialogue.js';
 import { $ } from './ui/dom.js';
+import { openInventory } from './ui/inventory.js';
 import { dressing, openWardrobe, wardrobeKey } from './ui/wardrobe.js';
 
 export const coarse = matchMedia('(pointer: coarse)').matches;
@@ -16,7 +17,7 @@ function begin(){
     if (isNewExplorer) setTimeout(() => openWardrobe(true), 350); }
 }
 startEl.addEventListener('pointerdown', begin);
-// flashcards, the globe, the book reader and the block tower catch keys before this handler while they are open
+// flashcards, the globe, the book reader, the block tower and the backpack catch keys before this handler while they are open
 addEventListener('keydown', e => {
   const k = e.key;
   if (e.target && e.target.tagName === 'INPUT') { if (k === 'Enter' || k === 'Escape') e.target.blur(); return; }
@@ -29,6 +30,7 @@ addEventListener('keydown', e => {
   keys[k.length === 1 ? k.toLowerCase() : k] = true;
   if ((k === ' ' || k === 'Enter') && !e.repeat) { if (convo || game.nearest || !game.nearUse) talk(); else useThing(); }
   if ((k === 'e' || k === 'E') && !e.repeat && !convo) useThing();
+  if ((k === 'z' || k === 'Z') && !e.repeat) openBag();
   if ((k === 'm' || k === 'M') && !e.repeat) toggleSound();
   if (k === 'Escape') closeDialog();
 });
@@ -60,3 +62,10 @@ document.getElementById('talk').addEventListener('click', () => { Sound.init(); 
 export const useBtn = $('use');
 function useThing(){ if (game.nearUse && !convo && !dressing && !game.activity && !game.cutscene) game.nearUse.action(); }
 useBtn.addEventListener('click', e => { e.stopPropagation(); Sound.init(); useThing(); });
+
+function openBag(){
+  if (convo || dressing || game.activity || game.cutscene || !startEl.hidden) return;
+  for (const k in keys) keys[k] = false;
+  openInventory();
+}
+$('bag').addEventListener('click', e => { e.stopPropagation(); Sound.init(); openBag(); $('bag').blur(); });

@@ -1,5 +1,5 @@
 // What the player has made and done: their explorer, phonogram stars, trips, books read, best tower,
-// experiments and the biomes found on the globe.
+// experiments, the biomes found on the globe and what they carry.
 // The storage keys predate the module split; renaming them orphans existing saves.
 //
 // Saves outlive the code that wrote them, and during a rollout tabs on two versions share them:
@@ -9,7 +9,8 @@
 // - when a slot's shape must change, bump its VERSION and add a MIGRATE step from the old one.
 //   The version rides inside the record as `_v`, which older code reads past harmlessly.
 const KEYS = {explorer:'lantern-hill-explorer', phonograms:'lantern-hill-phonograms', trips:'lantern-hill-trips',
-  books:'lantern-hill-books', towerBest:'lantern-hill-tower-best', lab:'lantern-hill-lab', globe:'lantern-hill-globe'};
+  books:'lantern-hill-books', towerBest:'lantern-hill-tower-best', lab:'lantern-hill-lab', globe:'lantern-hill-globe',
+  inventory:'lantern-hill-inventory'};
 const VERSION = {};
 const MIGRATE = {};   // slot -> {fromVersion: record => record}
 

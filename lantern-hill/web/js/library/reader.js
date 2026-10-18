@@ -1,7 +1,7 @@
 // The Library Nook reader: the explorer lies on their tummy on the reading rug with a big storybook
 // open on the floor in front of them, and the camera looks down over their head at the pages, which
-// curl as they turn. Everything happens in the room itself. Loaded the first time someone settles
-// down in the story corner.
+// curl as they turn. Everything happens in the room itself. Loaded the first time someone reads
+// a book from their backpack.
 
 import * as THREE from 'three';
 import { ease } from '../core/kit.js';
@@ -189,12 +189,13 @@ pagesEl.addEventListener('pointerup', e => { if (sx === null) return; const dx =
 $r('rPrev').addEventListener('click', () => turn(-1)); $r('rNext').addEventListener('click', () => turn(1));
 $r('rShelf').addEventListener('click', showShelf); $r('rClose').addEventListener('click', () => close());
 
-export function openReader() {
-  if (!sitDown({...SPOT, pose, seated: () => { game.cutCam = readCam; el.hidden = false; }})) return;
+export function openReader(id) {
+  const b = BOOKS.find(x => x.id === id);
+  if (!b || !b.pages || !sitDown({...SPOT, pose, seated: () => { game.cutCam = readCam; el.hidden = false; }})) return;
   closeDialog(); for (const k in keys) keys[k] = false; open = true;
   B.root.visible = true; document.documentElement.classList.add('reading-book');
   Sound.duck(true); Sound.tone(660, { type: 'triangle', dur: .15, vol: .07 });
-  const ready = BOOKS.filter(b => b.pages); if (ready.length === 1) openBook(ready[0]); else showShelf();
+  openBook(b);
 }
 function close() {
   if (!open) return;

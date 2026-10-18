@@ -35,7 +35,7 @@ addNPC(PERSONA.pembrook, -7.3, 0, -3.55, 0, [
   "Oh! Hello there, {name}, dear. Welcome to the Library Nook.",
   "Every book on these shelves is a door. The red ones open onto adventures, the blue ones onto sky and sea, and the green ones are full of animals.",
   "I keep a pencil in my hair so I never lose it. I have lost it anyway, twice today.",
-  "Soon you'll be able to borrow books and collect library stars. The window seat is the coziest spot to read."
+  "You can borrow a book at my desk, dear, and read it on the rug. Or curl up in the window seat; it's the coziest spot in the cottage."
 ]);
 
 addNPC(PERSONA.sparks, 7.6, 0, -4.7, 0, [
