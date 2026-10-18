@@ -37,7 +37,10 @@
     engine.gravity.y = 1;
     const world = engine.world, S = { engine, level, statics: [], dyn: [], placed: [], gates: [], tails: [], triggers: [], buttons: [], levers: [] };
     const st = (x, y, w, h, a, label, fr = .02) => { const b = Bodies.rectangle(x, y, w, h, { isStatic: true, label, friction: fr, frictionStatic: 0, angle: a || 0 }); S.statics.push(b); return b; };
-    for (const s of level.statics) st(s.x, s.y, s.w, s.h, s.a, s.kind || 'shelf', s.fr ?? .02);
+    for (const s of level.statics) {
+      if (s.r) { const b = Bodies.circle(s.x, s.y, s.r, { isStatic: true, label: s.kind || 'cat', friction: .02, frictionStatic: 0 }); S.statics.push(b); continue; }   // round things, like a sleeping cat
+      st(s.x, s.y, s.w, s.h, s.a, s.kind || 'shelf', s.fr ?? .02);
+    }
     // cup: a little U
     const c = level.cup; S.cupBox = { x0: c.x - 23, x1: c.x + 23, y0: c.y - 26, y1: c.y };
     // a teacup tipped on its side: a low lip toward the approach, a tall back
@@ -96,7 +99,7 @@
     const others = [...S.statics, ...S.dyn, ...S.placed.filter((_, i) => i !== idx), ...S.gates.map(g => g.plank), ...S.tails].filter(b => b.label !== 'reel' || p.type !== 'lever');
     if (Query.collides(body, others).length) return true;
     if (Math.hypot(p.x - level.start.x, p.y - level.start.y) < 40) return true;
-    for (const g of level.gates || []) if (Math.hypot(p.x - g.trigger.x, p.y - g.trigger.y) < (g.trigger.r || 16) + 34) return true;   // no parking things on a trigger
+    for (const g of level.gates || []) if (Math.hypot(p.x - g.trigger.x, p.y - g.trigger.y) < (g.trigger.r || 16) + 14) return true;   // no parking things on a trigger
     if (Math.abs(p.x - level.cup.x) < 45 && p.y > level.cup.y - 60 && p.y < level.cup.y + 10) return true;
     return false;
   }
@@ -142,7 +145,9 @@
             if (di * dm < 0 && vi > 2 && Math.abs(di) > 8) {
               let nx = -uy, ny = ux; if (ny > 0) { nx = -nx; ny = -ny; }
               const sp = Math.min(15, vi * Math.min(3, Math.abs(dm / di)) * .55);
-              Body.setVelocity(m, { x: m.velocity.x + nx * sp + Math.sign(dm) * -ux * sp * .18, y: m.velocity.y + ny * sp });
+              // a real catapult throws the marble up and back over the fulcrum, not straight up
+              const bx = nx - Math.sign(dm) * ux * .95, by = ny - Math.sign(dm) * uy * .95, bl = Math.hypot(bx, by);
+              Body.setVelocity(m, { x: bx / bl * sp, y: by / bl * sp });
               push('launch');
             }
           }
