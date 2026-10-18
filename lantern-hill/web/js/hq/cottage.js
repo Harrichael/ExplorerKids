@@ -114,7 +114,7 @@ for (const zz of [2.6, 4.2]) { const p = box(.3, .45, .6, T(zz > 3 ? C.forest : 
 col(-10, -8.9, 2, 4.8);
 const reading = tex(256,256,(g,w,h)=>{ g.fillStyle='#5b3d64'; g.beginPath(); g.arc(128,128,126,0,7); g.fill(); g.strokeStyle='#d9a441'; g.lineWidth=6; for (let r=20;r<120;r+=24){ g.beginPath(); g.arc(128,128,r,0,7); g.stroke(); } });
 const rug2 = add(new THREE.CircleGeometry(1.6, 32), T(0xffffff,{map:reading, transparent:true}), -7.6,.05,3.6, null, false); rug2.rotation.x = -Math.PI/2;
-for (const [cx,cz,cc] of [[-7.0,4.4,C.rust],[-8.0,2.8,C.navy]]) { const cu = sph(.42, T(cc), cx,.25,cz, null, 12); cu.scale.set(1,.5,1); }
+for (const [cx,cz,cc] of [[-7.0,4.4,C.rust],[-8.0,2.6,C.navy]]) { const cu = sph(.42, T(cc), cx,.25,cz, null, 12); cu.scale.set(1,.5,1); }
 for (let i=0;i<6;i++) box(.5 - (i%3)*.04, .1, .38, T(bookCols[(i+3)%9]), -6.6, .06 + i*.1, 2.9).rotation.y = i*.3;
 { const ob = grp(-7.0, .06, 4.05, -.35);
   for (const sd of [-1, 1]) { const cvb = box(.36, .03, .44, T(C.plum), sd * .19, .015, 0, ob); const pg = box(.33, .035, .4, T(0xf6ecd6), sd * .185, .045, 0, ob, false); pg.rotation.z = -sd * .06; }

@@ -1,5 +1,5 @@
-// Walking the explorer to a spot and sitting them down there, and later standing them back up: the
-// choreography HQ's sit-down activities share. The player has no control while it runs.
+// Walking the explorer to a spot and sitting (or lying) them down there, and later standing them back
+// up: the choreography HQ's sit-down activities share. The player has no control while it runs.
 //
 //   sitDown({x, z, angle, pose, seated})   // pose(p) bends the hero from standing (0) to sat (1);
 //                                          // seated() runs once they are down
@@ -8,18 +8,18 @@
 // pose() is applied over the hero's resting pose every frame, so it only sets what it changes. An
 // activity can layer more on top (arms that hold something, say) from its own hqAnims callback.
 
-import { clamp01, ease } from '../core/kit.js';
+import { ease } from '../core/kit.js';
 import { Sound } from '../core/sound.js';
 import { hero, player } from '../player.js';
 import { game } from '../state.js';
 import { hqAnims } from './scene.js';
 
 let s = null;
-const limbs = () => [hero.legL, hero.legR, hero.armL, hero.armR];
+const parts = () => [hero.legL, hero.legR, hero.armL, hero.armR, hero.head, hero.body];
 
 export function sitDown(spot){
   if (s || game.cutscene) return false;
-  s = Object.assign({phase:'walk', walk:0, p:0, rest:limbs().map(l => l.quaternion.clone())}, spot);
+  s = Object.assign({phase:'walk', walk:0, p:0, rest:parts().map(l => l.quaternion.clone())}, spot);
   game.cutscene = true; return true;
 }
 export function standUp(){
@@ -28,7 +28,7 @@ export function standUp(){
 }
 
 function rest(){
-  limbs().forEach((l, i) => l.quaternion.copy(s.rest[i])); hero.body.position.y = 0;
+  parts().forEach((l, i) => l.quaternion.copy(s.rest[i])); hero.body.position.set(0, 0, 0);
   hero.root.position.set(player.x, player.y, player.z); hero.root.rotation.y = player.angle;
 }
 function turnTo(a, k){ let d = a - player.angle; d = Math.atan2(Math.sin(d), Math.cos(d)); player.angle += d*Math.min(1, k); return Math.abs(d); }
