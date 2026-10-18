@@ -18,8 +18,8 @@ body{background:var(--night);color:var(--parch);font-family:var(--body);touch-ac
 #world,#storybook,#storyStash{position:fixed;inset:0;display:block;width:100%;height:100%}
 /* above every overlay: an update may turn the page from inside an activity */
 #storybook,#storyStash{z-index:8}
-.hud,#prompt,#stick,#talk,#use{transition:opacity .3s}
-.turning .hud,.turning #prompt,.turning #stick,.turning #talk,.turning #use{opacity:0}
+.hud,#prompt,#stick,#talk,.use{transition:opacity .3s}
+.turning .hud,.turning #prompt,.turning #stick,.turning #talk,.turning .use{opacity:0}
 .vignette{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(20,12,28,.55) 100%)}
 .hud{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));display:flex;justify-content:space-between;align-items:flex-start;gap:12px;pointer-events:none}
 .plate{background:rgba(26,19,32,.82);border:2px solid var(--gold);border-radius:14px;padding:6px 14px 6px;box-shadow:0 0 0 3px var(--ink), 0 6px 18px rgba(0,0,0,.35)}
@@ -54,10 +54,10 @@ body{background:var(--night);color:var(--parch);font-family:var(--body);touch-ac
 #talk.ready{background:var(--plum);opacity:1}
 #talk:focus-visible{outline:3px solid var(--parch);outline-offset:4px}
 .coarse #stick,.coarse #talk{display:block}
-.coarse.talking #stick,.coarse.talking #talk,.coarse.talking #use{display:none!important}
-#use{position:fixed;right:calc(max(16px,env(safe-area-inset-right,0px)) + 100px);bottom:calc(14px + env(safe-area-inset-bottom,0px));width:60px;height:60px;border-radius:50%;background:var(--teal);border:2px solid var(--gold);box-shadow:0 0 0 3px var(--ink), 0 0 18px rgba(217,164,65,.45);font-family:var(--display);font-size:14px;color:var(--parch);display:none;cursor:pointer;animation:popin .25s ease-out}
-.coarse #use{display:block}
-#use:focus-visible{outline:3px solid var(--parch);outline-offset:4px}
+.coarse.talking #stick,.coarse.talking #talk,.coarse.talking .use{display:none!important}
+.use{position:fixed;right:calc(max(16px,env(safe-area-inset-right,0px)) + 100px);bottom:calc(14px + var(--i, 0)*70px + env(safe-area-inset-bottom,0px));width:60px;height:60px;border-radius:50%;background:var(--teal);border:2px solid var(--gold);box-shadow:0 0 0 3px var(--ink), 0 0 18px rgba(217,164,65,.45);font-family:var(--display);font-size:14px;color:var(--parch);display:none;cursor:pointer;animation:popin .25s ease-out}
+.coarse .use{display:block}
+.use:focus-visible{outline:3px solid var(--parch);outline-offset:4px}
 @keyframes popin{from{transform:scale(.4);opacity:0}}
 .hudbtns{display:flex;gap:8px;pointer-events:auto}
 .pill{font-family:var(--body);font-weight:900;font-size:13px;color:var(--parch);background:rgba(26,19,32,.82);border:2px solid var(--gold);border-radius:999px;padding:5px 12px;box-shadow:0 0 0 3px var(--ink);cursor:pointer}
@@ -79,9 +79,9 @@ body{background:var(--night);color:var(--parch);font-family:var(--body);touch-ac
 .wbtn{flex:1;font-family:var(--display);font-size:16px;color:var(--parch);background:var(--plum);border:2.5px solid var(--gold);border-radius:14px;padding:8px 10px;box-shadow:0 0 0 3px var(--ink);cursor:pointer}
 .wbtn.ghost{background:rgba(239,224,191,.06)}
 .wbtn:active{transform:translateY(2px)}
-.dressing .keys,.dressing #stick,.dressing #talk,.dressing #use,.dressing #prompt,.dressing .hudbtns{display:none!important}
+.dressing .keys,.dressing #stick,.dressing #talk,.dressing .use,.dressing #prompt,.dressing .hudbtns{display:none!important}
 @media (max-width:640px){#wardrobe{top:auto;left:max(12px,env(safe-area-inset-left,0px));right:max(12px,env(safe-area-inset-right,0px));width:auto;height:min(52vh,480px);bottom:calc(12px + env(safe-area-inset-bottom,0px))}}
-.learning #world,.learning .vignette,.learning .hud,.learning #stick,.learning #talk,.learning #use,.learning #prompt,.learning #dialog{display:none!important}
+.learning #world,.learning .vignette,.learning .hud,.learning #stick,.learning #talk,.learning .use,.learning #prompt,.learning #dialog{display:none!important}
 #learn{position:fixed;inset:0;overflow-y:auto;touch-action:pan-y;-webkit-user-select:none;background:radial-gradient(ellipse at 50% -10%, #44305a 0%, #2a2140 45%, var(--night) 100%);padding-top:calc(14px + env(safe-area-inset-top,0px));padding-bottom:calc(24px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));animation:fadein .35s ease-out}
 @keyframes fadein{from{opacity:0}}
 .lwrap{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
@@ -192,7 +192,7 @@ button.snd:focus-visible,button.word:focus-visible{outline:3px solid #6d3b5e;out
 #badge h3{margin:0;font-family:var(--display);font-weight:400;font-size:28px;line-height:1.1}
 #badge p{margin:0 0 6px;font-weight:800;font-size:15px;line-height:1.45;max-width:36ch}
 @media (prefers-reduced-motion: reduce){#banner,#badge,#badge .page{animation:none}}
-@media (prefers-reduced-motion: reduce){#dialog .more,#start .go,#use,#learn,#trip,.tdlg .more,.tbtn.next,.card.enter{animation:none}.card{transition:none}.wbtn:active,.lbtn:active{transform:none}}
+@media (prefers-reduced-motion: reduce){#dialog .more,#start .go,.use,#learn,#trip,.tdlg .more,.tbtn.next,.card.enter{animation:none}.card{transition:none}.wbtn:active,.lbtn:active{transform:none}}
 
 /* updates: the toast offered mid-activity, and the caption over the book while the page turns */
 #updateToast{position:fixed;left:50%;top:calc(84px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:6;display:flex;align-items:center;gap:12px;width:max-content;max-width:calc(100vw - 32px);box-sizing:border-box;background:rgba(26,19,32,.92);color:var(--parch);border:2px solid var(--gold);border-radius:14px;box-shadow:0 0 0 3px var(--ink),0 10px 26px rgba(0,0,0,.4);padding:8px 10px 8px 14px;font-size:13.5px;font-weight:700;line-height:1.35;animation:toastIn .45s cubic-bezier(.2,1.4,.4,1) both}

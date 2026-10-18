@@ -5,7 +5,7 @@ import { zany } from './characters/zany.js';
 import { rr } from './core/kit.js';
 import { camera, renderer } from './core/render.js';
 import { Sound } from './core/sound.js';
-import { coarse, joy, keys, startEl, useBtn } from './input.js';
+import { USE_KEYS, coarse, joy, keys, startEl, useBtns } from './input.js';
 import { blob, blocked, hero, player } from './player.js';
 import { game } from './state.js';
 import { active, closeDialog, convo, promptEl, renderBust, talkBtn, typing, updateTyping } from './ui/dialogue.js';
@@ -20,7 +20,7 @@ export function enterWorld(w, spawn){
   const co = w.cam || {}, portrait = innerWidth < innerHeight;
   camPos.set(player.x, player.y + (portrait ? (co.oyP || 7.4) : (co.oy || 5.6)), player.z + (portrait ? (co.ozP || 8.2) : (co.oz || 7)));
   camLook.set(player.x, player.y + 1.1 + (co.lookY || 0), player.z - .4);
-  game.nearest = lastNearest = game.nearUse = lastUse = null; game.cutCam = null;
+  game.nearest = lastNearest = null; game.reach.length = 0; game.cutCam = null;
   w.npcs.forEach(n => { if (n.follow === undefined) return;
     n.x = player.x + (n.follow - 1)*1.3; n.z = player.z + 1.4 + (n.follow === 1 ? .7 : 0);
     if (w.bounds && !w.bounds(n.x, n.z)) n.z = player.z - 1.3 - (n.follow === 1 ? .7 : 0);
@@ -31,16 +31,17 @@ export const clock = new THREE.Clock();
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), dir = new THREE.Vector3();
 const ray = new THREE.Raycaster();
 const areaEl = $('area'); let areaName = '';
-let lastNearest = null, lastUse = null;
+let lastNearest = null;
+const inReach = u => Math.hypot(player.x - u.x, player.z - u.z) < u.range && player.y < 1;
 
 function update(dt){
   game.elapsed += dt;
   let ix = 0, iz = 0;
   if (!convo && !dressing && !game.cutscene && startEl.hidden) {
-    if (keys.ArrowLeft || keys.a) ix -= 1;
-    if (keys.ArrowRight || keys.d) ix += 1;
-    if (keys.ArrowUp || keys.w) iz -= 1;
-    if (keys.ArrowDown || keys.s) iz += 1;
+    if (keys.ArrowLeft) ix -= 1;
+    if (keys.ArrowRight) ix += 1;
+    if (keys.ArrowUp) iz -= 1;
+    if (keys.ArrowDown) iz += 1;
     ix += joy.x; iz += joy.y;
   }
   let mag = Math.hypot(ix, iz);
@@ -138,22 +139,26 @@ function update(dt){
   if (game.nearest && game.nearest !== lastNearest && !active) Sound.near();
   lastNearest = game.nearest;
   if (convo && convo.npc && Math.hypot(player.x - convo.npc.x, player.z - convo.npc.z) > convo.npc.range + .8) closeDialog();
-  game.nearUse = null;
-  if (!dressing && !convo && !game.cutscene && startEl.hidden) for (const u of game.world.usables) { if (Math.hypot(player.x - u.x, player.z - u.z) < u.range && player.y < 1) { game.nearUse = u; break; } }
-  if (game.nearUse && game.nearUse !== lastUse) Sound.near();
-  lastUse = game.nearUse;
+  // a thing keeps its key until it leaves range, so keys never shuffle as others come and go
+  const reach = game.reach, canUse = !dressing && !convo && !game.cutscene && startEl.hidden;
+  for (let i = 0; i < reach.length; i++) if (reach[i] && !inReach(reach[i])) reach[i] = null;
+  for (const u of game.world.usables) if (!reach.includes(u) && inReach(u)) {
+    let i = 0; while (reach[i]) i++;
+    if (i >= USE_KEYS.length) break;
+    reach[i] = u; if (canUse) Sound.near();
+  }
   if (!convo) {
     const parts = [];
     if (game.nearest) parts.push(`<b>Space</b> Talk to ${game.nearest.name}`);
-    if (game.nearUse) parts.push(`<b>E</b> ${game.nearUse.verb}`);
+    if (canUse) reach.forEach((u, i) => { if (u) parts.push(`<b>${USE_KEYS[i].toUpperCase()}</b> ${u.verb}`); });
     promptEl.hidden = !parts.length || coarse || !startEl.hidden || dressing || game.cutscene;
     if (parts.length) promptEl.innerHTML = parts.join('<br>');
   }
   talkBtn.classList.toggle('ready', !!game.nearest);
-  const showUse = !!game.nearUse;
-  if (useBtn.hidden === showUse) useBtn.hidden = !showUse;
-  if (game.nearUse && useBtn.textContent !== game.nearUse.short) { useBtn.textContent = game.nearUse.short; useBtn.setAttribute('aria-label', game.nearUse.verb); }
-  for (const u of game.world.usables) { const sm = u.sparkle.material; sm.opacity += ((game.nearUse === u ? 1 : 0) - sm.opacity) * Math.min(1, dt * 7);
+  useBtns.forEach((b, i) => { const u = canUse && reach[i];
+    if (b.hidden === !!u) b.hidden = !u;
+    if (u && b.textContent !== u.short) { b.textContent = u.short; b.setAttribute('aria-label', u.verb); } });
+  for (const u of game.world.usables) { const sm = u.sparkle.material; sm.opacity += ((canUse && reach.includes(u) ? 1 : 0) - sm.opacity) * Math.min(1, dt * 7);
     u.sparkle.position.y = u.glow[1] + Math.sin(game.elapsed * 3) * .08; sm.rotation = game.elapsed * .8; }
   updateTyping(dt);
 
