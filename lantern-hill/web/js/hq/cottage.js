@@ -128,7 +128,8 @@ const libLight = new THREE.PointLight(0xffb85c, .9, 7, 2); libLight.position.set
 const globe = grp(-5.6, 0, -.2);
 cyl(.25,.32,.08,T(C.woodDk),0,.04,0,globe); for (let i=0;i<3;i++) cyl(.025,.025,.7,T(C.woodDk),Math.cos(i*2.1)*.15,.38,Math.sin(i*2.1)*.15,globe,5);
 const globeTex = tex(256,128,(g,w,h)=>{ g.fillStyle='#3a5f8a'; g.fillRect(0,0,w,h); g.fillStyle='#c9b48a'; for (let i=0;i<14;i++){ g.beginPath(); g.ellipse(rand()*w, rr(20,h-20), rr(10,30), rr(8,18), rand()*3, 0, 7); g.fill(); } });
-const globeBall = add(new THREE.SphereGeometry(.4,22,16), T(0xffffff,{map:globeTex}), 0,1.05,0, globe); outline(globeBall, 1.04);
+// the Explorer's Globe repaints it with the real map once someone has used it
+export const globeBall = add(new THREE.SphereGeometry(.4,22,16), T(0xffffff,{map:globeTex}), 0,1.05,0, globe); outline(globeBall, 1.04);
 const gring = add(new THREE.TorusGeometry(.46,.02,6,30), T(C.gold), 0,1.05,0, globe); gring.rotation.y = Math.PI/2;
 col(-5.95, -5.25, -.55, .15);
 
