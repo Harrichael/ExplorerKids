@@ -1,0 +1,2 @@
+nap sims 10723 solutions 6
+  6x  T:marble>lever>launch  (min 1 pcs)

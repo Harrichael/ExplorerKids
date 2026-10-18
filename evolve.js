@@ -12,7 +12,7 @@ function sane(L) {
     if (s.kind === 'floor') continue;
     const inside = (p, pad) => Math.abs(p.x - s.x) < s.w / 2 + pad && Math.abs(p.y - s.y) < s.h / 2 + pad;
     if (inside(L.start, 14) || inside({ x: L.cup.x, y: L.cup.y - 25 }, 34)) return false;
-    for (const g of L.gates || []) if (inside(g.trigger, 18)) return false;
+    for (const g of L.gates || []) if (inside(g.trigger, 0)) return false;
     if (s.x < 30 || s.x > 1170 || s.y < 120 || s.y > 640) return false;
   }
   for (const b of L.buttons) if (b.x < 30 || b.x > 1170 || b.y < 80 || b.y > 625) return false;
@@ -31,6 +31,15 @@ function mutateLevel(L0) {
     else if (k < .8) { const t = pick(Object.keys(LIM)); L.tray[t] = Math.max(LIM[t][0], Math.min(LIM[t][1], (L.tray[t] || 0) + (R() < .5 ? -1 : 1))); L.mut = 'tray ' + t; }
     else if (k < .87 && (L.tails || []).length) { const t = pick(L.tails); t.px += (R() - .5) * 80; t.amp = Math.max(.3, Math.min(.9, t.amp + (R() - .5) * .2)); t.period = Math.max(1.4, Math.min(3.2, t.period + (R() - .5) * .5)); L.mut = 'tail'; }
     else if (k < .93) { const f = L.statics.filter(s => s.kind === 'furniture'); if (!f.length) continue; const s = pick(f); s.x += (R() - .5) * 40; s.y += (R() - .5) * 30; L.mut = 'nudge furniture'; }
+    else if (k < .965) {
+      // raise or lower the cup together with whatever it sits on
+      const sup = L.statics.find(s => Math.abs((s.y - s.h / 2) - L.cup.y) < 3 && Math.abs(s.x - L.cup.x) < s.w / 2 && s.kind !== 'floor'); if (!sup) continue;
+      const dy = (R() - .5) * 80; sup.y += dy / 2; sup.h -= dy; L.cup.y += dy; if (sup.h < 20) continue; L.mut = 'cup height';
+    }
+    else if (k < .985) {
+      const sup = L.statics.find(s => Math.abs((s.y - s.h / 2) - (L.start.y + 16)) < 4 && Math.abs(s.x - L.start.x) < s.w / 2); if (!sup) continue;
+      const dy = (R() - .5) * 80; sup.y += dy; L.start.y += dy; L.mut = 'start height';
+    }
     else { L.start.vx = Math.max(2.5, Math.min(5.5, L.start.vx + (R() - .5))); L.mut = 'start push'; }
     if (sane(L)) return L;
   }
@@ -41,7 +50,7 @@ const evalOpt = { seed: 11, restarts: 34, iters: 60, robustN: 3 };
 let cur = clone(T[name]), t0 = Date.now();
 let curE = evaluate(cur, evalOpt), best = { L: cur, E: curE }, history = [curE.report.fitness];
 const top = [{ L: cur, E: curE }];
-const log = fs.createWriteStream(`out/${name}.log`, { flags: 'w' });
+fs.writeFileSync(`out/${name}.log`, ''); const log = { write: t => fs.appendFileSync(`out/${name}.log`, t), end() {} };
 const save = () => fs.writeFileSync(`out/${name}.json`, JSON.stringify({ history, cands: top.slice(0, 3).map(c => ({ level: c.L, report: c.E.report })) }));
 log.write(`start fitness ${curE.report.fitness.toFixed(2)}\n`); save();
 for (let i = 1; i <= N; i++) {

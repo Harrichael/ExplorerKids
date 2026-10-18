@@ -15,7 +15,7 @@
     block:  { w: 36,  h: 36, static: false, friction: .6,  density: .006 },
     lever:  { w: 210, h: 10, static: false, friction: .3,  density: .0004 }, // plank on a sliding cotton-reel fulcrum
     yarn:   { r: 17,          static: false, friction: .9,  density: .0016 },
-    ball:   { r: 17,          static: false, friction: .2,  density: .006 },             // a heavy wooden toy ball
+    ball:   { r: 17,          static: false, friction: .2,  density: .008 },             // a heavy wooden toy ball
   };
   const MARBLE = { r: 10, density: .0045, restitution: .3, friction: 0, frictionAir: .0012 };
 
@@ -24,7 +24,7 @@
     if (d.density) o.density = d.density;
     let b;
     if (p.type === 'yarn') b = Bodies.circle(p.x, p.y, d.r, { ...o, restitution: 0, frictionAir: .02, frictionStatic: 1 });
-    else if (p.type === 'ball') b = Bodies.circle(p.x, p.y, d.r, { ...o, restitution: .1, frictionAir: .001 });
+    else if (p.type === 'ball') b = Bodies.circle(p.x, p.y, d.r, { ...o, friction: 0, frictionStatic: 0, restitution: .1, frictionAir: .002 });
     else b = Bodies.rectangle(p.x, p.y, d.w, d.h, { ...o, chamfer: p.type === 'block' ? { radius: 4 } : undefined });
     Body.setAngle(b, p.a || 0);
     return b;
@@ -36,7 +36,7 @@
     const engine = Engine.create({ positionIterations: 8, velocityIterations: 6 });
     engine.gravity.y = 1;
     const world = engine.world, S = { engine, level, statics: [], dyn: [], placed: [], gates: [], tails: [], triggers: [], buttons: [], levers: [] };
-    const st = (x, y, w, h, a, label, fr = .02) => { const b = Bodies.rectangle(x, y, w, h, { isStatic: true, label, friction: fr, angle: a || 0 }); S.statics.push(b); return b; };
+    const st = (x, y, w, h, a, label, fr = .02) => { const b = Bodies.rectangle(x, y, w, h, { isStatic: true, label, friction: fr, frictionStatic: 0, angle: a || 0 }); S.statics.push(b); return b; };
     for (const s of level.statics) st(s.x, s.y, s.w, s.h, s.a, s.kind || 'shelf', s.fr ?? .02);
     // cup: a little U
     const c = level.cup; S.cupBox = { x0: c.x - 23, x1: c.x + 23, y0: c.y - 26, y1: c.y };
@@ -47,7 +47,7 @@
     for (const p of level.props || []) { const b = makePiece(p); b.label = p.type; b.isProp = true; S.dyn.push(b); }
     // gates: a plank hinged at one end, held by a latch until its trigger is hit
     for (const g of level.gates || []) {
-      const len = g.len, tilt = g.tilt ?? .3, ang = g.dir > 0 ? -Math.PI/2 + tilt : -Math.PI/2 - tilt;   // standing, tipped toward the gap
+      const len = g.len, tilt = g.tilt ?? .55, ang = g.dir > 0 ? -Math.PI/2 + tilt : -Math.PI/2 - tilt;   // standing, tipped toward the gap
       const cx = g.hx + Math.cos(ang) * len / 2, cy = g.hy + Math.sin(ang) * len / 2;
       const plank = Bodies.rectangle(cx, cy, len, 14, { label: 'gate', density: .002, friction: .2, angle: ang });
       const hinge = Constraint.create({ bodyA: plank, pointA: { x: -Math.cos(ang) * len / 2, y: -Math.sin(ang) * len / 2 }, pointB: { x: g.hx, y: g.hy }, stiffness: 1, length: 0 });
@@ -68,8 +68,8 @@
         // a ruler with a little stopper at each end, so a marble can sit in the end like a spoon's bowl
         const f = { group: -7 }, d2 = PIECES.lever;
         const parts = [Bodies.rectangle(cx, cy, d2.w, d2.h, { label: 'lever', collisionFilter: f, friction: d2.friction, density: d2.density }),
-          Bodies.rectangle(cx - d2.w / 2 + 3, cy - 9, 6, 14, { label: 'lever', collisionFilter: f, density: d2.density }),
-          Bodies.rectangle(cx + d2.w / 2 - 3, cy - 9, 6, 14, { label: 'lever', collisionFilter: f, density: d2.density })];
+          Bodies.rectangle(cx - d2.w / 2 + 10, cy - 7, 8, 6, { label: 'lever', collisionFilter: f, density: d2.density, chamfer: { radius: 2.5 } }),
+          Bodies.rectangle(cx + d2.w / 2 - 10, cy - 7, 8, 6, { label: 'lever', collisionFilter: f, density: d2.density, chamfer: { radius: 2.5 } })];
         const plank = Body.create({ parts, label: 'lever', collisionFilter: f, friction: d2.friction });
         Body.setPosition(plank, { x: cx, y: cy + (plank.position.y - cy) }); Body.setAngle(plank, p.a);
         const reel = Bodies.circle(p.x, p.y + 14, 13, { isStatic: true, label: 'reel', collisionFilter: { group: -7 } });
@@ -115,7 +115,7 @@
   function runner(level, placements, opt = {}) {
     const S = build(level, placements), { engine } = S, m = S.marble;
     const maxSteps = opt.maxSteps || 900, settle = 45, trail = [];
-    const R = { S, steps: 0, done: false, success: false, fell: false, minDist: 1e9, trigDist: 1e9, tokens: [], trail, launched: false };
+    const R = { S, steps: 0, done: false, success: false, fell: false, minDist: 1e9, trigDist: 1e9, propTrail: [], tokens: [], trail, launched: false };
     const push = t => { if (R.tokens[R.tokens.length - 1] !== t) R.tokens.push(t); };
     let inCup = 0;
     const toppled = new Set(), touching = new Map();
@@ -132,6 +132,20 @@
           if (x === m) touch(y.label, 1);
           if (x === m && R.steps > settle && ['ruler', 'book', 'domino', 'block', 'lever', 'yarn', 'gate', 'tail', 'ball'].includes(y.label)) push(y.label);
           if (x.label === 'domino' && y.label === 'domino') { toppled.add(x.id); toppled.add(y.id); }
+          // lever catapult: a heavy thing landing on one arm flings a marble sitting on the other arm.
+          // Speed scales with the arm ratio (long arm / short arm), which is the lesson of the sliding fulcrum.
+          if (x.label === 'lever' && ['ball', 'block'].includes(y.label) && (touching.get('lever') || 0) > 0 && R.steps > settle) {
+            const lv = S.levers.find(l => l.plank === x.parent || l.plank === x); if (!lv) continue;
+            const f = lv.pin.pointB, a = lv.plank.angle, ux = Math.cos(a), uy = Math.sin(a);
+            const di = (y.position.x - f.x) * ux + (y.position.y - f.y) * uy, dm = (m.position.x - f.x) * ux + (m.position.y - f.y) * uy;
+            const vi = Math.hypot(y.velocity.x - x.parent.velocity.x, y.velocity.y - x.parent.velocity.y);
+            if (di * dm < 0 && vi > 2 && Math.abs(di) > 8) {
+              let nx = -uy, ny = ux; if (ny > 0) { nx = -nx; ny = -ny; }
+              const sp = Math.min(15, vi * Math.min(3, Math.abs(dm / di)) * .55);
+              Body.setVelocity(m, { x: m.velocity.x + nx * sp + Math.sign(dm) * -ux * sp * .18, y: m.velocity.y + ny * sp });
+              push('launch');
+            }
+          }
         }
       }
     });
@@ -158,7 +172,7 @@
       let contact = 0; for (const v of touching.values()) contact += v;
       if (contact > 0) { const v = m.velocity, sp = Math.hypot(v.x, v.y), dec = (touching.get('book') ? .07 : .004);
         if (sp > 0) { const k = Math.max(0, sp - dec) / sp; Body.setVelocity(m, { x: v.x * k, y: v.y * k }); } }
-      if (steps % 6 === 0) trail.push([m.position.x, m.position.y, m.velocity.x]);
+      if (steps % 6 === 0) { trail.push([m.position.x, m.position.y, m.velocity.x]); for (const b of S.dyn) if (b.speed > .5) R.propTrail.push([b.position.x, b.position.y, b.velocity.x]); }
       R.minDist = Math.min(R.minDist, Math.hypot(m.position.x - level.cup.x, m.position.y - (level.cup.y - 15)));
       for (const t of S.triggers) if (!t.gate.open) { for (const b of [m, ...S.dyn, ...S.placed]) if (!b.isStatic) R.trigDist = Math.min(R.trigDist, Math.hypot(b.position.x - t.position.x, b.position.y - t.position.y)); }
       const cb = S.cupBox;
@@ -177,7 +191,7 @@
     const R = runner(level, placements, opt);
     while (!R.done) R.step();
     return { success: R.success, steps: R.steps, minDist: R.minDist, fell: R.fell, tokens: R.tokens, buttons: R.S.buttons.map(b => b.got),
-      gateOpen: R.S.gates.map(g => g.open), trigDist: R.trigDist, trail: R.trail, launched: R.launched, pieces: placements.length };
+      gateOpen: R.S.gates.map(g => g.open), trigDist: R.trigDist, trail: R.trail, propTrail: R.propTrail, launched: R.launched, pieces: placements.length };
   }
 
   function snapshot(S) {
@@ -190,7 +204,7 @@
   // collapse a run's tokens into a "route family" key
   function family(tokens) {
     const t = tokens.filter(x => x !== 'cup').map(x => (x === 'ruler' || x === 'book') ? 'ramp' : x.startsWith('T:') ? 'T:' + (x.slice(2) === 'marble' ? 'marble' : x.slice(2) === 'ramp' ? 'ramp' : x.slice(2)) : x);
-    const out = []; for (const x of t) if (out[out.length - 1] !== x) out.push(x);
+    const out = []; for (const x of t) if (!out.includes(x)) out.push(x);   // first time each mechanism shows up
     return out.join('>');
   }
 

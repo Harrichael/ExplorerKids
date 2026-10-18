@@ -30,7 +30,24 @@ function propose(level, placements, type, trail, R) {
     else if (closed.length && k < .85) { const g = closed[Math.floor(R() * closed.length)].trigger; x = g.x + (R() - .5) * 160; y = g.y + (R() - .2) * 80; }   // something near a trigger
     else { x = 60 + R() * (Sim.W - 120); y = 120 + R() * (FLOOR_Y - 140); }
     let p = { type, x, y, a: 0 };
+    if ((type === 'ruler' || type === 'book') && trail && trail.length && R() < .4) {
+      // aim a ramp from under the marble's path toward something worth reaching (a trigger, a button, the cup)
+      const P = trail[Math.floor(R() * trail.length)], targets = [level.cup, ...(level.gates || []).map(g => g.trigger), ...(level.buttons || [])], Q = targets[Math.floor(R() * targets.length)];
+      const dir = Math.sign(Q.x - P[0]) || 1, len = PIECES[type].w, ang = Math.max(.05, Math.min(.75, Math.atan2(Math.max(5, Q.y - P[1]), Math.abs(Q.x - P[0]))));
+      p.a = dir * ang; p.x = P[0] + dir * Math.cos(ang) * len * .45; p.y = P[1] + 16 + Math.sin(ang) * len * .45;
+      const next = [...placements, p]; if (valid(level, next, next.length - 1)) return next; continue;
+    }
     if (type === 'ruler' || type === 'book') p.a = R() < .7 ? Math.sign(level.cup.x - x) * (.08 + R() * .55) : (R() - .5) * 1.3;   // mostly sloping toward the cup
+    if (type === 'lever' && trail && trail.length && level._propTrail && level._propTrail.length && R() < .6) {
+      // catapult guess: marble's resting spot on the long arm, a falling prop's path over the short arm
+      const C = trail[Math.floor(R() * trail.length)], falls = level._propTrail.filter(q => q[1] > 200), D = falls.length ? falls[Math.floor(R() * falls.length)] : null;
+      if (D && Math.abs(D[0] - C[0]) > 60 && Math.abs(D[0] - C[0]) < 205) {
+        const dir = Math.sign(D[0] - C[0]), gap = Math.abs(D[0] - C[0]), L1 = Math.max(110, Math.min(185, gap * (.6 + R() * .3)));
+        p.x = C[0] + dir * (L1 - 8); p.t = -dir * (L1 - 105) / 210; p.a = (R() - .5) * .3; p.y = C[1] - 20;
+        if (standOn(level, placements, p)) { const next = [...placements, p]; if (valid(level, next, next.length - 1)) return next; }
+        continue;
+      }
+    }
     if (type === 'lever') { p.a = (R() - .5) * .7; p.t = (R() - .5) * .8; p.y -= 30; if (!standOn(level, placements, p)) continue; }
     if (type === 'domino' || type === 'block' || type === 'yarn') { p.y -= 60; if (!standOn(level, placements, p)) continue; }
     const next = [...placements, p];
@@ -55,7 +72,7 @@ function addDominoRow(level, placements, trail, R) {
 function mutate(level, placements, trail, R) {
   const left = trayLeft(level, placements), avail = Object.keys(left).filter(k => left[k] > 0);
   const r = R();
-  if ((r < .3 || !placements.length) && avail.length) { const t = avail[Math.floor(R() * avail.length)]; return t === 'domino' && R() < .6 ? addDominoRow(level, placements, trail, R) : propose(level, placements, t, trail, R); }
+  if ((r < (placements.length < 3 ? .55 : .3) || !placements.length) && avail.length) { const t = avail[Math.floor(R() * avail.length)]; return t === 'domino' && R() < .6 ? addDominoRow(level, placements, trail, R) : propose(level, placements, t, trail, R); }
   if (r < .38 && placements.length) {
     let i = Math.floor(R() * placements.length);
     if (trail && trail.length && R() < .6) { const e = trail[trail.length - 1]; let bd = 1e9; placements.forEach((p, j) => { const d = Math.hypot(p.x - e[0], p.y - e[1]); if (d < bd) { bd = d; i = j; } }); }
@@ -109,9 +126,48 @@ function solve(level, opt = {}) {
   return { sols, sims, findRate: restartHits / restarts, bestScore, bestRes };
 }
 
+// beam search: build a run piece by piece, catching the marble where it went wrong (how people build marble runs)
+function solveBeam(level, opt = {}) {
+  const R = rngFrom(opt.seed || 7), width = opt.width || 6, expand = opt.expand || 10, beams = opt.beams || 3;
+  const sols = [], seenSol = new Set(); let sims = 0, hits = 0, bestScore = -1e9, bestRes = null;
+  const total = Object.values(level.tray).reduce((a, b) => a + b, 0);
+  for (let bm = 0; bm < beams; bm++) {
+    let frontier = [{ pl: [], res: Sim.run(level, [], {}) }]; sims++;
+    frontier[0].sc = score(level, frontier[0].res);
+    let hit = false;
+    for (let depth = 0; depth < Math.min(total, 7) + 2; depth++) {
+      const kids = [];
+      for (const node of frontier) for (let e = 0; e < expand; e++) {
+        const cand = (node.pl.length && R() < .3) ? mutate(level, node.pl, node.res.trail, R) : mutate(level, node.pl, node.res.trail, R);
+        if (!cand) continue;
+        const res = Sim.run(level, cand, {}); sims++;
+        if (res.propTrail && res.propTrail.length) level._propTrail = res.propTrail;
+        const sc = score(level, res) + R() * 4;
+        if (res.success) {
+          hit = true; const fam = Sim.family(res.tokens), key = fam + '|' + cand.length;
+          if (!seenSol.has(JSON.stringify(cand.map(p => [p.type, Math.round(p.x / 20), Math.round(p.y / 20)])))) {
+            seenSol.add(JSON.stringify(cand.map(p => [p.type, Math.round(p.x / 20), Math.round(p.y / 20)])));
+            sols.push({ placements: cand, fam, pieces: cand.length, buttons: res.buttons, steps: res.steps, tokens: res.tokens });
+          }
+        }
+        if (sc > bestScore) { bestScore = sc; bestRes = res; }
+        kids.push({ pl: cand, res, sc, sig: Sim.family(res.tokens) });
+      }
+      if (!kids.length) break;
+      // keep the best few, but no more than two per route signature so the beam stays varied
+      kids.sort((a, b) => b.sc - a.sc);
+      const per = new Map(); frontier = [];
+      for (const k of kids) { const n = per.get(k.sig) || 0; if (n >= 2) continue; per.set(k.sig, n + 1); frontier.push(k); if (frontier.length >= width) break; }
+      // successful nodes keep going (to find variants) but we also re-seed from them less often
+    }
+    if (hit) hits++;
+  }
+  return { sols, sims, findRate: hits / beams, bestScore, bestRes };
+}
+
 // how good is this level as a puzzle?
 function evaluate(level, opt = {}) {
-  const sv = solve(level, opt), R = rngFrom((opt.seed || 7) + 99);
+  const sv = (opt.mode === 'climb' ? solve : solveBeam)(level, opt), R = rngFrom((opt.seed || 7) + 99);
   const fams = new Map();
   for (const s of sv.sols) { if (!fams.has(s.fam)) fams.set(s.fam, []); fams.get(s.fam).push(s); }
   const report = { sims: sv.sims, findRate: sv.findRate, families: [], fitness: 0, notes: [] };
@@ -144,4 +200,4 @@ function evaluate(level, opt = {}) {
   return { report, sv };
 }
 
-module.exports = { solve, evaluate, rngFrom, score };
+module.exports = { solve, solveBeam, evaluate, rngFrom, score, mutate, propose };
