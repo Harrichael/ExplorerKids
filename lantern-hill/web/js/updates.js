@@ -20,7 +20,8 @@ const TOAST_AFTER = 1500;
 const toastEl = $('updateToast');
 // the server pins each page to its version with <base href="/v/<version>/">
 const mine = (document.baseURI.match(/\/v\/([^/]+)\/$/) || [])[1];
-let live = mine, resumed = false, applying = false;
+// a closed toast stays closed for that version; it still turns by itself at the next safe moment
+let live = mine, resumed = false, applying = false, dismissed = null;
 
 // Called once the world is running.
 export function followUpdates(){
@@ -33,9 +34,10 @@ export function followUpdates(){
     if (live === mine) { waiting = 0; toastEl.hidden = true; return; }
     if (safe()) { clearInterval(poll); applyUpdate(); return; }
     waiting += 500;
-    if (waiting >= TOAST_AFTER && toastEl.hidden) { toastEl.hidden = false; Sound.updateReady(); }
+    if (waiting >= TOAST_AFTER && toastEl.hidden && dismissed !== live) { toastEl.hidden = false; Sound.updateReady(); }
   }, 500);
   $('updateNow').addEventListener('click', e => { e.stopPropagation(); clearInterval(poll); applyUpdate(); });
+  $('updateClose').addEventListener('click', e => { e.stopPropagation(); dismissed = live; toastEl.hidden = true; e.currentTarget.blur(); });
 }
 const safe = () => !startEl.hidden || (game.world === HQ && !game.activity && !game.cutscene && !convo && !dressing);
 
