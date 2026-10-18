@@ -1,12 +1,13 @@
-// The Library Nook reader: the explorer lies on their tummy on the reading rug with a big storybook
-// open on the floor in front of them, and the camera looks down over their head at the pages, which
-// curl as they turn. Everything happens in the room itself. Loaded the first time someone reads
+// The Library Nook reader: the explorer settles down with a storybook open in front of them, on their
+// tummy on the reading rug or cross-legged in the window seat, and the camera looks down at the pages,
+// which curl as they turn. Everything happens in the room itself. Loaded the first time someone reads
 // a book from their backpack.
 
 import * as THREE from 'three';
 import { ease } from '../core/kit.js';
 import { camera, renderer } from '../core/render.js';
 import { Sound } from '../core/sound.js';
+import { WINDOW_SEAT } from '../hq/cottage.js';
 import { hqAnims, scene } from '../hq/scene.js';
 import { sitDown, standUp } from '../hq/sit.js';
 import { keys } from '../input.js';
@@ -37,37 +38,24 @@ css.textContent = `
 #reader .side.prev{left:max(10px,env(safe-area-inset-left,0px))}
 #reader .side.next{right:max(10px,env(safe-area-inset-right,0px))}
 @media (orientation:portrait){#reader .side{top:auto;bottom:calc(64px + env(safe-area-inset-bottom,0px));transform:none}}
-#reader .rb:focus-visible,#shelf .bk:focus-visible{outline:3px solid var(--parch);outline-offset:3px}
+#reader .rb:focus-visible{outline:3px solid var(--parch);outline-offset:3px}
 #reader .pg{font-weight:900;font-size:14px;color:var(--parch);font-variant-numeric:tabular-nums;text-shadow:0 2px 0 var(--ink)}
 #reader .credit{font-size:10px;font-weight:700;color:rgba(239,224,191,.7);text-shadow:0 1px 0 var(--ink);line-height:1.3}
-#reader.picking .side,#reader.picking .rfoot,#reader.picking #rShelf{visibility:hidden}
 #reader .done{position:absolute;left:50%;top:18%;transform:translateX(-50%);font-family:var(--display);font-size:clamp(24px,6vw,38px);color:var(--parch);text-shadow:0 3px 0 var(--ink),0 0 24px rgba(217,164,65,.6);pointer-events:none;text-align:center;opacity:0;transition:opacity .4s}
-#reader .done small{display:block;font-family:var(--body);font-size:15px;font-weight:900;color:var(--gold)}
-#shelf{position:absolute;inset:auto 0 0 0;top:64px;overflow-y:auto;padding:12px max(16px,env(safe-area-inset-left,0px)) 24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:16px;align-content:start;background:rgba(34,28,51,.8)}
-#shelf .bk{position:relative;background:#f6ecd6;color:#1a1320;border:3px solid var(--gold);border-radius:12px;box-shadow:0 0 0 4px var(--ink),0 10px 24px rgba(0,0,0,.4);padding:0;cursor:pointer;text-align:left;font:inherit;overflow:hidden}
-#shelf .bk img{display:block;width:100%;aspect-ratio:3/4;object-fit:cover;background:#6d3b5e}
-#shelf .bk span{display:block;padding:8px 10px 10px;font-weight:900;font-size:14px;line-height:1.25}
-#shelf .bk em{display:block;font-style:normal;font-weight:800;font-size:12px;color:#6d3b5e;margin-top:2px}
-#shelf .ribbon{position:absolute;top:8px;right:-30px;transform:rotate(35deg);background:var(--gold);color:#1a1320;font-weight:900;font-size:12px;padding:3px 34px;box-shadow:0 2px 0 var(--ink)}`;
+#reader .done small{display:block;font-family:var(--body);font-size:15px;font-weight:900;color:var(--gold)}`;
 document.head.appendChild(css);
 const el = document.createElement('div'); el.id = 'reader'; el.hidden = true; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Library book');
-el.innerHTML = `<header><div><div class="sub" id="rSub">Library Nook</div><h2 id="rTitle">Pick a book</h2></div>
-    <div class="rtop"><button class="rb ghost" id="rShelf">Bookshelf</button><button class="rb ghost" id="rClose">Close</button></div></header>
+el.innerHTML = `<header><div><div class="sub" id="rSub">Library Nook</div><h2 id="rTitle"></h2></div>
+    <div class="rtop"><button class="rb ghost" id="rClose">Close</button></div></header>
   <div class="rspace" id="rPages"></div>
   <button class="rb side prev" id="rPrev" aria-label="Previous page">◀</button><button class="rb side next" id="rNext" aria-label="Next page">▶</button>
   <div class="done" id="rDone"></div>
   <div class="rfoot"><div class="pg" id="rPg"></div><div class="credit" id="rCredit"></div></div>
-  <div id="shelf" hidden></div>`;
+`;
 document.body.appendChild(el);
-const shelfEl = el.querySelector('#shelf'), $r = id => el.querySelector('#' + id), pagesEl = $r('rPages');
+const $r = id => el.querySelector('#' + id), pagesEl = $r('rPages');
 
-// ---------- the book on the floor ----------
-// SPOT is where the explorer's hips settle; they lie along the rug facing the window, the book past their head
-const SPOT = {x:-6.9, z:3.45, angle:-Math.PI/2}, fwd = new THREE.Vector3(Math.sin(SPOT.angle), 0, Math.cos(SPOT.angle));
-const SCALE = .15;   // a page about 45 cm tall: a big floor storybook
-const B = makeBook();
-B.root.scale.setScalar(SCALE); B.root.rotation.y = SPOT.angle + Math.PI;   // the tops of the pages face away from the reader
-B.root.position.set(SPOT.x, .052, SPOT.z).addScaledVector(fwd, 1.55); B.root.visible = false; scene.add(B.root);
+const B = makeBook(); B.root.visible = false; scene.add(B.root);
 
 // Each page loads once and is uploaded to the GPU as soon as it arrives; a turn waits until every page it
 // reveals is ready, so a page never turns over onto a blank one
@@ -131,20 +119,44 @@ function turn(dir) {
   });
 }
 
-// ---------- lying down to read ----------
+// ---------- settling down to read ----------
+const X = new THREE.Vector3(1, 0, 0), q = new THREE.Quaternion();
+const down = new THREE.Vector3(0, -1, 0), reach = (x, y, z) => new THREE.Quaternion().setFromUnitVectors(down, new THREE.Vector3(x, y, z).normalize());
+// bends the body forward by a about the hips, with the hips ending up y above the ground and side across
+function bend(a, y, side = 0) {
+  const hip = .74 * hero.body.scale.y;
+  hero.body.quaternion.multiply(q.setFromAxisAngle(X, a));
+  hero.body.position.set(side, y - hip * Math.cos(a), -hip * Math.sin(a));
+}
 // on their tummy, pivoting forward about the hips, propped up on their elbows with their chin up to see the
 // pages; their feet swing in the air behind them
-const X = new THREE.Vector3(1, 0, 0), LIE = 1.35, q = new THREE.Quaternion();
-const down = new THREE.Vector3(0, -1, 0), reach = (x, y, z) => new THREE.Quaternion().setFromUnitVectors(down, new THREE.Vector3(x, y, z).normalize());
 const ELBOWS = [reach(.12, .3, .95), reach(-.12, .3, .95)];
-function pose(p) {
-  const s = hero.body.scale.y, a = LIE * p, hip = .74 * s, y = hip + (.26 - hip) * p;
-  hero.body.quaternion.multiply(q.setFromAxisAngle(X, a));
-  hero.body.position.set(0, y - hip * Math.cos(a), -hip * Math.sin(a));
+function lie(p) {
+  const hip = .74 * hero.body.scale.y;
+  bend(1.35 * p, hip + (.26 - hip) * p);
   hero.head.quaternion.multiply(q.setFromAxisAngle(X, -.8 * p));
   [hero.armL, hero.armR].forEach((m, i) => m.quaternion.slerp(ELBOWS[i], p));
   [hero.legL, hero.legR].forEach((m, i) => m.quaternion.multiply(q.setFromAxisAngle(X, p * (.9 + Math.sin(game.elapsed * 2.6 + i * Math.PI) * .3))));
 }
+// cross-legged, each leg forward and across to the other side, leaning over the book with hands on their knees.
+// They walk up beside the seat and hop sideways onto it, since walking there would go through it
+const SEAT_HOP = -.8, CROSSED = [reach(.62, -.14, .78), reach(-.62, -.03, .78)], KNEES = [reach(.2, -.85, .5), reach(-.2, -.85, .5)];
+function sit(p) {
+  const hip = .74 * hero.body.scale.y;
+  bend(.3 * p, hip + (WINDOW_SEAT.y + .1 - hip) * p + Math.sin(p * Math.PI) * .15, SEAT_HOP * p);
+  hero.head.quaternion.multiply(q.setFromAxisAngle(X, .35 * p));
+  [hero.legL, hero.legR].forEach((m, i) => m.quaternion.slerp(CROSSED[i], p));
+  [hero.armL, hero.armR].forEach((m, i) => m.quaternion.slerp(KNEES[i], p));
+}
+// x, z, angle: where they walk to and face. book: where the book's spine lies, its tops away from the reader
+const PLACES = {
+  // along the rug facing the window, a big floor storybook (pages about 45 cm tall) past their head
+  rug: {x:-6.9, z:3.45, angle:-Math.PI/2, pose:lie, scale:.15, book:[-8.45, .052, 3.45]},
+  // at the end of the seat facing along it, side-on to the window, a smaller book open on the cushion
+  window: {x:WINDOW_SEAT.x - SEAT_HOP, z:WINDOW_SEAT.z - .45, angle:0, pose:sit, scale:.09, book:[WINDOW_SEAT.x, WINDOW_SEAT.y + .002, WINDOW_SEAT.z + .3]},
+};
+let at = PLACES.rug;
+const fwd = new THREE.Vector3();
 // straight down onto the pages, so however far back a narrow screen needs it, the explorer's head stays
 // below the book rather than in front of it; far enough off to fit the book, open or closed, in the space
 // the header and footer leave free. The slight lean keeps the page tops at the top of the screen.
@@ -152,7 +164,7 @@ const TILT = .06, mid = new THREE.Vector3();
 function readCam(pos, look) {
   const [x0, x1] = B.extent(), tan = Math.tan(camera.fov * Math.PI / 360);
   const free = Math.max(.5, pagesEl.getBoundingClientRect().height / innerHeight || 1);
-  const w = (x1 - x0 + .3) * SCALE, h = (B.H + 2 * B.MARGIN + .3) * SCALE, d = Math.max(h / 2 / tan / free, w / 2 / tan / camera.aspect) * 1.02;
+  const w = (x1 - x0 + .3) * at.scale, h = (B.H + 2 * B.MARGIN + .3) * at.scale, d = Math.max(h / 2 / tan / free, w / 2 / tan / camera.aspect) * 1.02;
   B.root.localToWorld(mid.set((x0 + x1) / 2, .3, 0));
   look.copy(mid); pos.copy(mid).addScaledVector(fwd, -d * Math.sin(TILT)); pos.y += d * Math.cos(TILT);
 }
@@ -164,20 +176,8 @@ hqAnims.push(dt => {
   if (flip.t >= 1 && (flip.board !== null || queued || !B.fluttering())) { spread += flip.dir; flip = null; B.settle(); setFlat(); if (queued) { const d = Math.sign(queued); queued -= d; turn(d); } }
 });
 
-function showShelf() {
-  book = null; flip = null; queued = 0; shelfEl.hidden = false; el.classList.add('picking');
-  $r('rTitle').textContent = 'Pick a book'; $r('rSub').textContent = 'Library Nook'; $r('rCredit').textContent = '';
-  shelfEl.innerHTML = '';
-  for (const b of BOOKS) {
-    const st = state[b.id] || { seen: [] }, btn = document.createElement('button'); btn.className = 'bk';
-    const pct = b.pages ? Math.round(100 * (st.seen || []).length / b.pages) : 0;
-    btn.innerHTML = `${st.read ? '<i class="ribbon">Read ⭐</i>' : ''}<img alt="" src="${b.pages ? b.dir + 'p001.jpg' : ''}"><span>${b.title}<em>${b.pages ? (st.read ? 'Finished' : pct ? pct + '% read' : 'Not started yet') : 'Coming soon'}</em></span>`;
-    btn.addEventListener('click', () => { if (b.pages) openBook(b); });
-    shelfEl.append(btn);
-  }
-}
 function openBook(b) {
-  book = b; shelfEl.hidden = true; el.classList.remove('picking');
+  book = b;
   $r('rTitle').textContent = b.title; $r('rSub').textContent = b.sub; $r('rCredit').textContent = b.credit || '';
   B.setAspect(b.aspect); B.setShade(1); spread = 0; flip = null; queued = 0;
   B.setCovers([pageTex(b, 0), pageTex(b, 1)], [pageTex(b, b.pages - 1), pageTex(b, b.pages - 2)]); setFlat();
@@ -188,11 +188,14 @@ pagesEl.addEventListener('pointerdown', e => { sx = e.clientX; });
 pagesEl.addEventListener('pointerup', e => { if (sx === null) return; const dx = e.clientX - sx; sx = null; Sound.init();
   if (Math.abs(dx) > 30) turn(dx < 0 ? 1 : -1); else turn(e.clientX > innerWidth / 2 ? 1 : -1); });
 $r('rPrev').addEventListener('click', () => turn(-1)); $r('rNext').addEventListener('click', () => turn(1));
-$r('rShelf').addEventListener('click', showShelf); $r('rClose').addEventListener('click', () => close());
+$r('rClose').addEventListener('click', () => close());
 
-export function openReader(id) {
-  const b = BOOKS.find(x => x.id === id);
-  if (!b || !b.pages || !sitDown({...SPOT, pose, seated: () => { game.cutCam = readCam; el.hidden = false; }})) return;
+// where: one of PLACES
+export function openReader(id, where = 'rug') {
+  const b = BOOKS.find(x => x.id === id), pl = PLACES[where];
+  if (!b || !b.pages || !sitDown({x: pl.x, z: pl.z, angle: pl.angle, pose: pl.pose, seated: () => { game.cutCam = readCam; el.hidden = false; }})) return;
+  at = pl; fwd.set(Math.sin(at.angle), 0, Math.cos(at.angle));
+  B.root.scale.setScalar(at.scale); B.root.rotation.y = at.angle + Math.PI; B.root.position.set(...at.book);
   closeDialog(); for (const k in keys) keys[k] = false; open = true;
   B.root.visible = true; document.documentElement.classList.add('reading-book');
   Sound.duck(true); Sound.tone(660, { type: 'triangle', dur: .15, vol: .07 });
