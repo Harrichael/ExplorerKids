@@ -1249,7 +1249,7 @@ addNPC({pid:'pembrook', name:'Ms. Pembrook', role:'Librarian', dot:'#9a5a86',
   ]}, librarian, -7.3, 0, -3.55, 0, 2.45);
 
 const starShirt = tex(128,128,(g,w,h)=>{ g.fillStyle='#4a5a8a'; g.fillRect(0,0,w,h); g.fillStyle='#d9a441'; for (let i=0;i<10;i++){ const x = (i*37)%128, y = (i*53)%128; g.beginPath(); for (let k=0;k<10;k++){ const r = k%2?3:8, a = k*Math.PI/5-Math.PI/2; g.lineTo(x+Math.cos(a)*r, y+Math.sin(a)*r);} g.fill(); } g.fillStyle='#d36a8f'; for (let i=0;i<6;i++){ g.beginPath(); g.arc((i*61+20)%128, (i*29+60)%128, 6, 0, 7); g.fill(); } }, 2, 1);
-const teacher_O = {skin:0xe6b894, shirt:0x6d3b5e, coat:0xece4d4, lapel:0xd8cdb8, coatLen:.78, coatFlare:.44, pockets:true, sleeve:0xece4d4, cuff:0x2f8f8a, pants:0x34406b, slimLegs:true, dress:0x6d3b5e, dressTrim:0xd9a441, collar:0xe9d9b8, hair:0xd6d4dc, hairStyle:'buns', tie:0x2f8f8a, goggles:true, earrings:0x6fd6c4, shoe:C.rust, hold:'clipboard', pens:true, scale:1.08, browTilt:-.1, eye:0x2a4a3a, lashes:true, mouth:0xb8475a};
+const teacher_O = {skin:0xe6b894, shirt:0x6d3b5e, coat:0xece4d4, lapel:0xd8cdb8, coatLen:.78, coatFlare:.44, pockets:true, sleeve:0xece4d4, cuff:0x2f8f8a, pants:0x34406b, slimLegs:true, dress:0x6d3b5e, dressTrim:0xd9a441, collar:0xe9d9b8, hair:0xf07a26, brow:0xc8571a, hairStyle:'buns', build:'girl', freckles:true, tie:0x2f8f8a, goggles:true, earrings:0x6fd6c4, shoe:C.rust, hold:'clipboard', pens:true, scale:.98, browTilt:-.18, eye:0x2a4a3a, lashes:true, mouth:0xb8475a};
 const teacher = human(teacher_O);
 addNPC({pid:'sparks', name:'Dr. Vega Sparks', role:'Field trip scientist', dot:'#2f8f8a',
   voice:{type:'square', base:466, scale:[0,4,7,9,12], len:.065, vol:.08, glide:1.1, cut:2200, layer:true},
@@ -1908,6 +1908,68 @@ function addUsable(w, u){
   u.sparkle = new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, color:0xffe39a, opacity:0}));
   u.sparkle.scale.set(.7, .7, 1); u.sparkle.position.set(u.glow[0], u.glow[1], u.glow[2]); w.scene.add(u.sparkle);
   w.usables.push(u); return u;
+}
+// Dr. Vega Sparks can't stand still: random spins, twirls, hops and little dances
+const ZANY = {spin:.75, twirl:1.5, hop:1.1, dance:2.6, wiggle:1.6};
+function zany(n, m, talking, dt){
+  if (!n.zd) n.zd = {aLx:m.armL.rotation.x, aLz:m.armL.rotation.z, aRz:m.armR.rotation.z, next:rr(.8, 2.5), move:null, mt:0, spin:0};
+  const z = n.zd, b = m.body;
+  b.rotation.set(0, 0, 0); m.legL.rotation.z = m.legR.rotation.z = 0;
+  if (!n.moving) m.legL.rotation.x = m.legR.rotation.x = 0;
+  m.armL.rotation.x = z.aLx; m.armL.rotation.z = z.aLz;
+  if (n.moving) { z.move = null; return; }
+  if (talking) {
+    // can't contain herself: bouncy, swaying, rocking on her toes
+    z.move = null; z.next = 1.2;
+    b.position.y = Math.abs(Math.sin(n.t * 7)) * .07;
+    b.rotation.z = Math.sin(n.t * 3.5) * .08;
+    m.armL.rotation.z = z.aLz - Math.abs(Math.sin(n.t * 3.5)) * .25;
+    return;
+  }
+  if (!z.move) {
+    z.next -= dt;
+    // fidget while waiting
+    b.position.y += Math.max(0, Math.sin(n.t * 4.3)) * .02;
+    b.rotation.z = Math.sin(n.t * 1.7) * .04;
+    if (z.next <= 0) { const k = Object.keys(ZANY); z.move = k[Math.floor(Math.random() * k.length)]; z.mt = 0; z.dir = Math.random() < .5 ? -1 : 1; }
+    return;
+  }
+  z.mt += dt; const T = ZANY[z.move], u = Math.min(1, z.mt / T), ease = u < .5 ? 2*u*u : 1 - Math.pow(-2*u + 2, 2)/2;
+  if (z.move === 'spin') {
+    b.rotation.y = z.dir * ease * Math.PI * 2;
+    b.position.y = Math.sin(u * Math.PI) * .22;
+    m.armR.rotation.x = -2.6 * Math.sin(u * Math.PI); m.armR.rotation.z = .3;
+    m.legL.rotation.x = Math.sin(u * Math.PI) * -.5;
+  } else if (z.move === 'twirl') {
+    b.rotation.y = z.dir * ease * Math.PI * 4;
+    const out = Math.sin(u * Math.PI);
+    m.armR.rotation.z = .12 + out * 1.3; m.armR.rotation.x = 0;
+    m.armL.rotation.z = z.aLz - out * 1.1; m.armL.rotation.x = z.aLx * (1 - out);
+    b.position.y = Math.abs(Math.sin(u * Math.PI * 4)) * .06;
+    b.rotation.z = Math.sin(u * Math.PI * 4) * .06;
+  } else if (z.move === 'hop') {
+    const h = Math.abs(Math.sin(u * Math.PI * 3));
+    b.position.y = h * .3;
+    m.armR.rotation.x = -2.8 * h; m.armR.rotation.z = .25;
+    m.legL.rotation.x = -.6 * h; m.legR.rotation.x = .25 * h;
+  } else if (z.move === 'dance') {
+    const beat = z.mt * 6.5, s1 = Math.sin(beat), s2 = Math.sin(beat * .5);
+    b.position.y = Math.abs(s1) * .1;
+    b.rotation.z = s2 * .16;
+    b.rotation.y = Math.sin(beat * .25) * .7;
+    m.armR.rotation.x = -2.4 + s1 * .5; m.armR.rotation.z = .4 + s2 * .3;
+    m.armL.rotation.z = z.aLz - (.5 + Math.max(0, -s2) * .5);
+    m.legL.rotation.x = Math.max(0, s1) * -.7; m.legR.rotation.x = Math.max(0, -s1) * -.7;
+    m.head.rotation.z = s2 * .15;
+    if (u > .85) b.rotation.y *= (1 - u) / .15;
+  } else if (z.move === 'wiggle') {
+    const w = Math.sin(z.mt * 14);
+    b.rotation.z = w * .12; b.rotation.y = Math.sin(z.mt * 7) * .35;
+    m.armR.rotation.x = -1.2 + w * .6; m.armR.rotation.z = .6;
+    m.legL.rotation.z = w * .15; m.legR.rotation.z = w * .15;
+    b.position.y = Math.abs(w) * .04;
+  }
+  if (u >= 1) { z.move = null; z.next = rr(1.5, 4.5); }
 }
 function spawnNPC(w, pid, x, z, ry, lines, follow){
   const p = PERSONA[pid], model = p.make();
@@ -2615,7 +2677,7 @@ function update(dt){
           if (dd > .45) { const st = Math.min(dd - .3, (dd > 3 ? 6 : 3.6)*dt), nx2 = n.x + ddx/dd*st, nz2 = n.z + ddz/dd*st; if (!W.bounds || W.bounds(nx2, nz2)) { n.x = nx2; n.z = nz2; } moving = true; lookA = Math.atan2(ddx, ddz); n.walk += dt*9.5; }
         }
         n.y = n.gy = W.ground(n.x, n.z); m.root.position.set(n.x, n.y, n.z);
-        const swing = moving ? Math.sin(n.walk)*.6 : 0; m.legL.rotation.x = swing; m.legR.rotation.x = -swing;
+        n.moving = moving; const swing = moving ? Math.sin(n.walk)*.6 : 0; m.legL.rotation.x = swing; m.legR.rotation.x = -swing;
       }
       let d2 = lookA - m.root.rotation.y; d2 = Math.atan2(Math.sin(d2), Math.cos(d2));
       m.root.rotation.y += d2 * Math.min(1, dt * 4);
@@ -2627,6 +2689,7 @@ function update(dt){
       m.mouthOpen.visible = open; m.smile.visible = !open;
       m.mouthOpen.scale.y = .5 + Math.abs(Math.sin(n.t * 17)) * .5;
       if (n.t > n.blinkAt) { m.eyes.scale.y = .1; if (n.t > n.blinkAt + .1) { m.eyes.scale.y = 1; n.blinkAt = n.t + rr(2, 5); } }
+      if ((n.pid || (n.persona && n.persona.id)) === 'sparks') zany(n, m, talking, dt);
     }
     n.label.position.set(n.x, n.y + n.labelY + Math.sin(n.t * 2) * .03, n.z);
     const lo = d < 4.5 && dy < 2 && n.follow === undefined ? 1 : 0;
