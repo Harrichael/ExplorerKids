@@ -1,15 +1,20 @@
 -module(lantern_hill_app).
 -behaviour(application).
 
--export([start/2, stop/1, upgraded/0]).
+-export([start/2, prep_stop/1, stop/1, upgraded/0]).
 
 start(_Type, _Args) ->
     {ok, Sup} = lantern_hill_sup:start_link(),
-    {ok, _} = cowboy:start_clear(lantern_hill_http, [{port, port()}],
+    {ok, _} = cowboy:start_clear(lantern_hill_http, [{port, port()} | lantern_hill_handover:socket_opts()],
                                  #{env => #{dispatch => dispatch()}}),
     logger:notice("Lantern Hill serving ~ts on http://localhost:~b/",
                   [lantern_hill_versions:web_root(), ranch:get_port(lantern_hill_http)]),
+    lantern_hill_handover:serving(),
     {ok, Sup}.
+
+prep_stop(State) ->
+    lantern_hill_handover:step_down(),
+    State.
 
 stop(_State) ->
     cowboy:stop_listener(lantern_hill_http).

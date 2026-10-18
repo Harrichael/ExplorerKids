@@ -28,13 +28,15 @@ cp _build/prod/rel/lantern_hill/lantern_hill-NEW.tar.gz <installed release>/rele
 
 The old release must be in `_build/prod/rel/lantern_hill` when the relup is built.
 
-To keep a server on whatever a branch says, follow it:
+To keep a server on whatever a branch says, follow it (from `lantern-hill/server`):
 
 ```sh
-FOLLOW_BRANCH=main FOLLOW_INTERVAL=5 rebar3 shell     # interval in seconds, 3-10, default 5
+bin/follow main 5      # branch, then poll interval in seconds, 3-10, default 5
 ```
 
-The server checks the branch out into `server/follow/` (never your working copy) and polls the remote. Each new commit goes live whole or not at all: frontend changes publish like any edit, and when `server/` changed it runs `rebar3 compile` on the checkout and hot-loads the new code; the supervision tree then reconciles itself, starting, stopping or restarting children to match. A new dependency is added and started. A commit that fails to compile, or that upgrades an existing dependency (Cowboy, say), is logged and held back; the node stays on the last good commit until the branch moves again. An upgraded dependency needs a restart, which open tabs ride out (snapshots outlive the node and the update stream reconnects); a zero-gap handover, starting the new node on the same port with `SO_REUSEPORT` while the old one drains, is a possible follow-up.
+The server checks the branch out into `server/follow/` (never your working copy) and polls the remote. Each new commit goes live whole or not at all: frontend changes publish like any edit, and when `server/` changed it runs `rebar3 compile` on the checkout and hot-loads the new code; the supervision tree then reconciles itself, starting, stopping or restarting children to match. A new dependency is added and started. A commit that fails to compile is logged and held back; the node stays on the last good commit until the branch moves again.
+
+A commit that upgrades a dependency (`rebar3 upgrade cowboy`, say) can't be loaded into a running node, so `bin/follow` runs the server as a line of generations, numbered in its output. The old generation asks for a successor; the successor builds and starts from the new commit and binds the same port (`SO_REUSEPORT`); once it is serving, the old one closes its listening socket, gives requests under way two seconds, and stops. No request is refused, and open tabs reconnect to the successor and turn the page onto the new version. If the successor fails to start, the old generation stays on and holds the commit back. `FOLLOW_BRANCH=main rebar3 shell` follows too, with a shell to poke at, but holds dependency upgrades back for a manual restart.
 
 The frontend is plain ES modules with no build step; three.js and Matter.js come from a CDN through the import map in `web/index.html`. `web/js/main.js` is the entry point:
 
