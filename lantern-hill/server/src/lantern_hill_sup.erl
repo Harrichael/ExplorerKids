@@ -13,6 +13,7 @@ init([]) ->
     {ok, {#{strategy => one_for_one}, children()}}.
 
 children() ->
+    [#{id => lantern_hill_handover, start => {lantern_hill_handover, start_link, []}} || lantern_hill_handover:enabled()] ++
     [#{id => lantern_hill_follow, start => {lantern_hill_follow, start_link, []}} || lantern_hill_follow:enabled()] ++
     [#{id => lantern_hill_subscribers, start => {pg, start_link, [lantern_hill_subscribers]}},
      #{id => lantern_hill_versions, start => {lantern_hill_versions, start_link, []}}] ++
