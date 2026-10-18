@@ -47,6 +47,10 @@ async function openTower(){
   const { openTower } = await import('../tower/block-tower.js');
   openTower();
 }
+async function openGlobe(){
+  const { openGlobe } = await import('../globe/globe.js');
+  openGlobe();
+}
 async function sitOnBench(){
   const { sit } = await import('./pond-bench.js');
   sit();
@@ -58,6 +62,7 @@ async function boardWonderBus(){
 addUsable(HQ, {name:'Wardrobe', x:8.95, z:3.2, range:1.7, verb:'Open the wardrobe', short:'Open', glow:[8.9, 2.95, 3.2], action: () => openWardrobe(false)});
 addUsable(HQ, {name:'Flashcards', x:-.45, z:5.4, range:1.5, verb:'Practice phonogram cards', short:'Cards', glow:[-.45, 1.25, 6.1], action:openFlashcards});
 addUsable(HQ, {name:'Story corner', x:-7.3, z:3.9, range:1.5, verb:'Read a library book', short:'Read', glow:[-7.0, .55, 4.1], action:openReader});
+addUsable(HQ, {name:'Globe', x:-5.6, z:.75, range:1.3, verb:'Spin the globe', short:'Spin', glow:[-5.6, 1.6, -.2], action:openGlobe});
 addUsable(HQ, {name:'Toy crane', x:PLAY.x, z:PLAY.z + 1.2, range:1.4, verb:'Build a block tower', short:'Build', glow:[PLAY.x, 1.0, PLAY.z], action:openTower});
 addUsable(HQ, {name:'Wonder Bus', x:15.9, z:3.6, range:1.9, verb:'Board the Wonder Bus', short:'Board', glow:[15.6, 2.9, 5.5], action:boardWonderBus});
 addUsable(HQ, {name:'Pond bench', x:BENCH.x, z:BENCH.z - .78, range:1.25, verb:'Sit on the bench', short:'Sit', glow:[BENCH.x, .9, BENCH.z], action:sitOnBench});
