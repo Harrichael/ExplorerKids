@@ -16,7 +16,7 @@ function begin(){
     if (isNewExplorer) setTimeout(() => openWardrobe(true), 350); }
 }
 startEl.addEventListener('pointerdown', begin);
-// a full-screen activity (flashcards, book, tower) catches keys before this handler while it is open
+// a full-screen activity (flashcards, book) or the block tower catches keys before this handler while it is open
 addEventListener('keydown', e => {
   const k = e.key;
   if (e.target && e.target.tagName === 'INPUT') { if (k === 'Enter' || k === 'Escape') e.target.blur(); return; }
