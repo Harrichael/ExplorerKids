@@ -218,7 +218,7 @@ box(1.0,.06,.14,T(C.woodLt),0,.9,.1,easel);
 col(-2.95, -1.85, 5.0, 5.6);
 ['A','B','C','1','2','3'].forEach((L, i) => {
   const lt = tex(128,128,(g,w,h)=>{ g.fillStyle = ['#b5552f','#2f5552','#d9a441','#6d3b5e','#3e6b45','#4a5a8a'][i]; g.fillRect(0,0,w,h); g.strokeStyle='#e9d9b8'; g.lineWidth=10; g.strokeRect(8,8,w-16,h-16); g.fillStyle='#e9d9b8'; g.font='900 84px "Nunito", sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(L, w/2, h/2+4); });
-  const pos = [[1.2,5.6,0],[1.6,5.75,0],[1.4,5.65,1],[2.4,4.9,0],[2.15,5.2,0],[0.8,4.9,0]][i];
+  const pos = [[.35,3.0,0],[.7,2.75,0],[.5,2.9,1],[.15,3.45,0],[2.95,3.95,0],[.4,4.3,0]][i];
   const b = box(.34,.34,.34, T(0xffffff,{map:lt}), pos[0], .17 + pos[2]*.34, pos[1]); b.rotation.y = rand()*1.4; outline(b, 1.05);
 });
 const chest = grp(3.6, 0, 6.1, Math.PI);

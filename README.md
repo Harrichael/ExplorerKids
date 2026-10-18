@@ -28,13 +28,15 @@ cp _build/prod/rel/lantern_hill/lantern_hill-NEW.tar.gz <installed release>/rele
 
 The old release must be in `_build/prod/rel/lantern_hill` when the relup is built.
 
-To keep a server on whatever a branch says, follow it:
+To keep a server on whatever a branch says, follow it (from `lantern-hill/server`):
 
 ```sh
-FOLLOW_BRANCH=main FOLLOW_INTERVAL=5 rebar3 shell     # interval in seconds, 3-10, default 5
+bin/follow main 5      # branch, then poll interval in seconds, 3-10, default 5
 ```
 
-The server checks the branch out into `server/follow/` (never your working copy) and polls the remote. Each new commit goes live whole or not at all: frontend changes publish like any edit, and when `server/` changed it runs `rebar3 compile` on the checkout and hot-loads the new code; the supervision tree then reconciles itself, starting, stopping or restarting children to match. A new dependency is added and started. A commit that fails to compile, or that upgrades an existing dependency (Cowboy, say), is logged and held back; the node stays on the last good commit until the branch moves again. An upgraded dependency needs a restart, which open tabs ride out (snapshots outlive the node and the update stream reconnects); a zero-gap handover, starting the new node on the same port with `SO_REUSEPORT` while the old one drains, is a possible follow-up.
+The server checks the branch out into `server/follow/` (never your working copy) and polls the remote. Each new commit goes live whole or not at all: frontend changes publish like any edit, and when `server/` changed it runs `rebar3 compile` on the checkout and hot-loads the new code; the supervision tree then reconciles itself, starting, stopping or restarting children to match. A new dependency is added and started. A commit that fails to compile is logged and held back; the node stays on the last good commit until the branch moves again.
+
+A commit that upgrades a dependency (`rebar3 upgrade cowboy`, say) can't be loaded into a running node, so `bin/follow` runs the server as a line of generations, numbered in its output. The old generation asks for a successor; the successor builds and starts from the new commit and binds the same port (`SO_REUSEPORT`); once it is serving, the old one closes its listening socket, gives requests under way two seconds, and stops. No request is refused, and open tabs reconnect to the successor and turn the page onto the new version. If the successor fails to start, the old generation stays on and holds the commit back. `FOLLOW_BRANCH=main rebar3 shell` follows too, with a shell to poke at, but holds dependency upgrades back for a manual restart.
 
 The frontend is plain ES modules with no build step; three.js and Matter.js come from a CDN through the import map in `web/index.html`. `web/js/main.js` is the entry point:
 
@@ -44,6 +46,20 @@ The frontend is plain ES modules with no build step; three.js and Matter.js come
 - `ui/`: dialogue, wardrobe, page turns
 - `state.js` holds the few pieces of frame state several modules write; `save.js` owns localStorage
 - `learn/` (phonogram flashcards), `library/` (the story-corner book reader), `tower/` (Block Tower, with Matter.js) and `trips/` (the Wonder Bus field trip) load only when used; each takes over the screen through `game.activity` or a cutscene. Phonogram audio in `web/audio/` is fetched clip by clip, book pages from `web/books/` page by page
+
+#### Testing on a phone
+
+Many players are on phones, and the touch UI only switches on when the page loads on a touch screen (`input.js` reads `(pointer: coarse)` once), so a narrow desktop window doesn't show it. Two ways to check a change:
+
+**Emulated, scriptable.** `lantern-hill/tools/phone.mjs` (no dependencies, Node 22+) starts the installed Chrome headless as a phone: viewport, pixel ratio, touch, and notch insets (`env(safe-area-inset-*)`), all set before the page loads. Taps and drags are real touch events.
+
+```sh
+node lantern-hill/tools/phone.mjs http://localhost:8080/ --device iphone-15 --landscape --out shot.png
+```
+
+Devices are `iphone-15` (notch), `iphone-se` (small, no notch) and `pixel-7`; check portrait and landscape. For a walkthrough, import `phone()` in a script and use `tap`, `tapOn(selector)`, `drag`, `box(selector)`, `eval` and `shot` (see the top of the file). A fresh profile starts at the explorer creator, so `tapOn('#wDone')` first. Scripts can jump the explorer next to something with `eval` (import `js/player.js` relative to `document.baseURI` and set `player.x`/`player.z`), and check fit by projecting world points through `camera` from `js/core/render.js`. It renders on this computer's GPU, so it says nothing about a phone's frame rate.
+
+**A real phone**, for frame rate, how things feel under a thumb, and Safari's quirks. `rebar3 shell` listens on every interface, so on the same Wi-Fi open `http://<this Mac's LAN IP>:8080/` (`ipconfig getifaddr en0`); edits in `web/` reach the phone live. For the console, connect by cable: Safari's Develop menu (iPhone) or `chrome://inspect` (Android).
 
 ### Marble Lab quick start
 

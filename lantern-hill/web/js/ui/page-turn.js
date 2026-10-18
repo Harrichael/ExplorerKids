@@ -6,6 +6,8 @@
 // A turn can also span a page reload (a new version of the game): turnOut() on the old page stops
 // on the book and saves that frame, the inline script at the end of index.html paints it before
 // the new page has built anything, and turnIn() on the new page turns from it into the live world.
+// A caption over the book says what is happening; it is plain HTML, so it shows on both sides of
+// the reload.
 
 import * as THREE from 'three';
 import { ease } from '../core/kit.js';
@@ -17,7 +19,9 @@ import { game } from '../state.js';
 import { $ } from './dom.js';
 
 const STASH = 'lanternHill.turn';   // the inline script in index.html reads this key too
-const cv = $('storybook'), stashEl = $('storyStash'), bannerEl = $('banner'), root = document.documentElement;
+const cv = $('storybook'), stashEl = $('storyStash'), bannerEl = $('banner'), noteEl = $('turnNote'), root = document.documentElement;
+// long enough to read the caption and hear the bells ring out before the reload
+const HOLD = 1400;
 const OUT = 1.75, TILT = .8, YAW = .4;
 let sb = null;
 
@@ -88,21 +92,27 @@ export function pageTurn(mid, after, chapter){
 // frame for the new page. Resolves once it is saved; the screen stays on the book until the reload.
 export async function turnOut(){
   renderer.render(game.world.scene, camera); open(shoot(0), 0);
+  noteEl.hidden = false; Sound.updateOut();
+  const held = new Promise(r => setTimeout(r, HOLD));
   const t = await pullBack();
   sb.render(); const bookFrame = cv.toDataURL('image/jpeg', .95);
   try { sessionStorage.setItem(STASH, JSON.stringify({at: Date.now(), out: t, book: bookFrame, page: shots[0].c.toDataURL('image/jpeg', .95)})); }
   catch (e) {}   // too big to save: the new page simply starts without a turn
+  await held;
 }
 // New page, once the world is built and running: if the old page saved a book frame (and index.html
 // is still showing it), take over from it and turn into the live world. Resolves true if it turned.
 export async function turnIn(){
   if (stashEl.hidden) return false;
   let s = null; try { s = JSON.parse(sessionStorage.getItem(STASH)); sessionStorage.removeItem(STASH); } catch (e) {}
-  if (!s) { stashEl.hidden = true; root.classList.remove('turning'); return false; }
+  if (!s) { stashEl.hidden = noteEl.hidden = true; root.classList.remove('turning'); return false; }
   const img = new Image(); img.src = s.page; try { await img.decode(); } catch (e) {}
   const from = frameTex(new THREE.Texture(img)); from.needsUpdate = true;
   open(from, s.out); stashEl.hidden = true; stashEl.removeAttribute('src');
+  Sound.init(); if (Sound.running()) Sound.updateIn();
+  noteEl.classList.add('leaving');
   await turnTo(s.out); from.dispose();
+  noteEl.hidden = true; noteEl.className = '';
   return true;
 }
 

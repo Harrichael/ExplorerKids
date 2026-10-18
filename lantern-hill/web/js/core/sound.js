@@ -1,5 +1,5 @@
 export const Sound = (() => {
-  let ctx = null, master, sfx, music, noise, on = true;
+  let ctx = null, master, sfx, music, air, noise, on = true;
   function init(){
     if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
@@ -11,6 +11,9 @@ export const Sound = (() => {
     const fb = ctx.createGain(); fb.gain.value = 0.33;
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1700;
     music.connect(dly); dly.connect(lp); lp.connect(fb); fb.connect(dly); lp.connect(master);
+    // sfx with a tail: the music's echo, so magical cues ring in the same room as the tune
+    air = ctx.createGain(); air.connect(sfx);
+    const send = ctx.createGain(); send.gain.value = .55; air.connect(send); send.connect(dly);
     noise = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
     const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     music.gain.setValueAtTime(0, ctx.currentTime);
@@ -33,16 +36,29 @@ export const Sound = (() => {
     node.connect(g); g.connect(bus || sfx);
     o.start(now); o.stop(now + dur + .05);
   }
-  function hiss({t=0, dur=.08, vol=.1, type='lowpass', freq=800, q=1, bus}={}){
+  function hiss({t=0, dur=.08, vol=.1, type='lowpass', freq=800, f2, q=1, bus, attack}={}){
     if (!ctx) return;
     const now = ctx.currentTime + t;
     const s = ctx.createBufferSource(); s.buffer = noise; s.loop = true; s.playbackRate.value = .8 + Math.random() * .4;
-    const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
-    const g = ctx.createGain(); g.gain.setValueAtTime(vol, now); g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    const f = ctx.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(freq, now); f.Q.value = q;
+    if (f2) f.frequency.exponentialRampToValueAtTime(f2, now + dur);
+    const g = ctx.createGain();
+    if (attack) { g.gain.setValueAtTime(0.0001, now); g.gain.linearRampToValueAtTime(vol, now + attack); } else g.gain.setValueAtTime(vol, now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
     s.connect(f); f.connect(g); g.connect(bus || sfx);
     s.start(now, Math.random() * .3); s.stop(now + dur + .02);
   }
   const semi = n => Math.pow(2, n / 12);
+  // a struck bell: a pure fundamental under quickly fading inharmonic partials
+  function bell(f, t, dur, vol){
+    tone(f, {t, dur, vol, bus:air, attack:.003});
+    tone(f * 2.76, {t, dur:dur * .35, vol:vol * .3, bus:air, attack:.002});
+    tone(f * 5.4, {t, dur:dur * .15, vol:vol * .12, bus:air, attack:.001});
+  }
+  // fairy dust: a few random high pings scattered over `span` seconds
+  function sparkle(t, n, span = .5, vol = .025){
+    for (let i = 0; i < n; i++) tone(midi(96 + [0, 2, 4, 7, 9, 12][Math.floor(Math.random() * 6)]), {t:t + Math.random() * span, dur:.25, vol, bus:air, attack:.002});
+  }
   function blip(v){
     if (!ctx) return;
     const step = v.scale[Math.floor(Math.random() * v.scale.length)];
@@ -124,6 +140,27 @@ export const Sound = (() => {
       else hiss({dur:.09, vol:.07, type:'lowpass', freq:700 + Math.random() * 300});
     },
     crackle(vol){ hiss({dur:.02 + Math.random() * .03, vol:vol, type:'highpass', freq:1800 + Math.random() * 2000}); },
+    // Updates, scored the way Zelda scores a discovery: the background music falls silent so the cue
+    // owns the moment, every sound lands on a beat of the animation, and the cue resolves home.
+    updateReady(){ bell(midi(91), 0, 1.1, .045); bell(midi(96), .14, 1.4, .05); sparkle(.3, 4, .4, .018); },
+    // the old page: music hushes, the page lifts with a breath of air, a harp sweeps up as the
+    // camera pulls back, bells ring as the book settles, then everything fades before the reload
+    updateOut(){
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      music.gain.cancelScheduledValues(now); music.gain.setTargetAtTime(0, now, .12);
+      hiss({dur:.55, vol:.07, type:'bandpass', freq:500, f2:3200, q:.9, attack:.2});
+      [60, 62, 64, 67, 69, 72, 74, 76, 79, 81, 84, 88].forEach((n, i) =>
+        tone(midi(n), {type:'triangle', t:.06 + i * .036, dur:.7, vol:.05 - i * .002, bus:air, attack:.003}));
+      [72, 76, 79].forEach((n, i) => bell(midi(n), .56 + i * .03, 1.6, .05));
+      tone(midi(48), {type:'sine', t:.5, dur:1.4, vol:.08, attack:.12});
+      sparkle(.6, 7, .7);
+      master.gain.setTargetAtTime(0, now + 1.25, .05);
+    },
+    // the new page: a gentle two-note landing as the page settles into the world
+    updateIn(){ bell(midi(79), .55, 1, .04); bell(midi(84), .78, 1.6, .05); tone(midi(48), {type:'sine', t:.78, dur:1.2, vol:.06, attack:.08}); },
+    // a reloaded page may not have earned audio yet: browsers wait for a tap or key
+    running(){ return !!ctx && ctx.state === 'running'; },
     meow(){ tone(520, {type:'triangle', dur:.42, vol:.12, f2:820, cut:2200, vib:[7,18]}); tone(820, {type:'triangle', t:.28, dur:.3, vol:.08, f2:480, cut:2000}); }
   };
 })();
