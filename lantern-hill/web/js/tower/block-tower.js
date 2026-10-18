@@ -22,7 +22,7 @@ import M from 'matter-js';
 
 const css = document.createElement('style');
 css.textContent = `
-.towering .hud,.towering #stick,.towering #talk,.towering #use,.towering #prompt,.towering #dialog{display:none!important}
+.towering .hud,.towering #stick,.towering #talk,.towering .use,.towering #prompt,.towering #dialog{display:none!important}
 #tower{position:fixed;inset:0;display:flex;flex-direction:column;touch-action:none;cursor:pointer;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);animation:tfade .6s ease-out}
 @keyframes tfade{from{opacity:0}}
 #tower header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px max(16px,env(safe-area-inset-left,0px)) 18px;background:linear-gradient(rgba(26,19,32,.75),rgba(26,19,32,0))}

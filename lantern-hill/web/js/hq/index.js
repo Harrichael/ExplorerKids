@@ -13,10 +13,11 @@ import './toy-crane.js';
 import './sky.js';
 import { bFlush } from '../core/kit.js';
 import { addUsable } from '../core/world.js';
+import { game } from '../state.js';
 import { openWardrobe } from '../ui/wardrobe.js';
-import { LAB_DESK } from './cottage.js';
+import { LAB_DESK, WINDOW_SEAT } from './cottage.js';
 import { BENCH } from './garden-life.js';
-import { groundAt } from './garden.js';
+import { PLAT, groundAt } from './garden.js';
 import { npcs } from './residents.js';
 import { PLAY } from './toy-crane.js';
 import { colliders, hqAnims, occMeshes, occluders, scene, sun } from './scene.js';
@@ -41,9 +42,13 @@ async function openFlashcards(){
   const { openLearn } = await import('../learn/flashcards.js');
   openLearn();
 }
-async function openReader(){
-  const { openReader } = await import('../library/reader.js');
-  openReader();
+async function borrowBook(){
+  const { borrow } = await import('../library/nook.js');
+  borrow();
+}
+async function sitInWindow(){
+  const { sitInWindow } = await import('../library/nook.js');
+  sitInWindow();
 }
 async function openTower(){
   const { openTower } = await import('../tower/block-tower.js');
@@ -61,15 +66,27 @@ async function openLab(){
   const { openLab } = await import('../lab/index.js');
   openLab();
 }
+async function lookThroughTelescope(){
+  const { openTelescope } = await import('../sky/telescope.js');
+  openTelescope();
+}
 async function boardWonderBus(){
   const [{ startTrip }, { tectonics }] = await Promise.all([import('../trips/field-trip.js'), import('../trips/tectonics/index.js')]);
   startTrip(tectonics);
 }
 addUsable(HQ, {name:'Wardrobe', x:8.95, z:3.2, range:1.7, verb:'Open the wardrobe', short:'Open', glow:[8.9, 2.95, 3.2], action: () => openWardrobe(false)});
 addUsable(HQ, {name:'Flashcards', x:-.45, z:5.4, range:1.5, verb:'Practice phonogram cards', short:'Cards', glow:[-.45, 1.25, 6.1], action:openFlashcards});
-addUsable(HQ, {name:'Story corner', x:-7.3, z:3.9, range:1.5, verb:'Read a library book', short:'Read', glow:[-7.0, .55, 4.1], action:openReader});
 addUsable(HQ, {name:'Globe', x:-5.6, z:.75, range:1.3, verb:'Spin the globe', short:'Spin', glow:[-5.6, 1.6, -.2], action:openGlobe});
+addUsable(HQ, {name:'Library desk', x:-7.3, z:-1.55, range:1.2, verb:'Borrow a book', short:'Borrow', glow:[-7.2, 1.3, -2.5], action:borrowBook});
+const windowSeat = addUsable(HQ, {name:'Window seat', x:WINDOW_SEAT.x + 1.15, z:WINDOW_SEAT.z, range:1.3, verb:'Sit in the window seat', short:'Sit', glow:[WINDOW_SEAT.x, 1.0, WINDOW_SEAT.z], action:sitInWindow});
+// reading from the backpack settles down on the reading rug, or in the window seat if they're by it
+HQ.read = async item => {
+  if (item.kind !== 'book') return;
+  const { openReader } = await import('../library/reader.js');
+  openReader(item.id, game.reach.includes(windowSeat) ? 'window' : 'rug');
+};
 addUsable(HQ, {name:'Toy crane', x:PLAY.x, z:PLAY.z + 1.2, range:1.4, verb:'Build a block tower', short:'Build', glow:[PLAY.x, 1.0, PLAY.z], action:openTower});
 addUsable(HQ, {name:'Experiment desk', x:LAB_DESK.x, z:LAB_DESK.z + 1.05, range:1.2, verb:'Do an experiment', short:'Lab', glow:[LAB_DESK.x, 1.35, LAB_DESK.z + .1], action:openLab});
 addUsable(HQ, {name:'Wonder Bus', x:15.9, z:3.6, range:1.9, verb:'Board the Wonder Bus', short:'Board', glow:[15.6, 2.9, 5.5], action:boardWonderBus});
+addUsable(HQ, {name:'Telescope', x:23.7, z:-1.05, y:PLAT, range:1.3, verb:'Look through the telescope', short:'Look', glow:[24.4, PLAT + 1.5, -.6], action:lookThroughTelescope});
 addUsable(HQ, {name:'Pond bench', x:BENCH.x, z:BENCH.z - .78, range:1.25, verb:'Sit on the bench', short:'Sit', glow:[BENCH.x, .9, BENCH.z], action:sitOnBench});

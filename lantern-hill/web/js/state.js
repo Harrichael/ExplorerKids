@@ -8,6 +8,6 @@ export const game = {
   cutCam: null,     // (pos, look) => void, steering the camera during a cutscene
   camShake: 0,
   nearest: null,    // the NPC in talking range, if any
-  nearUse: null,    // the usable thing in range, if any
-  activity: null    // 'flashcards' or a page turn's 'storybook' while one fills the screen; the world pauses behind it
+  reach: [],        // usables in range, each at the index of its key in USE_KEYS (input.js)
+  activity: null    // 'flashcards', 'telescope', 'travel' or a page turn's 'storybook' while one fills the screen; the world pauses behind it
 };

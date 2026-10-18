@@ -10,7 +10,7 @@ import { C, T, outline } from '../core/kit.js';
 import { camera, canvas } from '../core/render.js';
 import { Sound } from '../core/sound.js';
 import { BIOMES, visit } from '../earth/biomes.js';
-import { arc, loadEarth } from '../earth/model.js';
+import { arc } from '../earth/model.js';
 import { GLOBE, globeBall, globeRing } from '../hq/cottage.js';
 import { hqAnims, scene } from '../hq/scene.js';
 import { sitDown, standUp } from '../hq/sit.js';
@@ -21,11 +21,11 @@ import { game } from '../state.js';
 import { closeDialog, convo, endConvo, story } from '../ui/dialogue.js';
 import { clearMarks, dioramaSize, growArrows, hideDiorama, markAnimal, pickAnimal, restore, selectAnimal, showDiorama, spotlight, updateDiorama, vanish } from './diorama.js';
 import { eatenBy, hunter, makers, whatIf } from './food-web.js';
-import { paintEarth, paintGlow } from './paint.js';
+import { earthMap, paintGlow } from './paint.js';
 
 const css = document.createElement('style');
 css.textContent = `
-.globing .hud .plate,.globing .hud .keys,.globing #stick,.globing #talk,.globing #use,.globing #prompt{display:none!important}
+.globing .hud .plate,.globing .hud .keys,.globing #stick,.globing #talk,.globing .use,.globing #prompt{display:none!important}
 #globeHud{position:fixed;inset:0;pointer-events:none;padding:calc(10px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) env(safe-area-inset-bottom,0px) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:8px;animation:fadein .4s ease-out}
 #globeHud button{pointer-events:auto;cursor:pointer;font-family:var(--body)}
 #globeHud button:focus-visible{outline:3px solid var(--parch);outline-offset:3px}
@@ -126,8 +126,8 @@ const view = {yaw: -Math.PI/2, pitch: 20*RAD, zoom: 1, orbit: 0, vyaw: 0, vpitch
 // ---------- the world model and the map ----------
 let earth = null, here = null, glowFor = null;
 function loadMap(){
-  loadEarth().then(e => {
-    if (!earth) { earth = e; globeBall.material = T(0xffffff, {map: paintEarth(e)}); $g('gCredit').textContent = e.credits.join(' · '); }
+  earthMap().then(({earth: e, map}) => {
+    if (!earth) { earth = e; globeBall.material = T(0xffffff, {map}); $g('gCredit').textContent = e.credits.join(' · '); }
     if (G) draw();
   }, () => { if (G) card.innerHTML = '<div class="ghint">The map is lost! Step away and try again.</div>'; });
 }

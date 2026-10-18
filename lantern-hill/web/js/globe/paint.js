@@ -1,8 +1,10 @@
 // A storybook map of the Earth for a globe: each biome in its own colour, inked coastlines. The
 // colours come from the world model cell by cell, so the map shows exactly what tapping it says.
+// A plain map is just land, sea and polar ice, for a globe that's about places, not biomes.
 
 import { tex } from '../core/kit.js';
 import { BIOMES } from '../earth/biomes.js';
+import { loadEarth } from '../earth/model.js';
 
 const COLS = 720, ROWS = 360;   // how finely biomes are sampled; finer than the model's own grid gains nothing
 
@@ -37,15 +39,19 @@ function projection(w){
   return {h, Y, path};
 }
 
-export function paintEarth(earth, w = 2048){
+const PLAIN = {sea: '#3a74a6', land: '#9bb56a', ice: '#eef2f4', lake: BIOMES.lake.color};
+const plainColor = b => b === BIOMES.ice ? PLAIN.ice : b === BIOMES.lake ? PLAIN.lake : b.water ? (b === BIOMES.reef ? null : PLAIN.sea) : PLAIN.land;
+
+export function paintEarth(earth, {plain = false, w = 2048} = {}){
   const {h, Y, path} = projection(w);
   return tex(w, h, g => {
-    const {land, lakes} = biomes(g, earth, b => b.color, w, h, path, 'rgba(160,215,235,.28)');
+    const {land, lakes} = biomes(g, earth, plain ? plainColor : b => b.color, w, h, path, 'rgba(160,215,235,.28)');
     g.strokeStyle = 'rgba(26,19,32,.85)'; g.lineWidth = 1.6; g.stroke(land); g.lineWidth = 1; g.stroke(lakes);
     // a faint graticule every 30°, and the equator in gold: Hoot's riddles measure from it
     g.strokeStyle = 'rgba(239,224,191,.16)'; g.lineWidth = 1;
     for (let lon = -150; lon < 180; lon += 30) { g.beginPath(); g.moveTo(lon*w/360 + w/2, 0); g.lineTo(lon*w/360 + w/2, h); g.stroke(); }
     for (const lat of [-60, -30, 30, 60]) { g.beginPath(); g.moveTo(0, Y(lat)); g.lineTo(w, Y(lat)); g.stroke(); }
+    if (plain) return;
     g.strokeStyle = 'rgba(217,164,65,.9)'; g.lineWidth = 3; g.setLineDash([14, 8]);
     g.beginPath(); g.moveTo(0, Y(0)); g.lineTo(w, Y(0)); g.stroke(); g.setLineDash([]);
   });
@@ -61,4 +67,12 @@ export function paintGlow(earth, id, w = 1024){
     g.shadowColor = '#ffffff'; g.shadowBlur = 10;
     for (let i = 0; i < 3; i++) g.drawImage(mask, 0, 0);
   });
+}
+
+// the world model and its map, each style painted once for every globe that wants it; a failed load isn't kept
+const painted = {};
+export function earthMap(plain = false){
+  const k = plain ? 'plain' : 'biomes';
+  if (!painted[k]) { painted[k] = loadEarth().then(earth => ({earth, map: paintEarth(earth, {plain})})); painted[k].catch(() => { delete painted[k]; }); }
+  return painted[k];
 }

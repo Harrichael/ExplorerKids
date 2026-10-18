@@ -1,12 +1,14 @@
-// The Library Nook reader: the explorer sits cross-legged on the reading rug with a storybook open in
-// their lap, and the camera leans in over the pages, which curl as they turn. Everything happens in
-// the room itself. Loaded the first time someone sits down in the story corner.
+// The Library Nook reader: the explorer settles down with a storybook open in front of them, on their
+// tummy on the reading rug or cross-legged in the window seat, and the camera looks down at the pages,
+// which curl as they turn. Everything happens in the room itself. Loaded the first time someone reads
+// a book from their backpack.
 
 import * as THREE from 'three';
 import { ease } from '../core/kit.js';
-import { camera } from '../core/render.js';
+import { camera, renderer } from '../core/render.js';
 import { Sound } from '../core/sound.js';
-import { hqAnims } from '../hq/scene.js';
+import { WINDOW_SEAT } from '../hq/cottage.js';
+import { hqAnims, scene } from '../hq/scene.js';
 import { sitDown, standUp } from '../hq/sit.js';
 import { keys } from '../input.js';
 import { hero } from '../player.js';
@@ -20,51 +22,54 @@ const saved = load('books'), state = saved && typeof saved === 'object' ? saved 
 const saveState = () => save('books', state);
 const css = document.createElement('style');
 css.textContent = `
-.reading-book .hud,.reading-book #stick,.reading-book #talk,.reading-book #use,.reading-book #prompt,.reading-book #dialog{display:none!important}
+.reading-book .hud,.reading-book #stick,.reading-book #talk,.reading-book .use,.reading-book #prompt,.reading-book #dialog{display:none!important}
 #reader{position:fixed;inset:0;display:flex;flex-direction:column;touch-action:none;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);animation:rfade .6s ease-out}
 @keyframes rfade{from{opacity:0}}
-#reader header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px max(16px,env(safe-area-inset-left,0px)) 16px;background:linear-gradient(rgba(26,19,32,.75),rgba(26,19,32,0))}
-#reader h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(19px,4.6vw,26px);color:var(--parch);line-height:1.1;text-shadow:0 2px 0 var(--ink)}
-#reader .sub{font-size:12px;font-weight:900;letter-spacing:1.1px;text-transform:uppercase;color:var(--gold);text-shadow:0 1px 0 var(--ink)}
+#reader header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px max(16px,env(safe-area-inset-left,0px)) 12px;background:linear-gradient(rgba(26,19,32,.75),rgba(26,19,32,0))}
+#reader h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(17px,4.2vw,24px);color:var(--parch);line-height:1.1;text-shadow:0 2px 0 var(--ink)}
+#reader .sub{font-size:11px;font-weight:900;letter-spacing:1.1px;text-transform:uppercase;color:var(--gold);text-shadow:0 1px 0 var(--ink)}
+#reader .rtop{display:flex;gap:8px;flex:none}
 #reader .rspace{flex:1;min-height:0}
-#reader .rfoot{background:linear-gradient(rgba(26,19,32,0),rgba(26,19,32,.75));padding-top:14px}
-#reader .rbar{display:flex;gap:10px;justify-content:center;align-items:center;padding:6px 16px 12px;flex:none}
-#reader .rb{font-family:var(--display);font-size:17px;color:var(--parch);background:var(--plum);border:2.5px solid var(--gold);border-radius:14px;padding:8px 16px;box-shadow:0 0 0 3px var(--ink);cursor:pointer;min-width:52px}
+#reader .rfoot{text-align:center;padding:4px 16px 8px;background:linear-gradient(rgba(26,19,32,0),rgba(26,19,32,.7))}
+#reader .rb{font-family:var(--display);font-size:16px;color:var(--parch);background:var(--plum);border:2.5px solid var(--gold);border-radius:14px;padding:7px 14px;box-shadow:0 0 0 3px var(--ink);cursor:pointer}
 #reader .rb.ghost{background:rgba(26,19,32,.55)}
-#reader .rb:disabled{opacity:.35;cursor:default}
-#reader .rb:focus-visible,#shelf .bk:focus-visible{outline:3px solid var(--parch);outline-offset:3px}
-#reader .pg{font-weight:900;color:var(--parch);font-variant-numeric:tabular-nums;min-width:96px;text-align:center;text-shadow:0 2px 0 var(--ink)}
+#reader .rb:disabled{opacity:.3;cursor:default}
+#reader .side{position:absolute;top:50%;transform:translateY(-50%);width:54px;height:54px;padding:0;border-radius:50%;font-size:20px}
+#reader .side.prev{left:max(10px,env(safe-area-inset-left,0px))}
+#reader .side.next{right:max(10px,env(safe-area-inset-right,0px))}
+@media (orientation:portrait){#reader .side{top:auto;bottom:calc(64px + env(safe-area-inset-bottom,0px));transform:none}}
+#reader .rb:focus-visible{outline:3px solid var(--parch);outline-offset:3px}
+#reader .pg{font-weight:900;font-size:14px;color:var(--parch);font-variant-numeric:tabular-nums;text-shadow:0 2px 0 var(--ink)}
+#reader .credit{font-size:10px;font-weight:700;color:rgba(239,224,191,.7);text-shadow:0 1px 0 var(--ink);line-height:1.3}
 #reader .done{position:absolute;left:50%;top:18%;transform:translateX(-50%);font-family:var(--display);font-size:clamp(24px,6vw,38px);color:var(--parch);text-shadow:0 3px 0 var(--ink),0 0 24px rgba(217,164,65,.6);pointer-events:none;text-align:center;opacity:0;transition:opacity .4s}
-#reader .done small{display:block;font-family:var(--body);font-size:15px;font-weight:900;color:var(--gold)}
-#reader .credit{font-size:11px;font-weight:700;color:rgba(239,224,191,.7);text-align:center;padding:0 16px 2px;text-shadow:0 1px 0 var(--ink)}
-#shelf{position:absolute;inset:auto 0 0 0;top:64px;overflow-y:auto;padding:12px max(16px,env(safe-area-inset-left,0px)) 24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:16px;align-content:start;background:rgba(34,28,51,.8)}
-#shelf .bk{position:relative;background:#f6ecd6;color:#1a1320;border:3px solid var(--gold);border-radius:12px;box-shadow:0 0 0 4px var(--ink),0 10px 24px rgba(0,0,0,.4);padding:0;cursor:pointer;text-align:left;font:inherit;overflow:hidden}
-#shelf .bk img{display:block;width:100%;aspect-ratio:3/4;object-fit:cover;background:#6d3b5e}
-#shelf .bk span{display:block;padding:8px 10px 10px;font-weight:900;font-size:14px;line-height:1.25}
-#shelf .bk em{display:block;font-style:normal;font-weight:800;font-size:12px;color:#6d3b5e;margin-top:2px}
-#shelf .ribbon{position:absolute;top:8px;right:-30px;transform:rotate(35deg);background:var(--gold);color:#1a1320;font-weight:900;font-size:12px;padding:3px 34px;box-shadow:0 2px 0 var(--ink)}`;
+#reader .done small{display:block;font-family:var(--body);font-size:15px;font-weight:900;color:var(--gold)}`;
 document.head.appendChild(css);
 const el = document.createElement('div'); el.id = 'reader'; el.hidden = true; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Library book');
-el.innerHTML = `<header><div><div class="sub" id="rSub">Library Nook</div><h2 id="rTitle">Pick a book</h2></div><button class="rb ghost" id="rClose">Close</button></header>
-  <div class="rspace" id="rPages"></div><div class="done" id="rDone"></div>
-  <div class="rfoot"><div class="credit" id="rCredit"></div>
-  <div class="rbar"><button class="rb" id="rPrev" aria-label="Previous page">◀</button><span class="pg" id="rPg"></span><button class="rb" id="rNext" aria-label="Next page">▶</button><button class="rb ghost" id="rShelf">Bookshelf</button></div></div>
-  <div id="shelf" hidden></div>`;
+el.innerHTML = `<header><div><div class="sub" id="rSub">Library Nook</div><h2 id="rTitle"></h2></div>
+    <div class="rtop"><button class="rb ghost" id="rClose">Close</button></div></header>
+  <div class="rspace" id="rPages"></div>
+  <button class="rb side prev" id="rPrev" aria-label="Previous page">◀</button><button class="rb side next" id="rNext" aria-label="Next page">▶</button>
+  <div class="done" id="rDone"></div>
+  <div class="rfoot"><div class="pg" id="rPg"></div><div class="credit" id="rCredit"></div></div>
+`;
 document.body.appendChild(el);
-const shelfEl = el.querySelector('#shelf'), $r = id => el.querySelector('#' + id), pagesEl = $r('rPages');
+const $r = id => el.querySelector('#' + id), pagesEl = $r('rPages');
 
-// the book rests on the explorer's knees, tipped up towards their face, its pages' tops away from them
-const B = makeBook({desk:false}), lap = new THREE.Group();
-lap.position.set(0, .98, .52); lap.rotation.x = -.35; lap.scale.setScalar(.085); lap.visible = false;
-B.root.rotation.y = Math.PI; lap.add(B.root);
+const B = makeBook(); B.root.visible = false; scene.add(B.root);
+
+// Each page loads once and is uploaded to the GPU as soon as it arrives; a turn waits until every page it
+// reveals is ready, so a page never turns over onto a blank one
 const loader = new THREE.TextureLoader(), texCache = new Map();
 function pageTex(book, i) {
   if (i < 0 || i >= book.pages) return B.paper;
   const k = book.id + ':' + i;
-  if (!texCache.has(k)) { const t = loader.load(book.dir + 'p' + String(i + 1).padStart(3, '0') + '.jpg'); t.encoding = THREE.sRGBEncoding; t.anisotropy = 4; texCache.set(k, t); }
+  if (!texCache.has(k)) {
+    let t; const loaded = new Promise(res => { t = loader.load(book.dir + 'p' + String(i + 1).padStart(3, '0') + '.jpg', () => { renderer.initTexture(t); res(); }, undefined, res); });
+    t.encoding = THREE.sRGBEncoding; t.anisotropy = 4; t.loaded = loaded; texCache.set(k, t);
+  }
   return texCache.get(k);
 }
-let book = null, spread = 0, flip = null, open = false;
+let book = null, spread = 0, flip = null, waiting = false, queued = 0, open = false;
 // pages: the first two are the front cover's outside and inside, the last two the back cover's inside and
 // outside. Spread 0 is the book closed on its front cover and the last spread closed on its back; spread k
 // between shows pages 2k-1 (left) and 2k (right)
@@ -78,6 +83,8 @@ function setFlat() {
   B.setBoards(spread > 0 ? 1 : 0, spread < last ? 0 : 1); B.setStacks(f, 1 - f); B.setPages(leaf(L), leaf(Rr));
   $r('rPg').textContent = spread === 0 ? 'Cover' : spread === last ? 'Back cover' : `${L + 1}–${Rr + 1} / ${book.pages}`;
   $r('rPrev').disabled = spread === 0; $r('rNext').disabled = spread >= last;
+  // two spreads either way are on hand before anyone asks for them
+  for (let i = L - 4; i <= Rr + 4; i++) pageTex(book, i);
   // remember every page seen; finishing the last spread marks the book as read
   const st = state[book.id] = state[book.id] || { seen: [], read: false };
   for (const i of [L, Rr]) if (i >= 0 && i < book.pages && !st.seen.includes(i)) st.seen.push(i);
@@ -89,74 +96,91 @@ function celebrate() {
   [523, 659, 784, 1046].forEach((f, i) => Sound.tone(f, { type: 'triangle', t: i * .09, dur: .3, vol: .08 }));
   setTimeout(() => { d.style.opacity = 0; }, 3200);
 }
+// turns asked for mid-turn are counted and follow straight on, so quick taps flip through pages
 function turn(dir) {
-  if (!book || flip) return;
+  if (!book) return;
+  if (flip || waiting) { queued += dir; return; }
   const last = spreads() - 1, to = spread + dir;
-  if (to < 0 || to > last) return;
+  if (to < 0 || to > last) { queued = 0; return; }
   const L = 2 * spread - 1, Rr = 2 * spread;
-  // a cover swings over as a stiff board, onto or off the first or last spread of pages
-  const board = Math.min(spread, to) === 0 ? 0 : Math.max(spread, to) === last ? 1 : null;
-  if (board !== null) { const k = board ? last - 1 : 1; B.setPages(leaf(2 * k - 1), leaf(2 * k)); }
-  // the turning page carries one page image on each face; the page it uncovers is already in place beneath
-  else if (dir > 0) { B.turnPage(pageTex(book, Rr), pageTex(book, Rr + 1)); B.setPages(leaf(L), leaf(Rr + 2)); B.curl(0, 1); }
-  else { B.turnPage(pageTex(book, L - 1), pageTex(book, L)); B.setPages(leaf(L - 2), leaf(Rr)); B.curl(1, -1); }
-  flip = { dir, board, t: 0 };
-  Sound.tone(dir > 0 ? 700 : 620, { type: 'triangle', dur: .05, vol: .04 }); Sound.tone(1400, { type: 'sine', t: .05, dur: .08, vol: .02 });
+  const board = Math.min(spread, to) === 0 ? 0 : Math.max(spread, to) === last ? 1 : null, k = board ? last - 1 : 1;
+  const reveals = board !== null ? [2 * k - 1, 2 * k] : dir > 0 ? [Rr, Rr + 1, Rr + 2] : [L - 2, L - 1, L];
+  const b = book; waiting = true;
+  Promise.all(reveals.map(i => pageTex(b, i).loaded)).then(() => {
+    waiting = false;
+    if (book !== b || !open) return;
+    // a cover swings over as a stiff board, onto or off the first or last spread of pages
+    if (board !== null) B.setPages(leaf(2 * k - 1), leaf(2 * k));
+    // the turning page carries one page image on each face; the page it uncovers is already in place beneath
+    else if (dir > 0) { B.turnPage(pageTex(b, Rr), pageTex(b, Rr + 1)); B.setPages(leaf(L), leaf(Rr + 2)); B.curl(0); }
+    else { B.turnPage(pageTex(b, L - 1), pageTex(b, L)); B.setPages(leaf(L - 2), leaf(Rr)); B.curl(1); }
+    flip = { dir, board, t: 0 };
+    Sound.tone(dir > 0 ? 700 : 620, { type: 'triangle', dur: .05, vol: .04 }); Sound.tone(1400, { type: 'sine', t: .05, dur: .08, vol: .02 });
+  });
 }
 
-// ---------- sitting down to read ----------
-const SPOT = {x:-7.6, z:3.75};
+// ---------- settling down to read ----------
+const X = new THREE.Vector3(1, 0, 0), q = new THREE.Quaternion();
 const down = new THREE.Vector3(0, -1, 0), reach = (x, y, z) => new THREE.Quaternion().setFromUnitVectors(down, new THREE.Vector3(x, y, z).normalize());
-// cross-legged: each leg points forward and across to the other side, one tucked just over the other;
-// the hands reach out to the book's sides
-const LEGS = [reach(.62, -.14, .78), reach(-.62, -.03, .78)], ARMS = [reach(.12, -.4, .52), reach(-.12, -.4, .52)];
-function pose(p) {
-  [hero.legL, hero.legR].forEach((l, i) => l.quaternion.slerp(LEGS[i], p));
-  [hero.armL, hero.armR].forEach((a, i) => a.quaternion.slerp(ARMS[i], p));
-  hero.body.position.y = (.08 - .66 * hero.body.scale.y) * p;
-  lap.visible = p > .7;
+// bends the body forward by a about the hips, with the hips ending up y above the ground and side across
+function bend(a, y, side = 0) {
+  const hip = .74 * hero.body.scale.y;
+  hero.body.quaternion.multiply(q.setFromAxisAngle(X, a));
+  hero.body.position.set(side, y - hip * Math.cos(a), -hip * Math.sin(a));
 }
-// straight down onto the pages, back just far enough to fit the book, open or closed, in the space
-// the header and buttons leave free
-const mid = new THREE.Vector3(), up = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
+// on their tummy, pivoting forward about the hips, propped up on their elbows with their chin up to see the
+// pages; their feet swing in the air behind them
+const ELBOWS = [reach(.12, .3, .95), reach(-.12, .3, .95)];
+function lie(p) {
+  const hip = .74 * hero.body.scale.y;
+  bend(1.35 * p, hip + (.26 - hip) * p);
+  hero.head.quaternion.multiply(q.setFromAxisAngle(X, -.8 * p));
+  [hero.armL, hero.armR].forEach((m, i) => m.quaternion.slerp(ELBOWS[i], p));
+  [hero.legL, hero.legR].forEach((m, i) => m.quaternion.multiply(q.setFromAxisAngle(X, p * (.9 + Math.sin(game.elapsed * 2.6 + i * Math.PI) * .3))));
+}
+// cross-legged, each leg forward and across to the other side, leaning over the book with hands on their knees.
+// They walk up beside the seat and hop sideways onto it, since walking there would go through it
+const SEAT_HOP = -.8, CROSSED = [reach(.62, -.14, .78), reach(-.62, -.03, .78)], KNEES = [reach(.2, -.85, .5), reach(-.2, -.85, .5)];
+function sit(p) {
+  const hip = .74 * hero.body.scale.y;
+  bend(.3 * p, hip + (WINDOW_SEAT.y + .1 - hip) * p + Math.sin(p * Math.PI) * .15, SEAT_HOP * p);
+  hero.head.quaternion.multiply(q.setFromAxisAngle(X, .35 * p));
+  [hero.legL, hero.legR].forEach((m, i) => m.quaternion.slerp(CROSSED[i], p));
+  [hero.armL, hero.armR].forEach((m, i) => m.quaternion.slerp(KNEES[i], p));
+}
+// x, z, angle: where they walk to and face. book: where the book's spine lies, its tops away from the reader
+const PLACES = {
+  // along the rug facing the window, a big floor storybook (pages about 45 cm tall) past their head
+  rug: {x:-6.9, z:3.45, angle:-Math.PI/2, pose:lie, scale:.15, book:[-8.45, .052, 3.45]},
+  // at the end of the seat facing along it, side-on to the window, a smaller book open on the cushion
+  window: {x:WINDOW_SEAT.x - SEAT_HOP, z:WINDOW_SEAT.z - .45, angle:0, pose:sit, scale:.09, book:[WINDOW_SEAT.x, WINDOW_SEAT.y + .002, WINDOW_SEAT.z + .3]},
+};
+let at = PLACES.rug;
+const fwd = new THREE.Vector3();
+// straight down onto the pages, so however far back a narrow screen needs it, the explorer's head stays
+// below the book rather than in front of it; far enough off to fit the book, open or closed, in the space
+// the header and footer leave free. The slight lean keeps the page tops at the top of the screen.
+const TILT = .06, mid = new THREE.Vector3();
 function readCam(pos, look) {
-  const [x0, x1] = B.extent(), tan = Math.tan(camera.fov * Math.PI / 360), k = B.root.getWorldScale(sc).x;
+  const [x0, x1] = B.extent(), tan = Math.tan(camera.fov * Math.PI / 360);
   const free = Math.max(.5, pagesEl.getBoundingClientRect().height / innerHeight || 1);
-  const w = x1 - x0 + .4, h = B.H + 2 * B.MARGIN + .4, d = Math.max(h / 2 / tan / free, w / 2 / tan / camera.aspect) * 1.04 * k;
-  B.root.localToWorld(mid.set((x0 + x1) / 2, .3, 0)); up.set(0, 1, 0).applyQuaternion(B.root.getWorldQuaternion(q));
-  look.copy(mid); pos.copy(mid).addScaledVector(up, d);
+  const w = (x1 - x0 + .3) * at.scale, h = (B.H + 2 * B.MARGIN + .3) * at.scale, d = Math.max(h / 2 / tan / free, w / 2 / tan / camera.aspect) * 1.02;
+  B.root.localToWorld(mid.set((x0 + x1) / 2, .3, 0));
+  look.copy(mid); pos.copy(mid).addScaledVector(fwd, -d * Math.sin(TILT)); pos.y += d * Math.cos(TILT);
 }
-const headAt = new THREE.Vector3();
 hqAnims.push(dt => {
-  if (!open) return;
-  // the camera comes down past the explorer's head to read over their lap
-  hero.head.visible = camera.position.distanceTo(hero.head.getWorldPosition(headAt)) > 1.2;
-  if (book && flip) {
-    flip.t = Math.min(1, flip.t + dt / (flip.board === null ? .6 : .8)); const e = ease(flip.t), p = flip.dir > 0 ? e : 1 - e;
-    if (flip.board === 0) B.setBoards(p, 0); else if (flip.board === 1) B.setBoards(1, p); else B.curl(p, flip.dir);
-    if (flip.t >= 1) { spread += flip.dir; flip = null; B.settle(); setFlat(); }
-  }
+  if (!open || !book || !flip) return;
+  flip.t = Math.min(1, flip.t + dt / (flip.board === null ? .6 : .8)); const e = ease(flip.t), p = flip.dir > 0 ? e : 1 - e;
+  if (flip.board === 0) B.setBoards(p, 0); else if (flip.board === 1) B.setBoards(1, p); else B.curl(p, dt);
+  // a page that has landed lets its edge flutter flat, unless the next turn is already waiting
+  if (flip.t >= 1 && (flip.board !== null || queued || !B.fluttering())) { spread += flip.dir; flip = null; B.settle(); setFlat(); if (queued) { const d = Math.sign(queued); queued -= d; turn(d); } }
 });
 
-function showShelf() {
-  book = null; flip = null; shelfEl.hidden = false;
-  $r('rTitle').textContent = 'Pick a book'; $r('rSub').textContent = 'Library Nook'; $r('rCredit').textContent = ''; el.querySelector('.rbar').style.visibility = 'hidden';
-  shelfEl.innerHTML = '';
-  for (const b of BOOKS) {
-    const st = state[b.id] || { seen: [] }, btn = document.createElement('button'); btn.className = 'bk';
-    const pct = b.pages ? Math.round(100 * (st.seen || []).length / b.pages) : 0;
-    btn.innerHTML = `${st.read ? '<i class="ribbon">Read ⭐</i>' : ''}<img alt="" src="${b.pages ? b.dir + 'p001.jpg' : ''}"><span>${b.title}<em>${b.pages ? (st.read ? 'Finished' : pct ? pct + '% read' : 'Not started yet') : 'Coming soon'}</em></span>`;
-    btn.addEventListener('click', () => { if (b.pages) openBook(b); });
-    shelfEl.append(btn);
-  }
-}
 function openBook(b) {
-  book = b; shelfEl.hidden = true; el.querySelector('.rbar').style.visibility = '';
+  book = b;
   $r('rTitle').textContent = b.title; $r('rSub').textContent = b.sub; $r('rCredit').textContent = b.credit || '';
-  B.setAspect(b.aspect); B.setShade(1); spread = 0; flip = null;
+  B.setAspect(b.aspect); B.setShade(1); spread = 0; flip = null; queued = 0;
   B.setCovers([pageTex(b, 0), pageTex(b, 1)], [pageTex(b, b.pages - 1), pageTex(b, b.pages - 2)]); setFlat();
-  // warm the next few pages so flipping feels instant
-  for (let i = 0; i < Math.min(6, b.pages); i++) pageTex(b, i);
 }
 // swipe or tap a side of the book to turn
 let sx = null;
@@ -164,19 +188,23 @@ pagesEl.addEventListener('pointerdown', e => { sx = e.clientX; });
 pagesEl.addEventListener('pointerup', e => { if (sx === null) return; const dx = e.clientX - sx; sx = null; Sound.init();
   if (Math.abs(dx) > 30) turn(dx < 0 ? 1 : -1); else turn(e.clientX > innerWidth / 2 ? 1 : -1); });
 $r('rPrev').addEventListener('click', () => turn(-1)); $r('rNext').addEventListener('click', () => turn(1));
-$r('rShelf').addEventListener('click', showShelf); $r('rClose').addEventListener('click', () => close());
+$r('rClose').addEventListener('click', () => close());
 
-export function openReader() {
-  if (!sitDown({...SPOT, angle: Math.PI, pose, seated: () => { game.cutCam = readCam; el.hidden = false; }})) return;
+// where: one of PLACES
+export function openReader(id, where = 'rug') {
+  const b = BOOKS.find(x => x.id === id), pl = PLACES[where];
+  if (!b || !b.pages || !sitDown({x: pl.x, z: pl.z, angle: pl.angle, pose: pl.pose, seated: () => { game.cutCam = readCam; el.hidden = false; }})) return;
+  at = pl; fwd.set(Math.sin(at.angle), 0, Math.cos(at.angle));
+  B.root.scale.setScalar(at.scale); B.root.rotation.y = at.angle + Math.PI; B.root.position.set(...at.book);
   closeDialog(); for (const k in keys) keys[k] = false; open = true;
-  hero.body.add(lap); document.documentElement.classList.add('reading-book');
+  B.root.visible = true; document.documentElement.classList.add('reading-book');
   Sound.duck(true); Sound.tone(660, { type: 'triangle', dur: .15, vol: .07 });
-  const ready = BOOKS.filter(b => b.pages); if (ready.length === 1) openBook(ready[0]); else showShelf();
+  openBook(b);
 }
 function close() {
   if (!open) return;
   open = false; el.hidden = true; document.documentElement.classList.remove('reading-book');
-  game.cutCam = null; hero.head.visible = true; lap.visible = false; standUp();
+  game.cutCam = null; B.root.visible = false; standUp();
   Sound.duck(false);
 }
 function key(e) {
