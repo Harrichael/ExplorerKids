@@ -284,7 +284,13 @@ function deliver(v, out, x, z, settled){
   if (out.l.soap && f.hasFilm(v) && f.film(v).soap(u, w)) { v.stats.bursts++; emit({type:'burst', v}); }
   chem.merge(v.c, out);
   const over = chem.liquidVol(v.c) - v.cap;
-  if (over > 0) { const lost = chem.take(v.c, over); desk.fx.spill(v.x + v.def.r*.7, v.z + v.def.r*.5, chem.liquidVol(lost), (chem.look(lost) || {col:chem.SUB.oil.col}).col); }
+  if (over > 0) {
+    const lost = chem.take(v.c, over), col = (chem.look(lost) || {col:chem.SUB.oil.col}).col;
+    // a cone's footprint is far wider than its mouth, so a puddle beside it would seep from under its skirt;
+    // what overflows a volcano wells out of the crater and runs down the slopes instead
+    if (v.def.cone) for (v.spilt = (v.spilt || 0) + chem.liquidVol(lost)*.4; v.spilt >= 1; v.spilt--) f.foam(v, col);
+    else f.spill(v.x + v.def.r*.7, v.z + v.def.r*.5, chem.liquidVol(lost), col);
+  }
   if (!chem.liquidVol(v.c)) f.dropFilm(v);
 }
 

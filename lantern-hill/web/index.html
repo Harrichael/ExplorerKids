@@ -9,7 +9,8 @@
 <link rel="stylesheet" href="css/lantern-hill.css">
 <script type="importmap">{"imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js",
-  "matter-js": "https://cdn.jsdelivr.net/npm/matter-js@0.19.0/+esm"
+  "matter-js": "https://cdn.jsdelivr.net/npm/matter-js@0.19.0/+esm",
+  "aladin-lite": "https://cdn.jsdelivr.net/npm/aladin-lite@3.8.2/dist/aladin.js"
 }}</script>
 <script type="module" src="js/main.js"></script>
 </head>
@@ -21,8 +22,8 @@
 <div class="hud">
   <div class="plate"><h1>Lantern Hill HQ</h1><div class="area" id="area">Hearth Room</div><div class="obj" id="obj" hidden></div></div>
   <div class="right">
-    <div class="hudbtns"><button class="pill" id="leaveTrip" hidden>Leave trip</button><button id="sound" aria-pressed="true">♪ Sound on</button></div>
-    <div class="keys"><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> walk · <kbd>Shift</kbd> run<br><kbd>Space</kbd> talk · <kbd>E</kbd> use · <kbd>M</kbd> sound</div>
+    <div class="hudbtns"><button class="pill" id="leaveTrip" hidden>Leave trip</button><button class="pill" id="bag" aria-label="Backpack">🎒<span> Backpack</span></button><button id="sound" aria-pressed="true">♪ Sound on</button></div>
+    <div class="keys"><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> walk · <kbd>Shift</kbd> run<br><kbd>Space</kbd> talk · <kbd>E</kbd> use · <kbd>Z</kbd> backpack · <kbd>M</kbd> sound</div>
   </div>
 </div>
 <div id="prompt" hidden></div>
@@ -40,7 +41,7 @@
 </div>
 <div id="stick"><div id="knob"></div></div>
 <button id="talk" aria-label="Talk">Talk</button>
-<button id="use" hidden>Open</button>
+<button id="use" class="use" hidden>Open</button>
 <div id="learn" hidden role="dialog" aria-labelledby="lTitle">
   <div class="lwrap">
     <div class="ltop">

@@ -1,7 +1,7 @@
 // The Library Nook reader: the explorer lies on their tummy on the reading rug with a big storybook
 // open on the floor in front of them, and the camera looks down over their head at the pages, which
-// curl as they turn. Everything happens in the room itself. Loaded the first time someone settles
-// down in the story corner.
+// curl as they turn. Everything happens in the room itself. Loaded the first time someone reads
+// a book from their backpack.
 
 import * as THREE from 'three';
 import { ease } from '../core/kit.js';
@@ -21,7 +21,7 @@ const saved = load('books'), state = saved && typeof saved === 'object' ? saved 
 const saveState = () => save('books', state);
 const css = document.createElement('style');
 css.textContent = `
-.reading-book .hud,.reading-book #stick,.reading-book #talk,.reading-book #use,.reading-book #prompt,.reading-book #dialog{display:none!important}
+.reading-book .hud,.reading-book #stick,.reading-book #talk,.reading-book .use,.reading-book #prompt,.reading-book #dialog{display:none!important}
 #reader{position:fixed;inset:0;display:flex;flex-direction:column;touch-action:none;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);animation:rfade .6s ease-out}
 @keyframes rfade{from{opacity:0}}
 #reader header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px max(16px,env(safe-area-inset-left,0px)) 12px;background:linear-gradient(rgba(26,19,32,.75),rgba(26,19,32,0))}
@@ -190,12 +190,13 @@ pagesEl.addEventListener('pointerup', e => { if (sx === null) return; const dx =
 $r('rPrev').addEventListener('click', () => turn(-1)); $r('rNext').addEventListener('click', () => turn(1));
 $r('rShelf').addEventListener('click', showShelf); $r('rClose').addEventListener('click', () => close());
 
-export function openReader() {
-  if (!sitDown({...SPOT, pose, seated: () => { game.cutCam = readCam; el.hidden = false; }})) return;
+export function openReader(id) {
+  const b = BOOKS.find(x => x.id === id);
+  if (!b || !b.pages || !sitDown({...SPOT, pose, seated: () => { game.cutCam = readCam; el.hidden = false; }})) return;
   closeDialog(); for (const k in keys) keys[k] = false; open = true;
   B.root.visible = true; document.documentElement.classList.add('reading-book');
   Sound.duck(true); Sound.tone(660, { type: 'triangle', dur: .15, vol: .07 });
-  const ready = BOOKS.filter(b => b.pages); if (ready.length === 1) openBook(ready[0]); else showShelf();
+  openBook(b);
 }
 function close() {
   if (!open) return;

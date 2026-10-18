@@ -12,16 +12,41 @@ export let active = null, convo = null, curItem = null;
 export const typing = {text:'', shown:0, acc:0, letters:0, done:true};
 const shownSpan = document.createElement('span'), restSpan = document.createElement('span'); restSpan.className = 'rest';
 dText.append(shownSpan, restSpan);
+// A line can end in a question: {p, text, choices:[{label, then}]}. The answers show once the line is
+// typed out, and picking one ends the talk and runs its `then`. Talk/Space/Enter picks the lit one,
+// the arrows move the light, Escape walks away without answering.
+const choicesEl = document.createElement('div'); choicesEl.className = 'choices'; choicesEl.hidden = true; dlg.append(choicesEl);
+let lit = 0;
+function showChoices(){
+  lit = 0; choicesEl.replaceChildren(...curItem.choices.map((c, i) => {
+    const b = document.createElement('button'); b.className = 'choice'; b.textContent = c.label;
+    b.addEventListener('click', e => { e.stopPropagation(); choose(i); });
+    return b;
+  }));
+  light(0); choicesEl.hidden = false; dMore.hidden = true;
+}
+function light(i){ lit = (i + curItem.choices.length) % curItem.choices.length; [...choicesEl.children].forEach((b, j) => b.classList.toggle('lit', j === lit)); }
+function choose(i){
+  if (!curItem || !curItem.choices || choicesEl.hidden) return;
+  const c = curItem.choices[i]; Sound.next(); endConvo(false);
+  if (c.then) c.then();
+}
+const asking = () => !!(convo && curItem && curItem.choices && !choicesEl.hidden);
+addEventListener('keydown', e => {
+  if (!asking()) return;
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); light(lit - 1); Sound.near(); }
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); light(lit + 1); Sound.near(); }
+});
 function showItem(it){
   curItem = it; const p = it.p;
   dlg.classList.toggle('thought', !!it.thought);
   $('dName').textContent = p.name; $('dRole').textContent = p.role; $('dDot').style.background = p.dot;
   typing.text = it.text.replace(/\{name\}/g, cfg.name || 'Explorer'); typing.shown = 0; typing.acc = -5; typing.letters = 0; typing.done = false;
-  shownSpan.textContent = ''; restSpan.textContent = typing.text; dMore.hidden = true;
+  shownSpan.textContent = ''; restSpan.textContent = typing.text; dMore.hidden = true; choicesEl.hidden = true;
   active = game.world.npcs.find(n => n.persona === p) || null;
   setBust(p);
 }
-function finishLine(){ typing.shown = typing.text.length; typing.done = true; shownSpan.textContent = typing.text; restSpan.textContent = ''; dMore.hidden = false; }
+function finishLine(){ typing.shown = typing.text.length; typing.done = true; shownSpan.textContent = typing.text; restSpan.textContent = ''; dMore.hidden = false; if (curItem.choices) showChoices(); }
 function startConvo(items, then, npc){
   if (!items.length) { if (then) then(); return; }
   if (convo) { convo.queue.push(...items); if (then) { const prev = convo.then; convo.then = prev ? () => { prev(); then(); } : then; } return; }
@@ -38,7 +63,7 @@ function nextItem(){
 }
 export function endConvo(sound){
   if (!convo) return;
-  convo = null; active = null; curItem = null; dlg.hidden = true; document.documentElement.classList.remove('talking');
+  convo = null; active = null; curItem = null; dlg.hidden = true; choicesEl.hidden = true; document.documentElement.classList.remove('talking');
   if (sound) Sound.close(); Sound.duck(false);
 }
 export function closeDialog(){ if (convo && !convo.then) endConvo(true); }
@@ -51,9 +76,10 @@ export function think(lines, then){
   startConvo(lines.map(l => Object.assign({p, thought:true}, l)), then, null);
 }
 export function talk(){
-  if (convo) { if (!typing.done) { finishLine(); return; } Sound.next(); nextItem(); return; }
+  if (convo) { if (!typing.done) { finishLine(); return; } if (asking()) { choose(lit); return; } Sound.next(); nextItem(); return; }
   if (!game.nearest || game.cutscene) return;
-  const n = game.nearest; startConvo(n.lines.map(text => ({p: n.persona, text})), null, n);
+  // someone with more to say than their usual lines (an offer, say) brings their own talk
+  const n = game.nearest; startConvo((n.converse && n.converse()) || n.lines.map(text => ({p: n.persona, text})), null, n);
 }
 dlg.addEventListener('click', talk);
 export function updateTyping(dt){
@@ -65,7 +91,7 @@ export function updateTyping(dt){
     if (/[.!?]/.test(ch)) typing.acc -= 7; else if (/[,;:]/.test(ch)) typing.acc -= 3.5;
   }
   if (changed) { shownSpan.textContent = typing.text.slice(0, typing.shown); restSpan.textContent = typing.text.slice(typing.shown); }
-  if (typing.shown >= typing.text.length) { typing.done = true; dMore.hidden = false; }
+  if (typing.shown >= typing.text.length) { typing.done = true; dMore.hidden = false; if (curItem.choices) showChoices(); }
 }
 
 // ---------- talking busts: a little 3D portrait of whoever is speaking ----------
