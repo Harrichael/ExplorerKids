@@ -537,9 +537,51 @@ const C = {
 // GROUND
 // =====================================================================
 const grassTex = tex(256,256,(g,w,h)=>{ g.fillStyle='#3f6343'; g.fillRect(0,0,w,h);
-  for (let i=0;i<1100;i++){ g.fillStyle = ['#3a5c3e','#46704a','#4e7a4e'][i%3]; g.fillRect(rand()*w, rand()*h, 2, 6); } }, 26, 26);
-const ground = add(new THREE.PlaneGeometry(130,130), T(0xffffff, {map:grassTex}), 8,0,0, null, false);
-ground.rotation.x = -Math.PI/2;
+  for (let i=0;i<1100;i++){ g.fillStyle = ['#3a5c3e','#46704a','#4e7a4e'][i%3]; g.fillRect(rand()*w, rand()*h, 2, 6); } }, 30, 30);
+// ---------- static batching: many small props merged into a few meshes per area ----------
+// keyed by colour + outline + shadow + spatial chunk, so distant chunks still frustum-cull
+const BATCH = new Map();
+function bAdd(color, geo, m, opt = {}){
+  const e = m.elements, ck = Math.floor(e[12]/16) + ',' + Math.floor(e[14]/16);
+  const key = color + '|' + (opt.ink || 0) + '|' + (opt.shadow ? 1 : 0) + '|' + (opt.glow || 0) + '|' + ck;
+  let b = BATCH.get(key); if (!b) BATCH.set(key, b = {color, opt, parts:[]});
+  b.parts.push([geo, m]);
+}
+function bFlush(parent){
+  for (const b of BATCH.values()) {
+    const geo = mergeGeos(b.parts);
+    const mat = b.opt.glow ? b.opt.mat : T(b.color);
+    const m = new THREE.Mesh(geo, mat); m.castShadow = !!b.opt.shadow; m.receiveShadow = !b.opt.glow; parent.add(m);
+    if (b.opt.ink) inkShell(geo, b.opt.ink, parent);
+  }
+  BATCH.clear();
+}
+// ---------- terrain: flat where you can walk, rolling hills beyond ----------
+const PLAY = {x0:-11.2, x1:28.0, z0:-11.4, z1:10.4};
+const LH = {x:5, z:-37}, WM = {x:40, z:-27}, VIL = {x:-27, z:-28}, MEAD = {x:39, z:-6};
+const streamZ = x => -16.8 + 1.8*Math.sin(x*.11 + .5) + .8*Math.sin(x*.27);
+const sstep = (a, b, v) => { const t = Math.max(0, Math.min(1, (v - a)/(b - a))); return t*t*(3 - 2*t); };
+const tnoise = (x, z) => Math.sin(x*.13 + 1.3)*Math.cos(z*.11 - .7) + .5*Math.sin(x*.27 - z*.19 + 2.1) + .25*Math.sin(x*.53 + z*.41);
+function hAt(x, z){
+  const dx = Math.max(PLAY.x0 - x, 0, x - PLAY.x1), dz = Math.max(PLAY.z0 - z, 0, z - PLAY.z1), d = Math.hypot(dx, dz);
+  if (d <= 0) return 0;
+  const s = sstep(0, 9, d);
+  let h = s * (1.4 + d*.1 + tnoise(x, z)*1.2);
+  const lh = Math.hypot(x - LH.x, z - LH.z); h += Math.pow(Math.max(0, 1 - lh/16), 1.5) * 10 * s;
+  const wm = Math.hypot(x - WM.x, z - WM.z); h += Math.pow(Math.max(0, 1 - wm/9), 2) * 3.5 * s;
+  const vl = Math.hypot(x - VIL.x, z - VIL.z); if (vl < 10) h = h * sstep(4, 10, vl) + (s * 1.6) * (1 - sstep(4, 10, vl));
+  // the stream cuts a soft channel across the north
+  const c = sstep(1.3, 3.8, Math.abs(z - streamZ(x)));
+  h = h * c - .4 * (1 - c);
+  return h;
+}
+const groundGeo = new THREE.PlaneGeometry(150, 150, 170, 170); groundGeo.rotateX(-Math.PI/2); groundGeo.translate(8, 0, -8);
+{ const gp = groundGeo.attributes.position, cols = new Float32Array(gp.count*3), cA = new THREE.Color(0x9fc49a), cB = new THREE.Color(0xd8e2b0), cC = new THREE.Color(0x7fa08a), tc = new THREE.Color();
+  for (let i = 0; i < gp.count; i++) { const x = gp.getX(i), z = gp.getZ(i), h = hAt(x, z); gp.setY(i, h);
+    const v = .5 + .5*Math.sin(x*.21 + z*.17) * Math.cos(z*.09 - x*.05);
+    tc.copy(cA).lerp(cB, Math.min(1, Math.max(0, h*.08 + v*.35))).lerp(cC, Math.max(0, -h*1.5)); cols.set([tc.r*1.05, tc.g*1.05, tc.b*1.05], i*3); }
+  groundGeo.setAttribute('color', new THREE.BufferAttribute(cols, 3)); groundGeo.computeVertexNormals(); }
+const ground = add(groundGeo, T(0xffffff, {map:grassTex, vertexColors:true}), 0, 0, 0, null, false);
 
 // =====================================================================
 // THE COTTAGE (interior x -10..10, z -7..7, door on the east wall)
@@ -897,18 +939,25 @@ document.fonts && document.fonts.ready.then(() => { const c = signT.image, g = c
 const signM = add(new THREE.PlaneGeometry(2.2,.7), T(0xffffff,{map:signT, transparent:true}), 10.47, 3.25, -2.9, null, false); signM.rotation.y = Math.PI/2;
 for (let i=0;i<11;i++){ const s = add(new THREE.CylinderGeometry(rr(.32,.45),rr(.35,.48),.07,8), T([0x8a8090,0x7d7486,0x94899a][i%3]), 10.9 + i*.42 + rr(-.1,.1), .04, rr(-.9,.4) + (i>6 ? -.6 : 0), null, false); s.rotation.y = rand()*3; }
 function hedge(x1, z1, x2, z2){
-  const len = Math.hypot(x2-x1, z2-z1), ang = Math.atan2(z2-z1, x2-x1);
-  const g = grp((x1+x2)/2, 0, (z1+z2)/2, -ang);
-  box(len, 1.1, 1.0, T(0x2f4f35), 0, .55, 0, g);
-  for (let i=0;i<len/0.9;i++) { const b = sph(rr(.5,.65), T(i%2?0x3a5f3e:0x34573a), -len/2 + .45 + i*.9, 1.05, rr(-.1,.1), g, 8); b.scale.y = .7; }
-  for (let i=0;i<len/1.6;i++) if (rand()<.6) sph(.07, T([0xd36a8f,0xe9d9b8,0xd9a441][i%3]), -len/2 + rr(.3,len-.3), rr(.6,1.3), .52, g, 6, false);
+  // a lumpy, living hedge: a dark core under rolling puffs, the odd blossom bush, and flowers on both faces
+  const len = Math.hypot(x2-x1, z2-z1), ux = (x2-x1)/len, uz = (z2-z1)/len, nx = -uz, nz = ux, ang = Math.atan2(z2-z1, x2-x1);
+  const core = box(len, .7, .62, T(0x2a4a31), (x1+x2)/2, .4, (z1+z2)/2); core.rotation.y = -ang;
+  const ph = fr(0, 6), blooms = [0xb46e8e, 0xc98aa6, 0xe3cfae];
+  for (let d = .25; d < len; d += .5) {
+    const r = fr(.44, .6), y = .52 + .2*Math.sin(d*1.05 + ph) + fr(-.06, .06), o = fr(-.14, .14), x = x1 + ux*d + nx*o, z = z1 + uz*d + nz*o;
+    const tone = y > .64 ? 2 : y < .42 ? 0 : 1, bloom = frand() < .08;
+    bAdd(bloom ? blooms[Math.floor(frand()*3)] : [LEAF.dk, LEAF.md, LEAF.lt][tone], new THREE.SphereGeometry(r, 12, 9), XF(x, y, z, 1, .85, 1, 0, fr(0, 6), 0), {ink:.04, shadow:true});
+    if (frand() < .3) bAdd([LEAF.md, LEAF.lt][Math.floor(frand()*2)], new THREE.SphereGeometry(r*.45, 9, 7), XF(x + fr(-.2, .2), y + r*.62, z + fr(-.15, .15)), {ink:.04, shadow:true});
+  }
+  for (let i = 0; i < len*1.3; i++) { const d = fr(.2, len - .2), sd = frand() < .5 ? -1 : 1;
+    bAdd([0xd36a8f, 0xe9d9b8, 0xd9a441, 0x8f7ad6][i%4], new THREE.SphereGeometry(.065, 6, 4), XF(x1 + ux*d + nx*sd*.6, fr(.45, 1.05), z1 + uz*d + nz*sd*.6)); }
   col(Math.min(x1,x2)-.5, Math.max(x1,x2)+.5, Math.min(z1,z2)-.5, Math.max(z1,z2)+.5);
 }
 hedge(10.8, -10.2, 27.2, -10.2); hedge(27.2, -10.2, 27.2, 9.2); hedge(10.8, 9.2, 27.2, 9.2);
 hedge(10.8, 7.6, 10.8, 9.2); hedge(10.8, -10.2, 10.8, -7.6);
 // a pine bough: cone whose skirt is scalloped and droops between the points
-function boughGeo(r, h){
-  const g = new THREE.ConeGeometry(r, h, 28, 4, true), p = g.attributes.position;
+function boughGeo(r, h, seg = 28, hs = 4){
+  const g = new THREE.ConeGeometry(r, h, seg, hs, true), p = g.attributes.position;
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i), t = (h/2 - y)/h, ang = Math.atan2(z, x), w = Math.sin(ang*7);
     const k = 1 + .14*w*t*t + .08*t;
@@ -946,21 +995,7 @@ function roundTree(x, z, s){
   leafCloud(g, puffs, .045*s);
   return g;
 }
-for (let i=0;i<34;i++){
-  let x, z; const t = rand();
-  if (t < .3) { x = rr(28.5, 34); z = rr(-13, 12); }
-  else if (t < .55) { x = rr(11, 34); z = rr(10.5, 14); }
-  else if (t < .8) { x = rr(11, 34); z = rr(-15, -11.5); }
-  else { x = rr(-12, 10); z = rr(-12, -8.5); }
-  (rand() < .55 ? pine : roundTree)(x, z, rr(.9, 1.5));
-}
-for (let i=0;i<10;i++) (rand()<.5?pine:roundTree)(rr(-15,-11.5), rr(-10, 10), rr(1,1.5));
-const pond = add(new THREE.CircleGeometry(1.8, 28), T(0x2e4f73, {emissive:0x1b3252, emissiveIntensity:.5}), 22.8, .04, 5.2, null, false); pond.rotation.x = -Math.PI/2; pond.scale.set(1.25,1,1);
-for (let i=0;i<14;i++){ const a = i/14*Math.PI*2; const st = sph(rr(.18,.3), T(i%2?0x7d7486:0x8a8090), 22.8+Math.cos(a)*2.3, .08, 5.2+Math.sin(a)*1.85, null, 7); st.scale.y = .55; }
 const lily = [];
-for (const [px,pz] of [[22.1,4.7],[23.6,5.6],[22.9,5.9]]) { const p = add(new THREE.CircleGeometry(.28,12,0,Math.PI*1.8), T(C.moss), px,.06,pz, null, false); p.rotation.x = -Math.PI/2; lily.push(p); }
-sph(.07, T(0xd36a8f), 23.6,.1,5.6, null, 8, false);
-for (let i=0;i<5;i++){ const cx = 24.9 + rr(-.2,.3), cz = 4.0 + i*.35; cyl(.02,.02,1.2,T(C.moss),cx,.6,cz,null,4); cyl(.05,.05,.25,T(C.woodDk),cx,1.15,cz,null,6); }
 col(20.4, 25.2, 3.3, 7.1);
 function pumpkin(x, z, s){ const g = grp(x,0,z,rand()*3); for (let i=0;i<6;i++){ const a = i/6*Math.PI*2; const p = sph(.28*s, T(C.rust), Math.cos(a)*.1*s, .22*s, Math.sin(a)*.1*s, g, 10); p.scale.set(.75,.85,1); p.rotation.y = a; } cyl(.035*s,.05*s,.16*s,T(C.forest),0,.46*s,0,g,6); col(x-.3*s, x+.3*s, z-.3*s, z+.3*s, -5, .6); }
 pumpkin(12.6,-6.3,1.2); pumpkin(13.6,-7.0,.9); pumpkin(12.2,-7.6,.8); pumpkin(14.5,-6.0,1.0);
@@ -1407,6 +1442,386 @@ addNPC({pid:'juniper', name:'Juniper', role:'Treehouse explorer', dot:'#e7b84c',
     "I write down everything in this notebook. Today: one owl, one sleepy cat, and one new explorer named {name}. That's you!",
     "Every time we finish an adventure, we hang a new lantern on the railing. Four so far. The next one might be ours together."
   ]}, juniper, 23.2, PLAT, -1.3, -Math.PI*.6, 2.0);
+
+// =====================================================================
+// THE WIDER WORLD: hills, forest, stream, Lantern Hill, windmill, village, meadow
+// =====================================================================
+const hqAnims = [];
+scene.fog.near = 22; scene.fog.far = 60;
+const PALETTES = [
+  [LEAF.dk, LEAF.md, LEAF.lt], [LEAF.dk, LEAF.md, LEAF.lt], [0x2a4f3a, 0x3a6a48, 0x58904f],
+  [0x7a3a2a, 0xa4552f, 0xc98a3e], [0x6f5a2a, 0x9a7a34, 0xc8a64c], [0x84466a, 0xb46e8e, 0xe0a6be], [0x29504c, 0x36655e, 0x52897a]
+];
+const pickPal = () => { const r = frand(); return r < .66 ? PALETTES[r < .33 ? 0 : 2] : r < .78 ? PALETTES[3] : r < .87 ? PALETTES[4] : r < .94 ? PALETTES[5] : PALETTES[6]; };
+const distPlay = (x, z) => Math.hypot(Math.max(PLAY.x0 - x, 0, x - PLAY.x1), Math.max(PLAY.z0 - z, 0, z - PLAY.z1));
+// batched round tree; hi = near the garden (more puffs, tufts, casts shadow)
+function bRound(x, z, s, pal){
+  const y0 = hAt(x, z) - .05, hi = distPlay(x, z) < 9, sg = hi ? [12, 9] : [9, 7], sh = hi;
+  pal = pal || pickPal();
+  const top = 2.15*s, bx = fr(-.25, .25)*s, bz = fr(-.2, .2)*s;
+  for (const [g, m] of barkGeo([[0, 0, 0], [bx*.3, .7*s, bz*.2], [bx*.8, 1.4*s, bz*.6], [bx, top, bz]], .27*s, .15*s)) bAdd(C.woodDk, g, new THREE.Matrix4().makeTranslation(x, y0, z).multiply(m), {ink:.03*s, shadow:sh});
+  bAdd(C.woodDk, new THREE.ConeGeometry(.5*s, .45*s, 10, 1, true), XF(x, y0 + .2*s, z), {ink:.03*s, shadow:sh});
+  const cx = x + bx, cy = y0 + top + .55*s, cz = z + bz, n = hi ? 6 : 5, ph = fr(0, 6);
+  const puffs = [[cx, cy, cz, .95*s, 1]];
+  for (let i = 0; i < n; i++) { const a = ph + i/n*Math.PI*2; puffs.push([cx + Math.cos(a)*.85*s, cy - .25*s + fr(-.1, .12)*s, cz + Math.sin(a)*.8*s, fr(.55, .68)*s, Math.sin(a) < -.2 ? 0 : 1]); }
+  for (let i = 0; i < (hi ? 3 : 2); i++) { const a = ph + i*2.1 + .5; puffs.push([cx + Math.cos(a)*.45*s, cy + .55*s, cz + Math.sin(a)*.4*s, fr(.45, .55)*s, 2]); }
+  for (const [px, py, pz, r, t] of puffs) {
+    bAdd(pal[t], new THREE.SphereGeometry(r, sg[0], sg[1]), XF(px, py, pz, 1, fr(.82, .95), 1, 0, fr(0, 6), 0), {ink:.045*s, shadow:sh});
+    if (hi) { const a = fr(0, 6.28), el = fr(-.1, .8); bAdd(pal[t], new THREE.SphereGeometry(r*.38, 8, 6), XF(px + Math.cos(a)*Math.cos(el)*r*.9, py + Math.sin(el)*r*.85, pz + Math.sin(a)*Math.cos(el)*r*.9), {ink:.045*s, shadow:sh}); }
+  }
+}
+function bPine(x, z, s){
+  const y0 = hAt(x, z) - .05, hi = distPlay(x, z) < 9, sh = hi, lean = fr(-.06, .06), cols = frand() < .2 ? [0x23413a, 0x2f5548] : [0x2a4a33, 0x35593c];
+  bAdd(C.woodDk, new THREE.CylinderGeometry(.12*s, .24*s, 1.3*s, 8), XF(x, y0 + .65*s, z), {ink:.03*s, shadow:sh});
+  for (let i = 0; i < 4; i++) {
+    const t = i/3, r = (1.25 - t*.75)*s, h = (1.25 - t*.25)*s, y = (1.15 + i*.72)*s;
+    bAdd(cols[i%2], boughGeo(r, h, hi ? 28 : 14, hi ? 4 : 2), XF(x + lean*i*s, y0 + y + h*.35, z, 1, 1, 1, 0, fr(0, 6), lean), {ink:.04*s, shadow:sh});
+  }
+}
+function bRock(x, z, r, sink = .35){
+  const y = hAt(x, z), col = [0x7d7486, 0x8a8090, 0x6f6678][Math.floor(frand()*3)];
+  bAdd(col, new THREE.SphereGeometry(r, 10, 7), XF(x, y + r*(.5 - sink), z, fr(1, 1.5), fr(.55, .8), fr(.9, 1.3), 0, fr(0, 6), fr(-.15, .15)), {ink:.035});
+  if (frand() < .6) bAdd(C.moss, new THREE.SphereGeometry(r*.75, 9, 5, 0, Math.PI*2, 0, Math.PI/2), XF(x + fr(-.1, .1)*r, y + r*(.75 - sink), z, 1.2, .35, 1.1, 0, fr(0, 6), 0));
+}
+function grassTuft(x, z, y, s = 1, col){
+  const c = col || [0x4e7a4e, 0x5b8a52, 0x46704a][Math.floor(frand()*3)];
+  for (let k = 0; k < 3; k++) bAdd(c, new THREE.ConeGeometry(.045*s, fr(.3, .5)*s, 3), XF(x + fr(-.08, .08)*s, y + .16*s, z + fr(-.08, .08)*s, 1, 1, 1, fr(-.35, .35), 0, fr(-.35, .35)));
+}
+const FLOWER_COLS = [0xd36a8f, 0xe9d9b8, 0xd9a441, 0x8f7ad6, 0xe07a5a, 0xf0c8d8];
+function flower(x, z, y, s = 1, col){
+  col = col || FLOWER_COLS[Math.floor(frand()*FLOWER_COLS.length)];
+  const h = fr(.28, .5)*s;
+  bAdd(C.moss, new THREE.CylinderGeometry(.012*s, .015*s, h, 4), XF(x, y + h/2, z));
+  bAdd(col, new THREE.SphereGeometry(.07*s, 8, 5), XF(x, y + h + .02*s, z, 1.25, .45, 1.25));
+  bAdd(0xf2d27a, new THREE.SphereGeometry(.03*s, 6, 4), XF(x, y + h + .045*s, z));
+  if (frand() < .4) bAdd(C.moss, new THREE.SphereGeometry(.05*s, 6, 4), XF(x + .04*s, y + h*.4, z, 1.6, .3, .8, 0, fr(0, 6), .4));
+}
+// a flat ribbon that hugs the ground along a curve (paths, the stream)
+function ribbonGeo(pts, width, yOff, follow = true, segs = 120){
+  const curve = new THREE.CatmullRomCurve3(pts.map(([x, z]) => new THREE.Vector3(x, 0, z)));
+  const P = curve.getSpacedPoints(segs), pos = [], uv = [], idx = [];
+  let acc = 0;
+  for (let i = 0; i <= segs; i++) {
+    const p = P[i], q = P[Math.min(segs, i + 1)], o = P[Math.max(0, i - 1)];
+    const tx = q.x - o.x, tz = q.z - o.z, l = Math.hypot(tx, tz) || 1, nx = -tz/l, nz = tx/l;
+    const w = width * (1 + .12*Math.sin(i*.7));
+    if (i) acc += Math.hypot(p.x - P[i-1].x, p.z - P[i-1].z);
+    for (const sd of [-1, 1]) { const x = p.x + nx*w/2*sd, z = p.z + nz*w/2*sd; pos.push(x, (follow ? hAt(x, z) : 0) + yOff, z); uv.push(sd < 0 ? 0 : 1, acc/width); }
+    if (i < segs) { const a = i*2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+  return {geo:g, curve, pts:P};
+}
+const haloMat = new THREE.SpriteMaterial({map:glowTex, color:0xffc870, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending});
+function halo(x, y, z, s){ const sp = new THREE.Sprite(haloMat); sp.position.set(x, y, z); sp.scale.set(s, s, 1); scene.add(sp); return sp; }
+const lanternGlow = T(0xffd27a, {emissive:0xffb347, emissiveIntensity:1.3});
+const winGlow = T(0xffd27a, {emissive:0xffaa44, emissiveIntensity:1.15});
+
+// ----- the stream, with banks of rocks and reeds -----
+const streamPts = []; for (let x = -55; x <= 72; x += 4) streamPts.push([x, streamZ(x)]);
+const waterTex = tex(128, 128, (g, w, h) => { g.fillStyle = '#35618a'; g.fillRect(0, 0, w, h);
+  g.strokeStyle = 'rgba(190,225,255,.35)'; g.lineWidth = 3; for (let i = 0; i < 9; i++) { g.beginPath(); const y = rand()*h, x = rand()*w; g.moveTo(x, y); g.quadraticCurveTo(x + 14, y - 6, x + 30, y); g.stroke(); } }, 1, 1);
+waterTex.wrapS = waterTex.wrapT = THREE.RepeatWrapping;
+const stream = ribbonGeo(streamPts, 3.0, -.12, false, 220);
+const streamMesh = new THREE.Mesh(stream.geo, T(0xffffff, {map:waterTex, emissive:0x1b3252, emissiveIntensity:.45})); scene.add(streamMesh);
+hqAnims.push((dt, t) => { waterTex.offset.y = -t * .12; });
+for (let i = 0; i < 70; i++) { const p = stream.pts[Math.floor(frand()*stream.pts.length)], sd = frand() < .5 ? -1 : 1, o = fr(1.4, 2.3);
+  const x = p.x + fr(-.6, .6), z = p.z + sd*o; if (distPlay(x, z) < 1) continue;
+  if (frand() < .45) bRock(x, z, fr(.25, .6), .45); else for (let k = 0; k < 3; k++) grassTuft(x + fr(-.3, .3), z + fr(-.3, .3), hAt(x, z), 1.6, 0x55804a); }
+
+// ----- paths: from the cottage's back, over a little bridge and up Lantern Hill -----
+const hillPath = [[5.2, -11.6], [5.6, -13.5], [5, streamZ(5)], [4.6, -19.5], [5.4, -23]];
+for (let i = 1; i <= 14; i++) { const t = i/14, r = 14*(1 - t) + 1.2, a = t*4.6; hillPath.push([LH.x + r*Math.sin(a), LH.z + r*Math.cos(a)]); }
+const dirtTex = tex(128, 128, (g, w, h) => { g.fillStyle = '#8a6748'; g.fillRect(0, 0, w, h); for (let i = 0; i < 160; i++) { g.fillStyle = ['#7a5a3e', '#977352', '#6e5038'][i%3]; g.beginPath(); g.arc(rand()*w, rand()*h, rr(1, 3.5), 0, 7); g.fill(); } }, 1, 1);
+dirtTex.wrapS = dirtTex.wrapT = THREE.RepeatWrapping;
+const dirtMat = T(0xffffff, {map:dirtTex});
+const hp = ribbonGeo(hillPath, 1.3, .14, true, 200);
+const hpMesh = new THREE.Mesh(hp.geo, dirtMat); hpMesh.receiveShadow = true; scene.add(hpMesh);
+const nearPath = (x, z, pts, r) => pts.some(p => (p.x - x)**2 + (p.z - z)**2 < r*r);
+// arched wooden bridge over the stream
+{ const bz = streamZ(5), br = grp(5, 0, bz, Math.PI/2 + .05);
+  for (let i = 0; i < 9; i++) { const t = (i - 4)/4, y = .35 + (1 - t*t)*.45; const pl = box(.42, .1, 1.5, T(i%2 ? C.woodLt : C.wood), t*2.1, y, 0, br); pl.rotation.z = -t*.38; outline(pl, 1.04); }
+  for (const sd of [-1, 1]) { for (let i = 0; i < 5; i++) { const t = (i - 2)/2, y = .35 + (1 - t*t)*.45; cyl(.05, .05, .8, T(C.woodDk), t*2.1, y + .4, sd*.72, br, 6); }
+    const rail = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([-2.1, -1.05, 0, 1.05, 2.1].map(x => { const t = x/2.1; return new THREE.Vector3(x, .35 + (1 - t*t)*.45 + .8, sd*.72); })), 16, .045, 6), T(C.woodDk)); br.add(rail); } }
+// lanterns along the hill path, brighter toward the top
+const lanternMeshes = [];
+for (let i = 4, k = 0; i < hp.pts.length; i += 9, k++) {
+  const p = hp.pts[i], q = hp.pts[Math.min(hp.pts.length - 1, i + 1)], tx = q.x - p.x, tz = q.z - p.z, l = Math.hypot(tx, tz) || 1, sd = k%2 ? 1 : -1;
+  const x = p.x - tz/l*1.05*sd, z = p.z + tx/l*1.05*sd, y = hAt(x, z);
+  bAdd(C.ink, new THREE.CylinderGeometry(.045, .06, 1.5, 6), XF(x, y + .75, z));
+  bAdd(C.ink, new THREE.ConeGeometry(.2, .14, 4), XF(x, y + 1.78, z, 1, 1, 1, 0, Math.PI/4, 0));
+  const lm = box(.22, .28, .22, lanternGlow, x, y + 1.58, z, null, false); lanternMeshes.push(lm);
+  halo(x, y + 1.58, z, 1.5);
+}
+// the Great Lantern on the summit
+{ const top = hp.pts[hp.pts.length - 1], x = top.x, z = top.z, y = hAt(x, z);
+  const g = grp(x, y, z);
+  cyl(1.4, 1.7, .5, T(C.stone), 0, .1, 0, g, 14); cyl(.12, .16, 3.4, T(C.ink), 0, 1.9, 0, g, 8);
+  for (const sd of [-1, 1]) { const arm = box(1.2, .07, .07, T(C.ink), sd*.55, 3.35, 0, g); arm.rotation.z = sd*.15; }
+  const big = box(.7, .9, .7, lanternGlow, 0, 3.0, 0, g, false); outline(big, 1.06); add(new THREE.ConeGeometry(.62, .45, 4), T(C.ink), 0, 3.66, 0, g).rotation.y = Math.PI/4;
+  for (const sd of [-1, 1]) { box(.3, .38, .3, lanternGlow, sd*1.1, 2.9, 0, g, false); }
+  halo(x, y + 3.0, z, 6); halo(x - 1.1, y + 2.9, z, 2); halo(x + 1.1, y + 2.9, z, 2);
+  lanternMeshes.push(big);
+  const bench = grp(1.8, .1, 1.2, -.6, g); box(1.3, .08, .4, T(C.wood), 0, .45, 0, bench); for (const sx of [-.55, .55]) box(.08, .45, .35, T(C.woodDk), sx, .22, 0, bench);
+}
+hqAnims.push((dt, t) => { lanternGlow.emissiveIntensity = 1.25 + Math.sin(t*5.3)*.08 + Math.sin(t*13.1)*.05; });
+
+// ----- the windmill on its knoll -----
+const sails = new THREE.Group();
+{ const y = hAt(WM.x, WM.z) - .3, g = grp(WM.x, y, WM.z, -.5);
+  const tower = add(new THREE.CylinderGeometry(1.25, 1.9, 6.2, 14), T(0xe0cfae), 0, 3.1, 0, g); outline(tower, 1.03);
+  for (let i = 0; i < 3; i++) cyl(1.9 - (i*2 + 1)*.105, 1.9 - (i*2 + 1)*.105 + .02, .12, T(0xc8b48e), 0, .8 + i*2, 0, g, 14);
+  const roof = add(new THREE.ConeGeometry(1.6, 1.9, 14), T(C.rust), 0, 7.1, 0, g); outline(roof, 1.04);
+  box(.8, 1.3, .1, T(C.woodDk), 0, .65, 1.82, g); box(.5, .6, .1, winGlow, 0, 3.5, 1.5, g, false); box(.45, .55, .1, winGlow, .9, 5.0, 1.0, g, false).rotation.y = .6;
+  halo(WM.x + Math.sin(-.5)*1.6, y + 3.5, WM.z + Math.cos(-.5)*1.6, 1.8);
+  sails.position.set(0, 6.0, 1.7); g.add(sails); cyl(.18, .18, .6, T(C.woodDk), 0, 0, -.1, sails, 8).rotation.x = Math.PI/2;
+  for (let i = 0; i < 4; i++) { const arm = grp(0, 0, .2, 0, sails); arm.rotation.z = i*Math.PI/2;
+    box(.14, 4.4, .1, T(C.woodDk), 0, 2.2, 0, arm); const sail = box(.9, 3.4, .04, T(0xefe0bf), .5, 2.6, .02, arm); outline(sail, 1.03);
+    for (let k = 0; k < 4; k++) box(.95, .04, .06, T(C.woodDk), .5, 1.2 + k*.9, .05, arm); }
+}
+hqAnims.push((dt) => { sails.rotation.z -= dt * .45; });
+
+// ----- a little village with smoking chimneys -----
+const smoke = [];
+function house(x, z, ry, wall, roofC, s = 1){
+  const y = hAt(x, z) - .25, g = grp(x, y, z, ry); g.scale.setScalar(s);
+  const body = box(3, 2.2, 2.4, T(wall), 0, 1.1, 0, g); outline(body, 1.02);
+  const roof = add(new THREE.CylinderGeometry(1.75, 1.75, 3.3, 3, 1, false, Math.PI/2), T(roofC), 0, 2.7, 0, g); roof.rotation.set(0, 0, Math.PI/2); roof.scale.set(1, 1, .82); roof.rotation.order = 'ZXY'; outline(roof, 1.03);
+  const ch = box(.45, 1.3, .45, T(C.stone), .9, 3.3, -.4, g); outline(ch, 1.05);
+  for (const wx of [-.85, .85]) box(.55, .55, .06, winGlow, wx, 1.25, 1.22, g, false);
+  box(.6, 1.1, .06, T(C.woodDk), 0, .55, 1.22, g);
+  for (const wx of [-.85, .85]) box(.75, .12, .25, T(C.woodLt), wx, .9, 1.3, g);
+  halo(x + Math.sin(ry)*1.6*s, y + 1.25*s, z + Math.cos(ry)*1.6*s, 2.4*s);
+  const wp = new THREE.Vector3(.9, 4.0, -.4).multiplyScalar(s).applyAxisAngle(new THREE.Vector3(0, 1, 0), ry).add(new THREE.Vector3(x, y, z));
+  for (let i = 0; i < 5; i++) { const m = sph(.22, T(0xb9adc4, {transparent:true, opacity:.6}), wp.x, wp.y, wp.z, null, 8, false); smoke.push({m, base:wp, t:i/5}); }
+  for (let i = 0; i < 6; i++) { const a = fr(0, 6.28), r = fr(2.2, 3.4)*s; flower(x + Math.cos(a)*r, z + Math.sin(a)*r, hAt(x + Math.cos(a)*r, z + Math.sin(a)*r), 1.4); }
+}
+house(VIL.x, VIL.z, .5, 0xe6d6b8, C.rust); house(VIL.x - 6.5, VIL.z + 4.5, .9, 0xd9c6a8, C.plum, .9); house(VIL.x + 5, VIL.z - 4, .2, 0xe9dcc2, 0x2f5552, 1.05); house(VIL.x - 2, VIL.z - 7.5, -.3, 0xdcc9ad, 0x8a5a3a, .85);
+hqAnims.push((dt) => { for (const p of smoke) { p.t = (p.t + dt*.18) % 1; p.m.position.set(p.base.x + Math.sin(p.t*5)*.3 + p.t*.8, p.base.y + p.t*3.2, p.base.z); p.m.scale.setScalar(.6 + p.t*1.8); p.m.material.opacity = .55*(1 - p.t); } });
+// a picket fence and a lane through the village
+for (let i = 0; i < 26; i++) { const t = i/25, x = VIL.x - 9 + t*16, z = VIL.z + 6.5 + Math.sin(t*3)*.8, y = hAt(x, z); bAdd(0xe9d9b8, new THREE.BoxGeometry(.1, .7, .06), XF(x, y + .35, z), {ink:.02}); if (i < 25) bAdd(0xe9d9b8, new THREE.BoxGeometry(.66, .07, .04), XF(x + .32, y + .5, z + Math.cos(t*3)*.08), {ink:.015}); }
+
+// ----- sheep meadow east of the garden -----
+const sheep = [];
+{ const fx0 = MEAD.x - 7, fx1 = MEAD.x + 7, fz0 = MEAD.z - 6, fz1 = MEAD.z + 5;
+  const fence = (x1, z1, x2, z2) => { const n = Math.round(Math.hypot(x2 - x1, z2 - z1)/1.6); for (let i = 0; i <= n; i++) { const x = x1 + (x2 - x1)*i/n, z = z1 + (z2 - z1)*i/n, y = hAt(x, z);
+      bAdd(C.woodLt, new THREE.CylinderGeometry(.07, .08, 1.0, 6), XF(x, y + .45, z), {ink:.02});
+      if (i < n) { const x3 = x + (x2 - x1)/n, z3 = z + (z2 - z1)/n, y3 = hAt(x3, z3), L = Math.hypot(x3 - x, z3 - z), a = Math.atan2(z3 - z, x3 - x);
+        for (const hy of [.4, .75]) bAdd(C.wood, new THREE.BoxGeometry(L, .07, .06), XF((x + x3)/2, (y + y3)/2 + hy, (z + z3)/2, 1, 1, 1, 0, -a, Math.atan2(y3 - y, L)), {ink:.015}); } } };
+  fence(fx0, fz0, fx1, fz0); fence(fx1, fz0, fx1, fz1); fence(fx1, fz1, fx0, fz1); fence(fx0, fz1, fx0, fz0);
+  for (let i = 0; i < 7; i++) {
+    const x = fr(fx0 + 1.2, fx1 - 1.2), z = fr(fz0 + 1.2, fz1 - 1.2), g = grp(x, hAt(x, z), z, fr(0, 6.28));
+    const wool = []; for (const [px, py, pz, r] of [[0, .62, 0, .42], [.28, .66, .1, .3], [-.28, .64, -.05, .32], [0, .8, .18, .28], [0, .78, -.2, .28], [.12, .9, 0, .25]]) wool.push([new THREE.SphereGeometry(r, 12, 9), XF(px, py, pz)]);
+    meshOf(mergeGeos(wool), 0xf1e8d6, g, .035);
+    for (const [lx, lz] of [[.2, .18], [-.2, .18], [.2, -.18], [-.2, -.18]]) cyl(.05, .045, .4, T(C.ink), lx, .2, lz, g, 6);
+    const head = grp(.48, .7, 0, 0, g); const hm = sph(.17, T(0x2a2230), .08, 0, 0, head, 10); hm.scale.set(1.3, .95, .9); outline(hm, 1.08);
+    for (const sd of [-1, 1]) { const ear = sph(.06, T(0x2a2230), 0, .06, sd*.16, head, 6); ear.scale.set(.6, .5, 1.6); }
+    for (const sd of [-1, 1]) sph(.025, T(0xffffff), .2, .04, sd*.08, head, 6, false);
+    sheep.push({g, head, t:fr(0, 10), sp:fr(.6, 1.2), dir:fr(0, 6.28), walk:0});
+    for (let k = 0; k < 8; k++) grassTuft(x + fr(-1.5, 1.5), z + fr(-1.5, 1.5), hAt(x, z), 1.2);
+  }
+  hqAnims.push((dt, t) => { for (const s of sheep) { s.t += dt;
+    s.head.rotation.z = -.55 + Math.sin(s.t*s.sp)*.45 + (Math.sin(s.t*.3) > .6 ? .5 : 0);
+    if (Math.sin(s.t*.21 + s.dir) > .7) { const nx = s.g.position.x + Math.cos(s.g.rotation.y)*dt*.25, nz = s.g.position.z - Math.sin(s.g.rotation.y)*dt*.25;
+      if (nx > fx0 + 1 && nx < fx1 - 1 && nz > fz0 + 1 && nz < fz1 - 1) { s.g.position.x = nx; s.g.position.z = nz; s.g.position.y = hAt(nx, nz); } else s.g.rotation.y += dt*1.2; }
+    else s.g.rotation.y += Math.sin(s.t*.13)*dt*.15; } });
+}
+
+// ----- the forest: dense near the garden, thinning into the hills -----
+{ const grid = new Map(), cell = 2.1, taken = (x, z) => { const gx = Math.floor(x/cell), gz = Math.floor(z/cell); for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const p = grid.get((gx + i) + ',' + (gz + j)); if (p && (p[0] - x)**2 + (p[1] - z)**2 < (cell*.95)**2) return true; } return false; };
+  const clear = (x, z) => {
+    const d = distPlay(x, z); if (d < 1.4) return false;
+    if (Math.abs(z - streamZ(x)) < 2.8) return false;
+    if (nearPath(x, z, hp.pts, 2.0)) return false;
+    if (Math.hypot(x - LH.x, z - LH.z) < 5) return false;
+    if (Math.hypot(x - WM.x, z - WM.z) < 5.5) return false;
+    if (Math.hypot(x - VIL.x, z - VIL.z) < 11) return false;
+    if (x > MEAD.x - 8.5 && x < MEAD.x + 8.5 && z > MEAD.z - 7.5 && z < MEAD.z + 6.5) return false;
+    return true; };
+  let placed = 0;
+  for (let i = 0; i < 6000 && placed < 330; i++) {
+    const x = fr(-52, 66), z = fr(-56, 17); if (!clear(x, z) || taken(x, z)) continue;
+    const d = distPlay(x, z); if (frand() > (d < 6 ? .95 : d < 16 ? .7 : .45)) continue;
+    grid.set(Math.floor(x/cell) + ',' + Math.floor(z/cell), [x, z]); placed++;
+    const s = fr(.85, 1.45) * (d > 14 ? 1.15 : 1);
+    if (frand() < .42) bPine(x, z, s); else bRound(x, z, s);
+    if (frand() < .5) for (let k = 0; k < 3; k++) grassTuft(x + fr(-1.4, 1.4), z + fr(-1.4, 1.4), hAt(x, z), 1.3);
+  }
+  // meadows of flowers and tufts on the open slopes, plus scattered boulders
+  for (let i = 0; i < 900; i++) { const x = fr(-48, 62), z = fr(-50, 15); if (distPlay(x, z) < 1.2 || Math.abs(z - streamZ(x)) < 1.8 || nearPath(x, z, hp.pts, .9)) continue;
+    const y = hAt(x, z); if (frand() < .35) flower(x, z, y, 1.6); else grassTuft(x, z, y, 1.5); }
+  for (let i = 0; i < 40; i++) { const x = fr(-45, 60), z = fr(-48, 14); if (clear(x, z)) bRock(x, z, fr(.4, 1.1)); }
+}
+
+// ----- birds wheeling overhead -----
+const birds = [];
+for (let i = 0; i < 5; i++) { const g = new THREE.Group(); scene.add(g); const wings = [];
+  for (const sd of [-1, 1]) { const w = new THREE.Mesh(new THREE.ConeGeometry(.12, .7, 3), T(0x2a2230)); w.rotation.z = sd*Math.PI/2; w.position.x = sd*.35; w.scale.set(1, 1, .25); const piv = new THREE.Group(); piv.add(w); g.add(piv); wings.push(piv); }
+  sph(.1, T(0x2a2230), 0, 0, 0, g, 6).scale.set(1, .8, 2.2);
+  birds.push({g, wings, r:fr(9, 17), y:fr(4.8, 6.8), sp:fr(.18, .3)*(i%2 ? 1 : -1), ph:fr(0, 6.28), cx:fr(12, 24), cz:fr(-8, 2)}); }
+hqAnims.push((dt, t) => { for (const b of birds) { const a = b.ph + t*b.sp; b.g.position.set(b.cx + Math.cos(a)*b.r, b.y + Math.sin(t*.7 + b.ph)*.4, b.cz + Math.sin(a)*b.r*.7); b.g.rotation.y = -a + (b.sp > 0 ? 0 : Math.PI); const f = Math.sin(t*9 + b.ph)*.6; b.wings[0].rotation.z = f; b.wings[1].rotation.z = -f; } });
+
+// =====================================================================
+// GARDEN LIFE: path, beds, critters and cosy props
+// =====================================================================
+// a winding dirt path from the door past the lamps, with a branch to the bus
+const gPath = ribbonGeo([[10.5, .5], [11.8, 1.15], [13.4, 1.25], [15.6, 1.8], [18.2, 1.9], [20.4, 2.1], [23.2, 1.6], [24.9, .7], [25.3, -.9], [25.2, -2.6]], 1.05, .035, false, 90);
+const gPathMesh = new THREE.Mesh(gPath.geo, dirtMat); gPathMesh.receiveShadow = true; scene.add(gPathMesh);
+const gBranch = ribbonGeo([[15.6, 1.8], [15.3, 2.7], [15.1, 3.5]], .85, .034, false, 12);
+scene.add(new THREE.Mesh(gBranch.geo, dirtMat));
+for (let i = 0; i < 40; i++) { const p = gPath.pts[Math.floor(frand()*gPath.pts.length)]; bAdd([0x8a8090, 0x9a90a0, 0x7d7486][i%3], new THREE.SphereGeometry(fr(.04, .09), 6, 4), XF(p.x + fr(-.6, .6), .04, p.z + fr(-.6, .6), 1, .5, 1)); }
+const onGPath = (x, z, r = .75) => nearPath(x, z, gPath.pts, r) || nearPath(x, z, gBranch.pts, r);
+const gBusy = (x, z) => (x < 18.6 && z > -2.5 && z < .3) || (x > 17.3 && x < 25.6 && z > -6.6 && z < .6) || (x > 12.8 && x < 18.4 && z > 3.7 && z < 7.3) || (x > 19.9 && x < 25.7 && z > 2.9 && z < 7.5) || onGPath(x, z);
+
+// tall grass and wildflowers through the lawn
+for (let i = 0; i < 260; i++) { const x = fr(11.3, 26.6), z = fr(-9.6, 8.6); if (gBusy(x, z)) continue; if (frand() < .3) flower(x, z, 0, 1.1); else grassTuft(x, z, 0, 1.15); }
+// flower beds tucked along the hedges
+function bed(x, z, w, d, n){ for (let i = 0; i < n; i++) { const fx = x + fr(-w/2, w/2), fz = z + fr(-d/2, d/2); if (gBusy(fx, fz)) continue; frand() < .75 ? flower(fx, fz, 0, fr(1.2, 1.6)) : grassTuft(fx, fz, 0, 1.3); }
+  const rim = []; for (let i = 0; i < Math.round((w + d)*2.2); i++) { const t = i/Math.round((w + d)*2.2)*Math.PI*2; rim.push([new THREE.SphereGeometry(fr(.1, .16), 7, 5), XF(x + Math.cos(t)*w/2*1.05, .04, z + Math.sin(t)*d/2*1.1, 1, .55, 1)]); }
+  for (const [g, m] of rim) bAdd(0x8a8090, g, m, {ink:.02}); }
+bed(22.0, -9.45, 4.2, .6, 34); bed(26.2, 4.6, .9, 3.2, 26); bed(12.2, 8.4, 2.4, .8, 22); bed(26.3, -7.4, .8, 1.8, 14); bed(11.6, -9.0, 1.8, .9, 16);
+
+// ----- the lily pond, rebuilt: organic shoreline, layered stones, rippling water, lilies, reeds, koi and a frog -----
+const POND = {x:22.8, z:5.2};
+const pondR = a => 1.0 + .13*Math.sin(a*3 + .6) + .07*Math.sin(a*5 + 2.0);
+const pondShape = (a, k) => [POND.x + Math.cos(a)*2.25*pondR(a)*k, POND.z + Math.sin(a)*1.75*pondR(a)*k];
+{ // shore of packed earth, then the water sitting slightly sunk inside it
+  const shore = new THREE.Shape(), water = new THREE.Shape(), N = 48;
+  for (let i = 0; i <= N; i++) { const a = i/N*Math.PI*2, [sx, sz] = pondShape(a, 1.18), [wx, wz] = pondShape(a, 1.0);
+    if (i) { shore.lineTo(sx - POND.x, -(sz - POND.z)); water.lineTo(wx - POND.x, -(wz - POND.z)); } else { shore.moveTo(sx - POND.x, -(sz - POND.z)); water.moveTo(wx - POND.x, -(wz - POND.z)); } }
+  const sm = add(new THREE.ShapeGeometry(shore, 2), T(0x6e5a44), POND.x, .03, POND.z, null, false); sm.rotation.x = -Math.PI/2;
+  const deep = add(new THREE.ShapeGeometry(water, 2), T(0x223d5c, {emissive:0x16304e, emissiveIntensity:.5}), POND.x, .045, POND.z, null, false); deep.rotation.x = -Math.PI/2;
+  // the surface: a ripple texture that drifts, with a lighter edge
+  const rip = tex(256, 256, (g, w, h) => { const gr = g.createRadialGradient(w/2, h/2, w*.25, w/2, h/2, w*.5); gr.addColorStop(0, '#3a6c96'); gr.addColorStop(.85, '#4f86ad'); gr.addColorStop(1, '#8fc0dc'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(220,240,255,.28)'; g.lineWidth = 2.5; for (let i = 0; i < 14; i++) { const x = rand()*w, y = rand()*h, r = rr(6, 22); g.beginPath(); g.ellipse(x, y, r, r*.55, 0, 0, Math.PI*2); g.stroke(); } }, 1, 1);
+  const wGeo = new THREE.ShapeGeometry(water, 2), uv = wGeo.attributes.uv, pp = wGeo.attributes.position;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, pp.getX(i)/5.4 + .5, pp.getY(i)/4.4 + .5);
+  const surf = add(wGeo, T(0xffffff, {map:rip, transparent:true, opacity:.88, emissive:0x1b3252, emissiveIntensity:.35}), POND.x, .07, POND.z, null, false); surf.rotation.x = -Math.PI/2;
+  hqAnims.push((dt, t) => { rip.offset.set(Math.sin(t*.15)*.02, Math.cos(t*.12)*.02); });
+  // layered rounded stones: big ones behind, small ones in front, a few with moss
+  for (let i = 0; i < 30; i++) { const a = i/30*Math.PI*2 + fr(-.05, .05), back = Math.sin(a) < 0, k = fr(1.04, 1.16), [x, z] = pondShape(a, k), r = (back ? fr(.26, .42) : fr(.16, .27));
+    bAdd([0x8a8090, 0x7d7486, 0x958b9c, 0x6f6678][i%4], new THREE.SphereGeometry(r, 10, 7), XF(x, r*.32, z, fr(1.1, 1.5), fr(.55, .75), fr(.9, 1.2), 0, -a, 0), {ink:.03, shadow:true});
+    if (frand() < .35) bAdd(C.moss, new THREE.SphereGeometry(r*.72, 8, 5, 0, Math.PI*2, 0, Math.PI/2), XF(x, r*.48, z, 1.3, .3, 1.1)); }
+  for (let i = 0; i < 9; i++) { const a = fr(0, 6.28), [x, z] = pondShape(a, fr(1.28, 1.5)); bAdd(0x8a8090, new THREE.SphereGeometry(fr(.09, .14), 8, 5), XF(x, .05, z, 1.3, .55, 1), {ink:.02}); }
+}
+// lily pads: notched discs of several sizes, some with pink water-lilies
+lily.length = 0;
+for (const [px, pz, r, bloom] of [[21.5, 4.6, .34, true], [22.3, 4.1, .24, false], [23.9, 5.7, .38, false], [24.4, 4.8, .22, true], [22.6, 6.1, .3, false], [21.7, 5.7, .2, false], [23.4, 4.4, .18, false]]) {
+  const g = grp(px, .085, pz, fr(0, 6.28));
+  const pad = add(new THREE.CircleGeometry(r, 18, .35, Math.PI*2 - .5), T(fr(0, 1) < .5 ? 0x4f8a4a : 0x5d9a52), 0, 0, 0, g, false); pad.rotation.x = -Math.PI/2;
+  const vein = add(new THREE.RingGeometry(r*.25, r*.3, 12), T(0x6eaa5e), 0, .002, 0, g, false); vein.rotation.x = -Math.PI/2;
+  if (bloom) { const fl = grp(r*.2, 0, 0, 0, g);
+    for (let i = 0; i < 8; i++) { const a = i/8*Math.PI*2, pet = sph(.07, T(i%2 ? 0xf0c8d8 : 0xe7a2bd), Math.cos(a)*.07, .06, Math.sin(a)*.07, fl, 8, false); pet.scale.set(1.5, .55, .7); pet.rotation.y = -a; pet.rotation.z = .5; }
+    for (let i = 0; i < 5; i++) { const a = i/5*Math.PI*2 + .3, pet = sph(.05, T(0xf6e0ea), Math.cos(a)*.035, .1, Math.sin(a)*.035, fl, 8, false); pet.scale.set(1.3, .7, .7); pet.rotation.y = -a; pet.rotation.z = .9; }
+    sph(.03, T(0xf2d27a), 0, .12, 0, fl, 6, false); }
+  g.userData.ry = g.rotation.y; lily.push(g);
+}
+// reeds and cattails in clumps at the back, swaying
+const reeds = [];
+for (const [cx, cz] of [[24.9, 4.0], [20.7, 4.3], [24.5, 6.6]]) for (let i = 0; i < 7; i++) {
+  const x = cx + fr(-.35, .35), z = cz + fr(-.3, .3), h = fr(.8, 1.4), g = grp(x, 0, z); g.rotation.x = fr(-.08, .08);
+  cyl(.014, .02, h, T(i%2 ? C.moss : 0x4a7a44), 0, h/2, 0, g, 4);
+  if (i%2 === 0) { const ct = cyl(.045, .045, .22, T(0x6b4430), 0, h + .05, 0, g, 6); outline(ct, 1.15); cyl(.008, .008, .12, T(C.moss), 0, h + .22, 0, g, 3); }
+  else { const leaf = add(new THREE.ConeGeometry(.03, h*.9, 3), T(0x5b8a52), .04, h*.45, 0, g); leaf.rotation.z = -.2; }
+  reeds.push({g, ph:fr(0, 6.28), base:g.rotation.x});
+}
+hqAnims.push((dt, t) => { for (const r of reeds) { r.g.rotation.z = Math.sin(t*1.3 + r.ph)*.06; r.g.rotation.x = r.base + Math.sin(t*.9 + r.ph)*.04; } });
+// koi drifting under the surface
+const koi = [];
+for (let i = 0; i < 3; i++) { const g = grp(POND.x, .06, POND.z); const b = sph(.12, T(i === 1 ? 0xf2efe6 : 0xe07a3a), 0, 0, 0, g, 10, false); b.scale.set(1, .35, 2.2);
+  if (i !== 0) sph(.07, T(0xe07a3a), 0, .02, .08, g, 8, false).scale.set(1, .4, 1.4);
+  const tail = add(new THREE.ConeGeometry(.09, .2, 4), T(i === 1 ? 0xf2efe6 : 0xe07a3a), 0, 0, -.32, g, false); tail.rotation.x = -Math.PI/2; tail.scale.set(1, 1, .25);
+  koi.push({g, tail, r:fr(.7, 1.3), sp:fr(.25, .45)*(i%2 ? -1 : 1), ph:i*2.1}); }
+hqAnims.push((dt, t) => { for (const k of koi) { const a = k.ph + t*k.sp; k.g.position.set(POND.x + Math.cos(a)*k.r*1.25, .06, POND.z + Math.sin(a)*k.r); k.g.rotation.y = -a + (k.sp > 0 ? Math.PI : 0); k.tail.rotation.y = Math.sin(t*6 + k.ph)*.5; } });
+// a frog on the big pad who hops now and then
+const frog = grp(0, 0, 0, 0, lily[0]); frog.position.set(-.08, .02, .05);
+{ const fb = sph(.11, T(0x6a9a3e), 0, .08, 0, frog, 12); fb.scale.set(1.15, .8, 1); outline(fb, 1.08);
+  for (const sd of [-1, 1]) { const e = sph(.05, T(0x6a9a3e), .05, .17, sd*.06, frog, 8); outline(e, 1.1); sph(.025, T(C.ink), .085, .18, sd*.065, frog, 6, false); const leg = sph(.05, T(0x5a8a34), -.06, .04, sd*.1, frog, 8); leg.scale.set(1.6, .6, .8); } }
+const frogState = {t:0, next:4};
+hqAnims.push((dt) => { frogState.t += dt; const h = frogState.t - frogState.next;
+  if (h > 0 && h < .5) { frog.position.y = .02 + Math.sin(h/.5*Math.PI)*.35; frog.rotation.y += dt*6; } else { frog.position.y = .02; if (h >= .5) { frogState.next = frogState.t + fr(3, 7); } } });
+
+// ----- veggie patch and a friendly scarecrow -----
+{ const vx = 16.4, vz = -8.6;
+  for (let r = 0; r < 3; r++) { const row = box(3.2, .12, .45, T(0x5a4030), vx, .06, vz - .7 + r*.7, null, false); row.receiveShadow = true;
+    for (let i = 0; i < 6; i++) { const x = vx - 1.35 + i*.54, z = vz - .7 + r*.7;
+      if (r === 1) { bAdd(0x4f8a4a, new THREE.SphereGeometry(.17, 9, 7), XF(x, .2, z, 1, .7, 1), {ink:.02}); bAdd(0x6eaa5e, new THREE.SphereGeometry(.12, 8, 6), XF(x, .28, z, 1, .6, 1)); }
+      else for (let k = 0; k < 3; k++) bAdd(0x5b9a4a, new THREE.ConeGeometry(.03, .26, 3), XF(x + fr(-.05, .05), .24, z, 1, 1, 1, fr(-.3, .3), 0, fr(-.3, .3))); } }
+  col(vx - 1.7, vx + 1.7, vz - 1, vz + 1);
+  const sc = grp(vx + 2.3, 0, vz + .2, -.4);
+  cyl(.05, .05, 1.9, T(C.woodDk), 0, .95, 0, sc, 6); const arm = box(1.5, .07, .07, T(C.woodDk), 0, 1.45, 0, sc);
+  const shirt = box(.55, .6, .3, T(0xb5552f), 0, 1.35, 0, sc); outline(shirt, 1.05);
+  for (const sx of [-1, 1]) { const sl = box(.42, .2, .22, T(0xb5552f), sx*.45, 1.45, 0, sc); outline(sl, 1.06); for (let k = 0; k < 3; k++) cyl(.012, .012, .2, T(0xd9b45a), sx*(.7 + k*.02), 1.4 - k*.04, (k - 1)*.04, sc, 3).rotation.z = sx*1.3; }
+  for (let k = 0; k < 4; k++) box(.56, .03, .31, T(0x8a3a24), 0, 1.15 + k*.14, 0, sc, false);
+  const hd = sph(.24, T(0xd8c08a), 0, 1.92, 0, sc, 12); outline(hd, 1.06);
+  for (const sx of [-1, 1]) box(.05, .05, .02, T(C.ink), sx*.08, 1.96, .23, sc, false);
+  add(new THREE.TorusGeometry(.06, .012, 4, 8, Math.PI), T(C.ink), 0, 1.86, .23, sc, false).rotation.z = Math.PI;
+  const brim = cyl(.4, .4, .04, T(0x6b4430), 0, 2.1, 0, sc, 14); outline(brim, 1.05); cyl(.2, .24, .3, T(0x6b4430), 0, 2.26, 0, sc, 12);
+  cyl(.205, .205, .06, T(C.gold), 0, 2.16, 0, sc, 12);
+  col(vx + 2.1, vx + 2.5, vz, vz + .4);
+  // a crow keeping him company
+  const crow = grp(.6, 1.5, 0, Math.PI/2, sc); const cb = sph(.09, T(0x2a2230), 0, .06, 0, crow, 8); cb.scale.set(1, .9, 1.5); sph(.06, T(0x2a2230), 0, .14, .1, crow, 8); add(new THREE.ConeGeometry(.025, .08, 4), T(C.gold), 0, .14, .18, crow, false).rotation.x = Math.PI/2;
+  hqAnims.push((dt, t) => { crow.rotation.y = Math.PI/2 + (Math.sin(t*.7) > .5 ? .6 : 0); });
+}
+
+// ----- clothesline with washing flapping in the breeze -----
+const washing = [];
+{ const x1 = 19.6, x2 = 24.4, z = -8.9;
+  for (const x of [x1, x2]) { cyl(.06, .07, 1.9, T(C.woodLt), x, .95, z, null, 6); box(.5, .06, .06, T(C.woodLt), x, 1.85, z); col(x - .12, x + .12, z - .12, z + .12); }
+  const rope = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(x1, 1.82, z), new THREE.Vector3((x1 + x2)/2, 1.62, z), new THREE.Vector3(x2, 1.82, z)]), 20, .012, 4), T(C.cream)); scene.add(rope);
+  const cols = [0xd36a8f, 0xe9d9b8, 0x34406b, 0xd9a441, 0x2f8f8a, 0xb5552f];
+  for (let i = 0; i < 6; i++) { const t = (i + .7)/6.4, x = x1 + (x2 - x1)*t, y = 1.82 - Math.sin(t*Math.PI)*.2, w = fr(.45, .7), h = fr(.45, .75);
+    const piv = grp(x, y, z); const cl = new THREE.Mesh(new THREE.PlaneGeometry(w, h, 1, 3), T(cols[i], {side:THREE.DoubleSide})); cl.position.y = -h/2; cl.castShadow = true; piv.add(cl);
+    if (i === 2) { for (let k = 0; k < 3; k++) { const st = new THREE.Mesh(new THREE.PlaneGeometry(w, .05), T(C.cream, {side:THREE.DoubleSide})); st.position.set(0, -h*(.25 + k*.25), .002); piv.add(st); } }
+    for (const sx of [-1, 1]) box(.03, .08, .03, T(C.woodDk), sx*w*.35, .02, 0, piv, false);
+    washing.push({piv, ph:i*.9}); }
+  hqAnims.push((dt, t) => { for (const w of washing) w.piv.rotation.x = Math.sin(t*1.6 + w.ph)*.18 + .1; });
+}
+
+// ----- beehive with bees -----
+const bees = [];
+{ const hx = 26.2, hz = -4.0, hv = grp(hx, 0, hz, -.6);
+  box(.7, .5, .7, T(C.woodLt), 0, .25, 0, hv); cyl(.04, .04, .5, T(C.woodDk), 0, .25, 0, hv, 4);
+  for (let i = 0; i < 4; i++) { const r = .42 - i*.07, s = sph(r, T(i%2 ? 0xd9a441 : 0xe8b85a), 0, .62 + i*.18, 0, hv, 14); s.scale.y = .62; outline(s, 1.04); }
+  box(.16, .1, .06, T(0x2a1810), 0, .62, .4, hv, false);
+  col(hx - .45, hx + .45, hz - .45, hz + .45);
+  for (let i = 0; i < 6; i++) { const b = grp(0, 0, 0); const bd = sph(.05, T(0xe8b84a), 0, 0, 0, b, 6, false); bd.scale.set(1, .9, 1.4); box(.1, .02, .02, T(C.ink), 0, 0, 0, b, false).rotation.y = Math.PI/2;
+    for (const sd of [-1, 1]) { const w = sph(.04, T(0xffffff, {transparent:true, opacity:.7}), sd*.04, .04, 0, b, 6, false); w.scale.set(1, .3, .6); }
+    bees.push({b, ph:fr(0, 6.28), r:fr(.5, 1.4), sp:fr(1.2, 2.2), hy:fr(.6, 1.6)}); }
+  hqAnims.push((dt, t) => { for (const e of bees) { const a = e.ph + t*e.sp; e.b.position.set(hx + Math.cos(a)*e.r + Math.sin(t*7 + e.ph)*.05, e.hy + Math.sin(t*3 + e.ph)*.2, hz + Math.sin(a*1.3)*e.r*.8); e.b.rotation.y = -a; } });
+}
+
+// ----- a bench facing the pond, a birdbath, and a wheelbarrow of flowers -----
+{ const bn = grp(22.6, 0, 8.25, Math.PI);
+  for (let i = 0; i < 3; i++) { const sl = box(1.6, .06, .14, T(C.woodLt), 0, .48, -.15 + i*.15, bn); outline(sl, 1.04); }
+  for (let i = 0; i < 2; i++) { const sl = box(1.6, .14, .05, T(C.woodLt), 0, .72 + i*.2, .2, bn); outline(sl, 1.04); }
+  for (const sx of [-.7, .7]) { box(.08, .48, .08, T(C.woodDk), sx, .24, -.15, bn); box(.08, 1.0, .08, T(C.woodDk), sx, .5, .2, bn); box(.08, .06, .45, T(C.woodDk), sx, .66, 0, bn); }
+  col(21.75, 23.45, 7.9, 8.6);
+  const bb = grp(19.2, 0, 4.4);
+  cyl(.12, .18, .7, T(0x9a90a0), 0, .35, 0, bb, 10); cyl(.32, .2, .05, T(0x9a90a0), 0, .03, 0, bb, 12);
+  const bowl = add(new THREE.SphereGeometry(.42, 16, 8, 0, Math.PI*2, Math.PI/2, Math.PI/2), T(0x9a90a0, {side:THREE.DoubleSide}), 0, .9, 0, bb); bowl.scale.y = .45; outline(bowl, 1.04);
+  const bw = add(new THREE.CircleGeometry(.36, 16), T(0x4f86ad, {emissive:0x1b3252, emissiveIntensity:.4}), 0, .88, 0, bb, false); bw.rotation.x = -Math.PI/2;
+  const bird = grp(.3, .9, 0, -.4, bb); const bbody = sph(.07, T(0x6d8ac4), 0, .05, 0, bird, 8); bbody.scale.set(1, .9, 1.4); outline(bbody, 1.1); sph(.05, T(0x6d8ac4), 0, .12, .07, bird, 8); add(new THREE.ConeGeometry(.018, .05, 4), T(C.gold), 0, .12, .13, bird, false).rotation.x = Math.PI/2; sph(.045, T(0xe07a5a), 0, .07, .06, bird, 6, false);
+  hqAnims.push((dt, t) => { const dip = Math.max(0, Math.sin(t*1.7) - .7)*3; bird.rotation.x = dip*.6; bird.position.y = .9 + Math.abs(Math.sin(t*9))*.01; });
+  col(18.85, 19.55, 4.05, 4.75);
+  const wb = grp(11.9, 0, 6.6, .8);
+  const tub = box(.9, .35, .6, T(0x2f5552), 0, .5, 0, wb); outline(tub, 1.04);
+  const wheel = add(new THREE.TorusGeometry(.18, .05, 6, 14), T(C.ink), .55, .2, 0, wb); outline(wheel, 1.06);
+  for (const sz of [-.25, .25]) { box(.9, .05, .05, T(C.woodLt), -.55, .45, sz, wb).rotation.z = -.15; box(.05, .35, .05, T(C.woodDk), -.3, .17, sz, wb); }
+  for (let i = 0; i < 9; i++) { const lp = new THREE.Vector3(fr(-.35, .35), .7, fr(-.22, .22)).applyAxisAngle(new THREE.Vector3(0, 1, 0), .8); flower(11.9 + lp.x, 6.6 + lp.z, .62, 1.3); }
+  col(11.35, 12.45, 6.1, 7.1);
+}
+
+// ----- butterflies dancing over the lawn -----
+const flutters = [];
+for (let i = 0; i < 7; i++) { const g = grp(0, 0, 0), c = [0xe9d9b8, 0xd36a8f, 0xd9a441, 0x8fd0e8, 0xe07a5a][i%5], ws = [];
+  for (const sd of [-1, 1]) { const piv = grp(0, 0, 0, 0, g); const w = new THREE.Mesh(new THREE.CircleGeometry(.11, 8), T(c, {side:THREE.DoubleSide})); w.position.x = sd*.1; w.rotation.x = -Math.PI/2; w.scale.set(1, 1.3, 1); piv.add(w);
+    const w2 = new THREE.Mesh(new THREE.CircleGeometry(.07, 8), T(c, {side:THREE.DoubleSide})); w2.position.set(sd*.07, 0, -.1); w2.rotation.x = -Math.PI/2; piv.add(w2); ws.push(piv); }
+  sph(.02, T(C.ink), 0, 0, 0, g, 5, false).scale.set(1, 1, 4);
+  flutters.push({g, ws, cx:fr(13, 25), cz:fr(-8, 7), ph:fr(0, 6.28), r:fr(.8, 2), sp:fr(.4, .8)}); }
+hqAnims.push((dt, t) => { for (const f of flutters) { const a = f.ph + t*f.sp; f.g.position.set(f.cx + Math.cos(a)*f.r + Math.sin(a*2.3)*.4, .7 + Math.sin(t*1.9 + f.ph)*.35 + .3, f.cz + Math.sin(a*1.4)*f.r); f.g.rotation.y = -a; const fl = Math.sin(t*16 + f.ph)*.9; f.ws[0].rotation.z = fl; f.ws[1].rotation.z = -fl; } });
+
+bFlush(scene);
 
 // ---------- personas: who can speak, and how to build their portrait ----------
 const PERSONA = {};
@@ -2883,7 +3298,8 @@ function update(dt){
   flag.rotation.y = Math.sin(elapsed * 3) * .3;
   bunting.forEach((b, i) => b.rotation.z = Math.sin(elapsed * 2.4 + i) * .15);
   glowList.forEach((l, i) => l.material.emissiveIntensity = 1 + Math.sin(elapsed * 2 + i * 1.7) * .15);
-  lily.forEach((p, i) => p.rotation.z = Math.sin(elapsed * .5 + i) * .2);
+  lily.forEach((p, i) => p.rotation.y = p.userData.ry + Math.sin(elapsed * .5 + i) * .2);
+  hqAnims.forEach(f => f(dt, elapsed));
   for (let i=0;i<FF;i++){ const f = ffData[i];
     ffPos[i*3] = f.x + Math.sin(elapsed * .4 * f.s + f.p) * 1.2; ffPos[i*3+1] = f.y + Math.sin(elapsed * .9 * f.s + f.p * 2) * .4; ffPos[i*3+2] = f.z + Math.cos(elapsed * .35 * f.s + f.p) * 1.2; }
   ffGeo.attributes.position.needsUpdate = true;
