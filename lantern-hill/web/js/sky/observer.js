@@ -1,13 +1,12 @@
 // Where the treehouse is tonight, and which moment of tonight its telescope shows. Pip's magic can
 // whisk the treehouse anywhere in the world; home is Lantern Hill.
 //
-// Lantern Hill is a little bit magic: it sits at 42° north, at the longitude of the player's own
-// time zone, so its tonight is the player's own evening by their clock.
+// Lantern Hill sits where Eagle Mountain, Utah does, and keeps Utah's clocks.
 
 import { load, save } from '../save.js';
 import { sunAltitude } from './astro.js';
 
-export const HOME = {name:'Lantern Hill', lat:42, lon:-new Date().getTimezoneOffset()/4, home:true};
+export const HOME = {name:'Lantern Hill', lat:40.314, lon:-112.011, zone:'America/Denver', home:true};
 
 export function where(){
   const t = load('travel');
@@ -28,8 +27,10 @@ export function tonight(place, ms){
   return best;
 }
 
-// the time by the Sun at that spot, near enough to its clocks for a kid
+// the time on the clocks there; a whisked-to spot has no time zone to hand, so it keeps time by the
+// Sun, near enough to its clocks for a kid
 export function localTime(place, ms){
+  if (place.zone) return new Date(ms).toLocaleTimeString('en-US', {timeZone:place.zone, hour:'numeric', minute:'2-digit'}).toLowerCase();
   const h = ((ms/3600000 + place.lon/15) % 24 + 24) % 24, m = Math.floor(h % 1*60);
   return `${(Math.floor(h) + 11) % 12 + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
 }
