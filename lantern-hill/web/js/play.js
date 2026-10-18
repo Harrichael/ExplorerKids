@@ -187,7 +187,8 @@ function update(dt){
   tmpV.set(player.x, player.y + 1.0, player.z);
   dir.copy(tmpV).sub(camera.position); const dist = dir.length(); dir.normalize();
   ray.set(camera.position, dir); ray.far = Math.max(.1, dist - .3);
-  for (const hit of ray.intersectObjects(game.world.occMeshes, false)) if (hit.object.userData.occ) hit.object.userData.occ.target = .2;
+  // only to keep the player in view; a cutscene with them hidden (the bus taking off) frames its own subject
+  if (hero.root.visible) for (const hit of ray.intersectObjects(game.world.occMeshes, false)) if (hit.object.userData.occ) hit.object.userData.occ.target = .2;
   game.world.occluders.forEach(o => { o.cur += (o.target - o.cur) * Math.min(1, dt * 6);
     o.meshes.forEach(mm => { mm.material.opacity = o.cur * mm.userData.baseOp; mm.material.depthWrite = o.cur > .95; }); });
 }

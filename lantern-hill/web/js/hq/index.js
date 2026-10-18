@@ -10,6 +10,7 @@ import './residents.js';
 import './wider.js';
 import './garden-life.js';
 import './toy-crane.js';
+import './sky.js';
 import { bFlush } from '../core/kit.js';
 import { addUsable } from '../core/world.js';
 import { openWardrobe } from '../ui/wardrobe.js';
