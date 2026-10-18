@@ -465,6 +465,67 @@ function tex(w, h, draw, rx=1, ry=1){
 }
 let seed = 11; const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 const rr = (a, b) => a + rand() * (b - a);
+// ---------- foliage kit: puffy cel-shaded leaf clouds with ink outlines (Wind Waker style) ----------
+// own seed so adding detail never reshuffles the rest of the seeded layout
+let fseed = 7; const frand = () => (fseed = (fseed * 16807) % 2147483647) / 2147483647, fr = (a, b) => a + frand() * (b - a);
+const _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _v = new THREE.Vector3(), _sc = new THREE.Vector3();
+const XF = (x, y, z, sx=1, sy=sx, sz=sx, rx=0, ry=0, rz=0) => new THREE.Matrix4().compose(_v.set(x, y, z), _q.setFromEuler(_e.set(rx, ry, rz)), _sc.set(sx, sy, sz));
+function mergeGeos(parts){
+  let nv = 0, ni = 0;
+  for (const [g] of parts) { nv += g.attributes.position.count; ni += g.index ? g.index.count : g.attributes.position.count; }
+  const pos = new Float32Array(nv*3), nor = new Float32Array(nv*3), idx = new Uint32Array(ni), nm = new THREE.Matrix3(), v = new THREE.Vector3();
+  let vo = 0, io = 0;
+  for (const [g, m] of parts) {
+    nm.getNormalMatrix(m); const p = g.attributes.position, n = g.attributes.normal;
+    for (let i = 0; i < p.count; i++) {
+      v.fromBufferAttribute(p, i).applyMatrix4(m); pos[(vo+i)*3] = v.x; pos[(vo+i)*3+1] = v.y; pos[(vo+i)*3+2] = v.z;
+      v.fromBufferAttribute(n, i).applyMatrix3(nm).normalize(); nor[(vo+i)*3] = v.x; nor[(vo+i)*3+1] = v.y; nor[(vo+i)*3+2] = v.z;
+    }
+    if (g.index) for (let i = 0; i < g.index.count; i++) idx[io++] = g.index.getX(i) + vo; else for (let i = 0; i < p.count; i++) idx[io++] = i + vo;
+    vo += p.count; g.dispose();
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3)); out.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); out.setIndex(new THREE.BufferAttribute(idx, 1));
+  return out;
+}
+// ink outline as a shell pushed out along the normals (works on merged clusters, unlike a scaled copy)
+function inkShell(geo, t, parent, mat){
+  const g = geo.clone(), p = g.attributes.position, n = g.attributes.normal;
+  for (let i = 0; i < p.count; i++) p.setXYZ(i, p.getX(i) + n.getX(i)*t, p.getY(i) + n.getY(i)*t, p.getZ(i) + n.getZ(i)*t);
+  const m = new THREE.Mesh(g, mat || outlineMat); parent.add(m); return m;
+}
+function meshOf(geo, color, parent, ink, inkMat){
+  const m = new THREE.Mesh(geo, color.isMaterial ? color : T(color)); m.castShadow = true; m.receiveShadow = true; parent.add(m);
+  if (ink) inkShell(geo, ink, parent, inkMat); return m;
+}
+const LEAF = {dk:0x2f5537, md:0x3f6d45, lt:0x5b8c50, tip:0x76a35c};
+// puffs: [x, y, z, r, tone]; tone 0 = shade, 1 = body, 2 = sunlit top
+function leafCloud(parent, puffs, ink=.045, inkMat){
+  const by = [[], [], []];
+  for (const [x, y, z, r, tone] of puffs) {
+    by[tone].push([new THREE.SphereGeometry(r, 16, 12), XF(x, y, z, 1, fr(.82, .95), 1, 0, fr(0, 6), 0)]);
+    // little leaf tufts poking out of each puff give the silhouette its scalloped edge
+    const nt = r > .5 ? 3 : 2;
+    for (let k = 0; k < nt; k++) { const a = fr(0, Math.PI*2), el = fr(-.2, .9), tr = r * fr(.32, .42);
+      by[tone].push([new THREE.SphereGeometry(tr, 10, 8), XF(x + Math.cos(a)*Math.cos(el)*r*.92, y + Math.sin(el)*r*.85, z + Math.sin(a)*Math.cos(el)*r*.92)]); }
+  }
+  const cols = [LEAF.dk, LEAF.md, LEAF.lt], all = [];
+  by.forEach((parts, i) => { if (parts.length) { const g = mergeGeos(parts); all.push(meshOf(g, cols[i], parent, ink, inkMat)); } });
+  return all;
+}
+function barkGeo(pts, r0, r1){
+  // a gently curving trunk from a list of points, tapering r0 -> r1
+  const parts = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = new THREE.Vector3(...pts[i]), b = new THREE.Vector3(...pts[i+1]), d = b.clone().sub(a), L = d.length();
+    const ra = r0 + (r1 - r0) * i/(pts.length-1), rb = r0 + (r1 - r0) * (i+1)/(pts.length-1);
+    const g = new THREE.CylinderGeometry(rb, ra, L * 1.06, 12, 1, true);
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().normalize());
+    parts.push([g, new THREE.Matrix4().compose(a.clone().add(b).multiplyScalar(.5), q, new THREE.Vector3(1, 1, 1))]);
+    parts.push([new THREE.SphereGeometry(rb, 12, 8), new THREE.Matrix4().makeTranslation(b.x, b.y, b.z)]);
+  }
+  return parts;
+}
 function rrect(g, x, y, w, h, r){ g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r); g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); }
 
 const C = {
@@ -845,8 +906,46 @@ function hedge(x1, z1, x2, z2){
 }
 hedge(10.8, -10.2, 27.2, -10.2); hedge(27.2, -10.2, 27.2, 9.2); hedge(10.8, 9.2, 27.2, 9.2);
 hedge(10.8, 7.6, 10.8, 9.2); hedge(10.8, -10.2, 10.8, -7.6);
-function pine(x, z, s){ const g = grp(x,0,z); cyl(.15*s,.22*s,1*s,T(C.woodDk),0,.5*s,0,g,6); for (let i=0;i<3;i++) add(new THREE.ConeGeometry((1.3-i*.3)*s,1.5*s,8), T(i%2?0x2c4a34:0x263f2e), 0,(1.3+i*.8)*s,0,g); return g; }
-function roundTree(x, z, s){ const g = grp(x,0,z); cyl(.18*s,.26*s,1.8*s,T(C.woodDk),0,.9*s,0,g,6); add(new THREE.IcosahedronGeometry(1.2*s,1), T(0x34573a), 0,2.4*s,0,g); add(new THREE.IcosahedronGeometry(.8*s,1), T(0x3e6b45), .5*s,2.9*s,.3*s,g); return g; }
+// a pine bough: cone whose skirt is scalloped and droops between the points
+function boughGeo(r, h){
+  const g = new THREE.ConeGeometry(r, h, 28, 4, true), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), t = (h/2 - y)/h, ang = Math.atan2(z, x), w = Math.sin(ang*7);
+    const k = 1 + .14*w*t*t + .08*t;
+    p.setXYZ(i, x*k, y - h*.1*t*t*(1 - w)*.5 - h*.06*t*t, z*k);
+  }
+  g.computeVertexNormals(); return g;
+}
+function pine(x, z, s){
+  const g = grp(x,0,z), lean = fr(-.06, .06), tiers = 4, parts = [[], []];
+  const trunk = mergeGeos([[new THREE.CylinderGeometry(.12*s, .24*s, 1.3*s, 10), XF(0, .65*s, 0)], [new THREE.ConeGeometry(.34*s, .3*s, 10), XF(0, .12*s, 0)]]);
+  meshOf(trunk, C.woodDk, g, .03);
+  for (let i = 0; i < tiers; i++) {
+    const t = i/(tiers-1), r = (1.25 - t*.75)*s, h = (1.25 - t*.25)*s, y = (1.15 + i*.72)*s;
+    // each tier is a cone with a soft rounded skirt so it reads as a fluffy bough, not a party hat
+    parts[i%2].push([boughGeo(r, h), XF(lean*i*s, y + h*.35, 0, 1, 1, 1, 0, fr(0, 6), lean)]);
+  }
+  parts[0].push([new THREE.SphereGeometry(.14*s, 10, 8), XF(lean*tiers*s, (1.15 + tiers*.72)*s + .3*s, 0)]);
+  meshOf(mergeGeos(parts[0]), 0x2a4a33, g, .04); meshOf(mergeGeos(parts[1]), 0x35593c, g, .04);
+  return g;
+}
+function roundTree(x, z, s){
+  const g = grp(x,0,z), bx = fr(-.25, .25)*s, bz = fr(-.2, .2)*s, top = 2.15*s;
+  // curving trunk with a flared root base and two branches reaching into the leaves
+  const tp = [[0, 0, 0], [bx*.3, .7*s, bz*.2], [bx*.8, 1.4*s, bz*.6], [bx, top, bz]];
+  const bp = barkGeo(tp, .27*s, .15*s);
+  bp.push([new THREE.ConeGeometry(.5*s, .45*s, 12, 1, true), XF(0, .2*s, 0)]);
+  for (let i = 0; i < 4; i++) { const a = i*1.57 + fr(-.3, .3); bp.push([new THREE.SphereGeometry(.13*s, 8, 6), XF(Math.cos(a)*.32*s, .06*s, Math.sin(a)*.32*s, 1.6, .55, 1, 0, -a, 0)]); }
+  for (const sd of [-1, 1]) bp.push(...barkGeo([[bx*.8, 1.5*s, bz*.6], [bx*.8 + sd*.55*s, 2.05*s, bz*.6 + fr(-.3, .3)*s]], .1*s, .06*s));
+  meshOf(mergeGeos(bp), C.woodDk, g, .03);
+  const cx = bx, cy = top + .55*s, cz = bz, puffs = [[cx, cy, cz, .95*s, 1]];
+  const n = 6, ph = fr(0, 6);
+  for (let i = 0; i < n; i++) { const a = ph + i/n*Math.PI*2; puffs.push([cx + Math.cos(a)*.85*s, cy - .25*s + fr(-.1, .12)*s, cz + Math.sin(a)*.8*s, fr(.55, .68)*s, Math.sin(a) < -.2 ? 0 : 1]); }
+  for (let i = 0; i < 3; i++) { const a = ph + i*2.1 + .5; puffs.push([cx + Math.cos(a)*.45*s, cy + .55*s, cz + Math.sin(a)*.4*s, fr(.45, .55)*s, 2]); }
+  puffs.push([cx + .1*s, cy + .9*s, cz + .05*s, .4*s, 2]);
+  leafCloud(g, puffs, .045*s);
+  return g;
+}
 for (let i=0;i<34;i++){
   let x, z; const t = rand();
   if (t < .3) { x = rr(28.5, 34); z = rr(-13, 12); }
@@ -896,7 +995,7 @@ col(11.6, 12.0, -3.2, -2.6);
 // ---------- Treehouse ----------
 const TX = 22, TZ = -3.6, PLAT = 3;
 const bark = T(0x6b4a35), barkDk = T(0x523626);
-cyl(.8, 1.15, 9, bark, TX, 4.5, TZ, null, 10);
+cyl(.8, 1.15, 9, bark, TX, 4.5, TZ, null, 20);
 for (let i=0;i<5;i++){ const a = i*1.26+.3; const rt = cyl(.12,.38,1.4,barkDk,TX+Math.cos(a)*1.0,.35,TZ+Math.sin(a)*1.0,null,6); rt.rotation.z = Math.cos(a)*.9; rt.rotation.x = -Math.sin(a)*.9; }
 col(TX-.95, TX+.95, TZ-.95, TZ+.95);
 const deckTex = tex(256,256,(g,w,h)=>{ for (let i=0;i<8;i++){ g.fillStyle = i%2 ? '#8a5a3a' : '#7a4e32'; g.fillRect(i*32,0,32,h); g.fillStyle='rgba(30,15,8,.5)'; g.fillRect(i*32,0,3,h); } }, 2, 1.7);
@@ -938,7 +1037,8 @@ const bunting = [];
 for (let i=0;i<9;i++){ const t = i/8; const x = 18.2 + t*6.6, y = PLAT+1.0 - Math.sin(t*Math.PI)*.25; const tri = add(new THREE.ConeGeometry(.1,.2,3), T([C.rust,C.gold,C.plum,0x2f8f8a][i%4]), x, y - .1, 0, null, false); tri.rotation.x = Math.PI; bunting.push(tri); }
 const canopy = grp(TX, 0, TZ);
 for (const [cx,cy,cz,r,c] of [[0,8.6,0,3.0,0x2f5a3a],[2.3,7.9,1.2,2.2,0x3a6b45],[-2.4,8.1,-.8,2.3,0x3a6b45],[.8,10.1,-1.2,2.1,0x2f5a3a],[-1.2,7.7,2.2,2.0,0x447a4c],[1.6,7.6,-2.2,2.0,0x447a4c]]) {
-  const cn = add(new THREE.IcosahedronGeometry(r,1), T(c), cx, cy, cz, canopy); cn.rotation.set(rand()*3, rand()*3, 0);
+  rand(); rand();
+  leafCloud(canopy, [[cx, cy, cz, r*.92, c === 0x2f5a3a ? 1 : c === 0x447a4c ? 2 : 1], [cx, cy - r*.35, cz, r*.7, 0]], .07, outlineMat.clone());
 }
 for (const a of [.6, 2.4, 4.2]) { const b = cyl(.15,.3,2.6,bark,Math.cos(a)*1.2,7,Math.sin(a)*1.2,canopy,6); b.rotation.z = -Math.cos(a)*.6; b.rotation.x = Math.sin(a)*.6; }
 occluder(canopy);
@@ -1034,22 +1134,24 @@ function human(o){
     if (o.puffSleeve) P(SG(.12,10,8), sl, 0, -.04, 0, A, false).scale.set(1,.8,1);
     if (o.shortSleeve) P(CG(.065,.06,.3,8), o.skin, 0, -.39, 0, A);
     if (o.cuff) { const c = P(new THREE.TorusGeometry(.072,.022,6,12), o.cuff, 0, -.52, 0, A, false); c.rotation.x = Math.PI/2; }
-    P(SG(.08,10,8), o.skin, 0, -.6, .01, A);
-    P(SG(.035,6,5), o.skin, -sx*.06, -.58, .05, A, false);
+    P(SG(.092,12,10), o.skin, 0, -.61, .01, A).scale.set(.95, 1, .85);
+    P(SG(.038,8,6), o.skin, -sx*.07, -.58, .05, A, false);
     arms.push(A);
   }
-  const head = new THREE.Group(); head.position.set(0, 1.79, 0); body.add(head);
+  const head = new THREE.Group(); head.position.set(0, 1.83, 0); head.scale.setScalar(o.headScale || 1.16); body.add(head);
   P(SG(.3,22,16), o.skin, 0, 0, 0, head).scale.set(girl ? .97 : boy ? 1.02 : 1, girl ? .99 : .97, .96);
   if (boy) P(SG(.2,14,10), o.skin, 0, -.13, .06, head, false).scale.set(1.15,.7,1);
   for (const sx of [-1, 1]) P(SG(.07,8,6), o.skin, sx*.29, -.02, 0, head, false).scale.set(.55,1,.8);
-  P(SG(.048,8,6), o.skin, 0, -.05, .29, head, false).scale.set(1,.85,.9);
+  P(SG(.036,8,6), o.skin, 0, -.055, .292, head, false).scale.set(1,.8,.9);
   const eyes = new THREE.Group(); eyes.position.y = .03; head.add(eyes);
   for (const sx of [-1, 1]) {
-    P(SG(.068,12,8), 0xfffaf0, sx*.11, 0, .245, eyes, false).scale.set(.9, 1.15, .5);
-    P(SG(.043,10,8), o.eye || 0x2a1e1a, sx*.11, -.008, .278, eyes, false);
-    P(SG(.014,6,4), 0xffffff, sx*.11 + .016, .016, .312, eyes, false);
-    if (o.lashes) for (let j=0;j<2;j++) P(new THREE.BoxGeometry(.05,.015,.012), 0x1a1320, sx*(.158 + j*.018), .052 - j*.024, .262, eyes, false).rotation.z = sx*(.45 + j*.45);
-    P(new THREE.BoxGeometry(.11,.024,.02), o.brow || o.hair, sx*.11, .125, .27, head, false).rotation.z = -sx*(o.browTilt || .12);
+    // big Wind Waker eyes: tall whites, large pupils, a bright catchlight
+    P(SG(.082,14,10), 0xfffaf0, sx*.118, 0, .236, eyes, false).scale.set(.84, 1.3, .48);
+    P(SG(.052,12,10), o.eye || 0x2a1e1a, sx*.116, -.012, .27, eyes, false).scale.set(.86, 1.18, .62);
+    P(SG(.022,8,6), 0xffffff, sx*.116 + .02, .028, .3, eyes, false);
+    P(SG(.009,6,4), 0xffffff, sx*.116 - .016, -.04, .298, eyes, false);
+    if (o.lashes) for (let j=0;j<2;j++) P(new THREE.BoxGeometry(.05,.015,.012), 0x1a1320, sx*(.172 + j*.018), .07 - j*.026, .258, eyes, false).rotation.z = sx*(.45 + j*.45);
+    P(new THREE.BoxGeometry(.11,.026,.02), o.brow || o.hair, sx*.118, .15, .262, head, false).rotation.z = -sx*(o.browTilt || .12);
   }
   for (const sx of [-1, 1]) P(SG(.045,8,6), 0xe89a8f, sx*.185, -.07, .235, head, false).scale.set(1,.7,.4);
   if (o.freckles) for (const sx of [-1,1]) for (let i=0;i<3;i++) P(SG(.008,4,3), 0x3a1e12, sx*(.13 + i*.03), -.03 - (i%2)*.02, .275, head, false);
@@ -2198,7 +2300,10 @@ function wrapText(c, text, x, y, maxW, lh){
   for (const wd of words) { const t = line ? line + ' ' + wd : wd; if (c.measureText(t).width > maxW && line) { lines.push(line); line = wd; } else line = t; }
   lines.push(line); const y0 = y - (lines.length - 1)*lh/2; lines.forEach((l, i) => c.fillText(l, x, y0 + i*lh));
 }
-function miniTree(x, y, z, s, parent){ const g = grp(x, y, z, 0, parent); cyl(.06*s, .09*s, .5*s, T(C.woodDk), 0, .25*s, 0, g, 6); add(new THREE.IcosahedronGeometry(.32*s, 1), T(0x3e6b45), 0, .7*s, 0, g); return g; }
+function miniTree(x, y, z, s, parent){ const g = grp(x, y, z, 0, parent);
+  meshOf(mergeGeos([[new THREE.CylinderGeometry(.05*s, .09*s, .5*s, 8), XF(0, .25*s, 0)]]), C.woodDk, g, .02*s);
+  leafCloud(g, [[0, .68*s, 0, .26*s, 1], [.17*s, .6*s, .08*s, .17*s, 0], [-.16*s, .62*s, -.06*s, .18*s, 1], [.02*s, .86*s, .02*s, .16*s, 2]], .025*s);
+  return g; }
 
 // ---------- Chapter 1: A Slice of the Earth ----------
 function buildSlice(){
