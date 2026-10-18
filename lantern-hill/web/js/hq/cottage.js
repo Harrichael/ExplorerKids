@@ -247,24 +247,33 @@ col(-1.1, .2, 5.79, 6.51, -5, .8);
 box(.3, 3.2, 4.6, wallMat, 4.5, 1.6, -4.7); box(.4, .14, 4.8, trimMat, 4.5, 3.22, -4.7);
 occluder(bookshelf(4.98, -4.6, Math.PI/2, 3.2, 4, true));
 col(4.3, 5.45, -7, -2.4);
-const bench = grp(7.8, 0, -6.45);
-box(3.8,.1,1.05,T(C.woodLt),0,.95,0,bench); box(3.6,.88,.9,T(C.woodDk),0,.44,0,bench);
-for (const dx of [-1.2, 0, 1.2]) box(.9,.6,.02,T(C.wood),dx,.5,.46,bench,false);
+// Dr. Sparks' bench: her glowing jars on the left, a clear work mat on the right for experiments (lab/)
+const BX = 7.8, BZ = -6.3;
+const bench = grp(BX, 0, BZ);
+box(3.8,.1,1.35,T(C.woodLt),0,.95,0,bench); box(3.6,.88,1.2,T(C.woodDk),0,.44,0,bench);
+for (const dx of [-1.2, 0, 1.2]) box(.9,.6,.02,T(C.wood),dx,.5,.61,bench,false);
 const bubbles = [];
-[[-1.4,0x6fd6c4],[-1.1,0xe7b84c],[-.8,0xd36a8f],[.9,0x9ccf6b],[1.25,0x6fd6c4]].forEach(([bx,c],i)=>{
-  const h = rr(.25,.42), bz = (i%2)*.2-.1;
+[[-1.75,0x6fd6c4],[-1.5,0xe7b84c],[-1.25,0xd36a8f],[-.3,0x9ccf6b],[-.05,0x6fd6c4]].forEach(([bx,c],i)=>{
+  const h = rr(.25,.42), bz = (i%2)*.2-.3;
   add(new THREE.CylinderGeometry(.1,.12,h,12), T(0xdff1f5,{transparent:true, opacity:.35}), bx, 1.0+h/2, bz, bench, false);
   cyl(.085,.105,h*.6, glowM(c,.7), bx, 1.0+h*.3, bz, bench, 10, false);
-  bubbles.push({x:7.8+bx, z:-6.45+bz, y0:1.0+h, t:rand()*2, m:sph(.035,new THREE.MeshToonMaterial({color:0xffffff, gradientMap:grad, transparent:true, opacity:.8}),0,0,0,null,6,false)});
+  bubbles.push({x:BX+bx, z:BZ+bz, y0:1.0+h, t:rand()*2, m:sph(.035,new THREE.MeshToonMaterial({color:0xffffff, gradientMap:grad, transparent:true, opacity:.8}),0,0,0,null,6,false)});
 });
-const alem = grp(-.1, 1.0, 0, 0, bench);
+const alem = grp(-.85, 1.0, -.2, 0, bench);
 cyl(.12,.15,.25,T(C.stone),0,.12,0,alem,10); add(new THREE.ConeGeometry(.06,.18,8), glowM(0x6fb7ff,1.4), 0,.32,0, alem, false);
 sph(.2, T(0xdff1f5,{transparent:true, opacity:.35}), 0,.58,0, alem, 14, false);
 sph(.16, glowM(0xd36a8f,.6), 0,.54,0, alem, 12, false);
 const neck = cyl(.035,.035,.6,T(0xdff1f5,{transparent:true,opacity:.5}),.22,.95,0,alem,8,false); neck.rotation.z = -.9;
-const nb = box(.45,.04,.32,T(C.cream),.55,1.02,.15,bench,false); nb.rotation.y = .3;
-const mag = grp(.55,1.06,-.2,0,bench); add(new THREE.TorusGeometry(.09,.015,6,16),T(C.gold),0,0,0,mag).rotation.x = Math.PI/2; box(.03,.03,.2,T(C.woodDk),0,0,.17,mag);
-col(5.8, 9.8, -7, -5.9);
+const nb = box(.45,.04,.32,T(C.cream),-.6,1.02,.32,bench,false); nb.rotation.y = .3;
+const mag = grp(-1.1,1.06,.3,0,bench); add(new THREE.TorusGeometry(.09,.015,6,16),T(C.gold),0,0,0,mag).rotation.x = Math.PI/2; box(.03,.03,.2,T(C.woodDk),0,0,.17,mag);
+const matTex = tex(512,340,(g,w,h)=>{ g.fillStyle='#2f5552'; g.fillRect(0,0,w,h); g.strokeStyle='rgba(239,224,191,.13)'; g.lineWidth=2;
+  for (let x=0;x<=w;x+=32){ g.beginPath(); g.moveTo(x,0); g.lineTo(x,h); g.stroke(); } for (let y=0;y<=h;y+=32){ g.beginPath(); g.moveTo(0,y); g.lineTo(w,y); g.stroke(); }
+  g.strokeStyle='rgba(217,164,65,.7)'; g.lineWidth=6; g.strokeRect(8,8,w-16,h-16); });
+box(1.68,.006,1.12,T(0xffffff,{map:matTex}),1.02,1.003,0,bench,false);
+// where experiments happen: the middle of the mat's top
+export const LAB_DESK = {x:BX + 1.02, y:1.006, z:BZ};
+const deskLamp = new THREE.PointLight(0xffe7c4, .55, 3.6, 2); deskLamp.position.set(LAB_DESK.x, 2.25, LAB_DESK.z + .45); scene.add(deskLamp);
+col(5.8, 9.8, -7, -5.6);
 const chartTex = tex(512,384,(g,w,h)=>{ g.fillStyle='#1f2747'; g.fillRect(0,0,w,h); g.strokeStyle='rgba(217,164,65,.6)'; g.lineWidth=2; g.beginPath(); g.arc(w/2,h/2,170,0,7); g.stroke(); g.beginPath(); g.arc(w/2,h/2,110,0,7); g.stroke();
   for (let i=0;i<90;i++){ g.fillStyle='rgba(255,240,200,'+rr(.4,1)+')'; g.beginPath(); g.arc(rand()*w, rand()*h, rr(1,3), 0, 7); g.fill(); }
   const pts = [[150,120],[200,150],[250,140],[300,180],[330,240]]; g.strokeStyle='rgba(255,255,255,.75)'; g.lineWidth=2; g.beginPath(); pts.forEach((p,i)=> i ? g.lineTo(p[0],p[1]) : g.moveTo(p[0],p[1])); g.stroke();
