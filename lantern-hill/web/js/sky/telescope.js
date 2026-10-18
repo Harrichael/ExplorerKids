@@ -1,7 +1,7 @@
-// The treehouse telescope: tonight's real sky over wherever the treehouse is, from what your eyes
-// see, down into Hubble's and Webb's pictures, and out across light no eye can see; and the Moon and
-// planets, each where it really is tonight and, up close, a real world to fly round. No tour and no
-// goals; the kid turns, zooms and taps whatever catches their eye.
+// Pip's telescope, on the treehouse deck: tonight's real sky over wherever the treehouse is, from
+// what your eyes see, down into Hubble's and Webb's pictures, and out across light no eye can see;
+// and the Moon and planets, each where it really is tonight and, up close, a real world to fly
+// round. No tour and no goals; the kid turns, zooms and taps whatever catches their eye.
 //
 // It steers like a telescope on a tripod: turning round and tipping up and down, the horizon level
 // and the ground below it, and it tracks, so whatever it points at stays put as the Earth turns.
@@ -122,9 +122,9 @@ css.textContent = `
 #scope .cloudy b{font-family:var(--display);font-weight:400;font-size:26px}`;
 document.head.appendChild(css);
 
-const el = document.createElement('div'); el.id = 'scope'; el.hidden = true; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Treehouse telescope');
+const el = document.createElement('div'); el.id = 'scope'; el.hidden = true; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Pip’s telescope');
 el.innerHTML = `<div id="scopeSky"></div><canvas id="scopeNames"></canvas><div class="rim"></div><div id="scopeGlass"></div>
-  <header><div><div class="sub" id="sWhere">The Treehouse Telescope</div><h2 id="sLens"></h2><p class="tip" id="sTip"></p><p class="note" id="sNote" hidden></p></div>
+  <header><div><div class="sub" id="sWhere">Pip’s Telescope</div><h2 id="sLens"></h2><p class="tip" id="sTip"></p><p class="note" id="sNote" hidden></p></div>
     <div class="tools"><button class="sb" id="sFind" hidden>Find in sky</button><button class="sb ghost" id="sNames" aria-pressed="true">Names</button><button class="sb ghost" id="sClose">Close</button></div></header>
   <div class="zoom"><button class="sb" id="sIn" aria-label="Zoom in">+</button><div class="like" id="sLike"></div><button class="sb" id="sOut" aria-label="Zoom out">−</button></div>
   <div class="info" id="sCard" hidden></div>
