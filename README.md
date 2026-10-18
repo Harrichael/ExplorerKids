@@ -4,7 +4,7 @@ A cozy, storybook science adventure for kids, built as a single-page three.js ga
 
 ## What's here
 
-- **`lantern-hill/`** — *Lantern Hill HQ*, the game: a three.js frontend in `web/`, served by a small Erlang/Cowboy app in `server/`. Explore the cottage, garden and treehouse, dress up your explorer, chat with Professor Hoot, Ms. Pembrook, Dr. Vega Sparks, Pip, Juniper and Biscuit, practice phonics flashcards, spin the Explorer's Globe to visit the world's biomes and their food webs, and take the Wonder Bus on a plate-tectonics field trip.
+- **`lantern-hill/`** — *Lantern Hill HQ*, the game: a three.js frontend in `web/`, served by a small Erlang/Cowboy app in `server/`. Explore the cottage, garden and treehouse, dress up your explorer, chat with Professor Hoot, Ms. Pembrook, Dr. Vega Sparks, Pip, Juniper and Biscuit, practice phonics flashcards, spin the Explorer's Globe to solve Professor Hoot's biome riddles and guess who eats whom in pop-up food web dioramas, and take the Wonder Bus on a plate-tectonics field trip.
 - **`marble-lab/`** — a throwaway Node tool for designing *Marble Run Rescue* levels (a physics mini-game planned for the toy blocks in the hearth room). It uses Matter.js to simulate levels, searches for solutions, groups them into distinct "route families", and can evolve level layouts with simulated annealing. `out/marble-lab.html` replays the found solutions.
 
 ### Lantern Hill quick start
@@ -46,7 +46,7 @@ The frontend is plain ES modules with no build step; three.js and Matter.js come
 - `ui/`: dialogue, wardrobe, page turns
 - `state.js` holds the few pieces of frame state several modules write; `save.js` owns localStorage
 - `earth/` is the world model: `model.js` answers what is at any latitude and longitude (sea or land, ecoregion, biome, and which food web to show), from `data/earth.json` and the hand-written biomes and food webs in `biomes.js`
-- `learn/` (phonogram flashcards), `library/` (the story-corner book reader), `globe/` (the Explorer's Globe), `tower/` (Block Tower, with Matter.js) and `trips/` (the Wonder Bus field trip) load only when used; each takes over the screen through `game.activity` or a cutscene. Phonogram audio in `web/audio/` is fetched clip by clip, book pages from `web/books/` page by page
+- `learn/` (phonogram flashcards), `library/` (the story-corner book reader), `globe/` (the Explorer's Globe, played on the real globe in the Library Nook), `tower/` (Block Tower, with Matter.js) and `trips/` (the Wonder Bus field trip) load only when used; each takes over the screen through `game.activity` or a cutscene. Phonogram audio in `web/audio/` is fetched clip by clip, book pages from `web/books/` page by page
 
 ### The world model's data
 

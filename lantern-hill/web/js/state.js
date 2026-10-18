@@ -9,5 +9,5 @@ export const game = {
   camShake: 0,
   nearest: null,    // the NPC in talking range, if any
   reach: [],        // usables in range, each at the index of its key in USE_KEYS (input.js)
-  activity: null    // 'flashcards', 'globe', 'telescope', 'travel' or a page turn's 'storybook' while one fills the screen; the world pauses behind it
+  activity: null    // 'flashcards', 'telescope', 'travel' or a page turn's 'storybook' while one fills the screen; the world pauses behind it
 };

@@ -10,7 +10,7 @@
 
 import { ease } from '../core/kit.js';
 import { Sound } from '../core/sound.js';
-import { hero, player } from '../player.js';
+import { blocked, hero, player } from '../player.js';
 import { game } from '../state.js';
 import { hqAnims } from './scene.js';
 
@@ -24,7 +24,17 @@ export function sitDown(spot){
 }
 export function standUp(){
   if (!s || s.phase === 'rise') return;
-  s.phase = 'rise';
+  s.phase = 'rise'; s.from = {x:player.x, z:player.z}; s.to = clear(player.x, player.z);
+}
+// A spot snug against a seat leaves the explorer overlapping the seat's collider, and from inside a
+// collider every step is blocked. They step to the nearest free spot as they rise.
+function clear(x, z){
+  if (!blocked(x, z, player.y)) return null;
+  for (let r = .05; r <= 1.5; r += .05) for (let k = 0; k < 24; k++) {
+    const a = k/24*Math.PI*2, cx = x + Math.sin(a)*r, cz = z + Math.cos(a)*r;
+    if (!blocked(cx, cz, player.y)) return {x:cx, z:cz};
+  }
+  return null;
 }
 
 function rest(){
@@ -44,7 +54,9 @@ hqAnims.push(dt => {
     if (turnTo(s.angle, dt*9) < .05) s.phase = 'sit';
     rest();
   } else if (s.phase === 'rise') {
-    s.p = Math.max(0, s.p - dt/.5); rest(); s.pose(ease(s.p)); hero.body.position.y += Math.sin(s.p*Math.PI)*.1;
+    s.p = Math.max(0, s.p - dt/.5);
+    if (s.to) { const k = ease(1 - s.p); player.x = s.from.x + (s.to.x - s.from.x)*k; player.z = s.from.z + (s.to.z - s.from.z)*k; }
+    rest(); s.pose(ease(s.p)); hero.body.position.y += Math.sin(s.p*Math.PI)*.1;
     if (s.p <= 0) { rest(); s = null; game.cutscene = false; }
   } else {
     s.p = Math.min(1, s.p + dt/.5); rest(); s.pose(ease(s.p));

@@ -10,7 +10,9 @@
 import * as THREE from 'three';
 import { C, T, outline, rrect, shade, tex } from '../core/kit.js';
 
-const H = 3, MARGIN = .17, BOARD = .12, STACK = .5, SEG = 32, LIFT = .004, RULE = .012;
+const H = 3, MARGIN = .17, BOARD = .12, STACK = .5, SEG = 32, ROWS = 10, LIFT = .004, RULE = .012;
+// where the light comes from, over the reader's left shoulder, for shading a curled page and casting its shadow
+const LX = -.45, LZ = .3;
 
 // a seeded random of its own, so the desk grain is the same on every page load (the cross-reload
 // page turn repaints a saved frame of this desk) and so building a book never shifts kit's world seed
@@ -56,6 +58,14 @@ function shadowTex(){
   const t = tex(256, 256, (g, w, h) => { g.shadowColor = 'rgba(0,0,0,1)'; g.shadowBlur = 26; g.shadowOffsetX = w; g.fillStyle = '#000'; rrect(g, -w + 30, 30, w - 60, h - 60, 18); g.fill(); });
   t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; return t;
 }
+// a satin ribbon running along v, its tail cut into a swallowtail notch
+function ribbonTex(){
+  return tex(32, 256, (g, w, h) => {
+    const gr = g.createLinearGradient(0, 0, w, 0); gr.addColorStop(0, '#7d1f2c'); gr.addColorStop(.45, '#c2414d'); gr.addColorStop(.6, '#d65a63'); gr.addColorStop(1, '#8a2431');
+    g.fillStyle = gr; g.beginPath(); g.moveTo(0, 0); g.lineTo(w, 0); g.lineTo(w, h); g.lineTo(w/2, h - 26); g.lineTo(0, h); g.closePath(); g.fill();
+    g.fillStyle = 'rgba(255,255,255,.12)'; for (let y = 0; y < h; y += 3) g.fillRect(0, y, w, 1);
+  });
+}
 // a flat w x h quad lying on the desk, its image upright when seen from above; mirror flips it left to right
 function flatGeo(w, h, x, mirror){
   const g = new THREE.PlaneGeometry(w, h); g.rotateX(-Math.PI/2); g.translate(x, 0, 0);
@@ -91,11 +101,14 @@ const print = (m, t) => { m.visible = !!t; if (t && m.material.map !== t) { m.ma
 
 // desk: whether the book throws a soft shadow onto a surface beneath it
 export function makeBook({desk = true} = {}){
-  const paper = paperTex(), edges = edgeTex(), fade = fadeTex(), shadowT = shadowTex();
+  const paper = paperTex(), edges = edgeTex(), fade = fadeTex(), shadowT = shadowTex(), ribbonT = ribbonTex();
   const group = new THREE.Group();
-  let W = H, stackL = .5, stackR = .5, dim = 0, turnP = 0, meshes = null;
+  let W = H, stackL = .5, stackR = .5, dim = 0, meshes = null;
   // where the front and back covers lie, as in curl(): 0 on the right, 1 on the left; and what is printed on them
   const boardP = [1, 0], coverMaps = [[null, null], [null, null]];
+  // the turning leaf's give, in radians at its free edge: how far the edge trails the turn (bend, sprung,
+  // so a leaf that stops turning flutters flat) and how far the corner nearest the reader leads it (twist)
+  const leaf = {p:0, bend:0, bendV:0, twist:0};
 
   function build(){
     while (group.children.length) { const o = group.children.pop(); o.traverse(m => { if (m.geometry) m.geometry.dispose(); }); }
@@ -126,15 +139,23 @@ export function makeBook({desk = true} = {}){
     const block = sd => { const sideM = T(0xffffff, {map:edges}), m = new THREE.Mesh(new THREE.BoxGeometry(W - .02, 1, H), [sideM, sideM, T(0xf3e7cf), sideM, sideM, sideM]); m.position.x = sd*(W/2 + .01); group.add(m); return m; };
     const page = (sd, map) => { const m = new THREE.Mesh(flatGeo(W, H, sd*W/2), new THREE.MeshBasicMaterial({map})); group.add(m); return m; };
     const gutter = sd => { const m = new THREE.Mesh(flatGeo(W, H, sd*W/2, sd < 0), new THREE.MeshBasicMaterial({map:fade, transparent:true, opacity:0, depthWrite:false})); m.visible = false; group.add(m); return m; };
-    // the turning page: one strip of columns bent around the spine, an image on each face
-    const fg = new THREE.PlaneGeometry(W, H, SEG, 1); fg.rotateX(-Math.PI/2); fg.translate(W/2, 0, 0);
-    fg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(fg.attributes.position.count*3).fill(1), 3));
-    const bg = new THREE.BufferGeometry(); bg.setIndex(fg.index); bg.setAttribute('position', fg.attributes.position); bg.setAttribute('color', fg.attributes.color);
+    // the turning page: a grid bent around the spine row by row, an image on each face, and its shadow
+    // cast onto the pages beneath. The faces and shadow share one index; each has its own shading.
+    const fg = new THREE.PlaneGeometry(W, H, SEG, ROWS); fg.rotateX(-Math.PI/2); fg.translate(W/2, 0, 0);
+    const colors = () => new THREE.BufferAttribute(new Float32Array(fg.attributes.position.count*3).fill(1), 3);
+    fg.setAttribute('color', colors());
+    const bg = new THREE.BufferGeometry(); bg.setIndex(fg.index); bg.setAttribute('position', fg.attributes.position); bg.setAttribute('color', colors());
     const buv = fg.attributes.uv.clone(); for (let i = 0; i < buv.count; i++) buv.setX(i, 1 - buv.getX(i)); bg.setAttribute('uv', buv);
     const front = new THREE.Mesh(fg, new THREE.MeshBasicMaterial({map:paper, vertexColors:true})), back = new THREE.Mesh(bg, new THREE.MeshBasicMaterial({map:paper, vertexColors:true, side:THREE.BackSide}));
-    front.frustumCulled = back.frustumCulled = false;
-    const turning = new THREE.Group(); turning.add(front, back); turning.visible = false; group.add(turning);
-    meshes = {blockL:block(-1), blockR:block(1), left:page(-1, paper), right:page(1, paper), gutL:gutter(-1), gutR:gutter(1), turning, front, back,
+    const sg = new THREE.BufferGeometry(); sg.setIndex(fg.index); sg.setAttribute('position', fg.attributes.position.clone()); sg.setAttribute('color', colors());
+    // multiplied onto the pages; where the curl folds its shadow over itself, the depth test keeps it from darkening twice
+    const cast = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({vertexColors:true, transparent:true, blending:THREE.MultiplyBlending, premultipliedAlpha:true, depthWrite:true, depthFunc:THREE.LessDepth}));
+    front.frustumCulled = back.frustumCulled = cast.frustumCulled = false;
+    const turning = new THREE.Group(); turning.add(front, back); turning.visible = cast.visible = false; group.add(turning, cast);
+    // the ribbon bookmark, tucked into the bottom of the page block by the spine, its tail out on the desk
+    const ribbon = new THREE.Mesh(new THREE.PlaneGeometry(.17, 1, 1, 64), new THREE.MeshLambertMaterial({map:ribbonT, side:THREE.DoubleSide, alphaTest:.5}));
+    group.add(ribbon);
+    meshes = {blockL:block(-1), blockR:block(1), left:page(-1, paper), right:page(1, paper), gutL:gutter(-1), gutR:gutter(1), turning, front, back, cast, ribbon,
       base:fg.attributes.position.array.slice(), boards:[cover(-1), cover(1)], spine, shadow};
     stack(); sb.setCovers(...coverMaps); sb.curl(0);
   }
@@ -162,6 +183,72 @@ export function makeBook({desk = true} = {}){
     meshes.spine.position.y = top/2; meshes.spine.scale.z = (top/2 + .04)/.1;
     const [l, r] = span();
     meshes.shadow.scale.x = ((l + r)*bw + 1.1)/(2*bw + 1.1); meshes.shadow.position.x = (r - l)*bw/2;
+    ribbon();
+  }
+  // The ribbon comes out from between the pages at their bottom edge, hangs down the page block, lies
+  // along the board, wraps over the board's edge and trails across the desk. It is laid as a polyline:
+  // a smooth curve through a few points cuts the corners, and through the board.
+  function ribbon(){
+    const V = (x, y, z) => new THREE.Vector3(x, y, z), k = .006, lip = H/2 + .02, edge = H/2 + MARGIN, ry = BOARD/2 + k, rz = BOARD/2 + BOARD*.32 + .045;
+    const pts = [V(.28, meshes.right.position.y - .02, lip), V(.28, BOARD + k, lip + .015), V(.29, BOARD + k, edge - BOARD/2)];
+    // bowing out over the board's edge, clear of its bevel and ink outline, then down to the desk
+    for (let i = 1; i <= 8; i++) { const a = i/8*Math.PI*.6; pts.push(V(.29, BOARD/2 + ry*Math.cos(a), edge - BOARD/2 + rz*Math.sin(a))); }
+    pts.push(V(.3, k, edge + .1));
+    const tail = new THREE.CatmullRomCurve3([V(.3, k, edge + .1), V(.36, k, edge + .3), V(.47, k, edge + .55), V(.42, k, edge + .8), V(.5, k, edge + .98)]);
+    pts.push(...tail.getSpacedPoints(24).slice(1));
+    // evenly along its length, so the satin's stripes don't bunch up round the edge
+    const len = [0]; for (let i = 1; i < pts.length; i++) len.push(len[i - 1] + pts[i].distanceTo(pts[i - 1]));
+    const m = meshes.ribbon, a = m.geometry.attributes.position, n = a.count/2, hw = .085, q = new THREE.Vector3();
+    for (let i = 0, j = 1; i < n; i++) {
+      const d = i/(n - 1)*len.at(-1); while (j < pts.length - 1 && len[j] < d) j++;
+      q.lerpVectors(pts[j - 1], pts[j], (d - len[j - 1])/(len[j] - len[j - 1] || 1));
+      a.setXYZ(2*i, q.x - hw, q.y, q.z); a.setXYZ(2*i + 1, q.x + hw, q.y, q.z);
+    }
+    a.needsUpdate = true; m.geometry.computeVertexNormals(); m.geometry.computeBoundingSphere();
+  }
+  // Each row of the leaf bends on its own, turned by p, its free edge offset by the bend plus the twist
+  // (positive on the reader's side, negative on the far side), most of it near the edge as paper bends.
+  // Shading is the light on each face's slope, scaled so a face lying flat is exactly its image.
+  const LIGHT = Math.hypot(LX, 1), AMB = .62, flatLit = AMB + (1 - AMB)/LIGHT;
+  const lit = (nx, ny) => (AMB + (1 - AMB)*Math.max(0, (nx*LX + ny)/LIGHT))/flatLit;
+  function draw(){
+    const {front, back, cast, base, turning} = meshes, p = leaf.p, n = SEG + 1, step = W/SEG;
+    const pos = front.geometry.attributes.position, fc = front.geometry.attributes.color, bc = back.geometry.attributes.color;
+    const sp = cast.geometry.attributes.position, sc = cast.geometry.attributes.color;
+    const ty = meshes.right.position.y + (meshes.left.position.y - meshes.right.position.y)*p + LIFT;
+    turning.position.y = ty;
+    // the shadow fades as the leaf lies flat, so it never shows round a page at rest
+    const shadowK = .55*Math.min(1, Math.sin(Math.PI*Math.min(1, Math.max(0, p)))*2 + Math.abs(leaf.bend)*.6);
+    for (let j = 0; j <= ROWS; j++) {
+      // a soft limit, so a quick flick bends the leaf a lot but never folds it
+      const r = j/ROWS, off = 1.1*Math.tanh((leaf.bend + leaf.twist*(2*r - 1))/1.1);
+      const angAt = s => Math.max(0, Math.min(Math.PI, p*Math.PI + off*Math.pow(s, 1.6)));
+      // soft at the leaf's top and bottom, so the shadow has a penumbra rather than a hard rim
+      const rimZ = Math.min(1, Math.min(r, 1 - r)*5);
+      for (let i = 0, x = 0, y = 0; i < n; i++) {
+        if (i) { const a = angAt((i - .5)/SEG); x += Math.cos(a)*step; y += Math.sin(a)*step; }
+        const v = j*n + i, z = base[v*3 + 2], a = angAt(i/SEG), sn = Math.sin(a), cs = Math.cos(a);
+        pos.setXYZ(v, x, y, z);
+        const f = lit(-sn, cs), b = lit(sn, -cs);
+        // a face tipped from the light warms a little, as paper does in lamplight
+        fc.setXYZ(v, f, f - (1 - Math.min(1, f))*.06, f - (1 - Math.min(1, f))*.15);
+        bc.setXYZ(v, b, b - (1 - Math.min(1, b))*.06, b - (1 - Math.min(1, b))*.15);
+        // project along the light onto whichever side's page lies beneath
+        const sx = x - y*LX, ground = sx > 0 ? meshes.right.position.y : meshes.left.position.y, hgt = Math.max(0, ty + y - ground);
+        const px = x - hgt*LX, pz = z - hgt*LZ;
+        sp.setXYZ(v, px, (px > 0 ? meshes.right.position.y : meshes.left.position.y) + .0012, pz);
+        // and only on the pages: past their edges it would hang in the air over the desk
+        const onPage = Math.max(0, Math.min(1, (W - Math.abs(px))/.5, (H/2 - Math.abs(pz))/.4));
+        const k = 1 - shadowK*rimZ*onPage*Math.min(1, (1 - Math.pow(i/SEG, 3))*1.4)/(1 + hgt*.18);
+        sc.setXYZ(v, k, k + (1 - k)*.08, k + (1 - k)*.18);
+      }
+    }
+    pos.needsUpdate = fc.needsUpdate = bc.needsUpdate = sp.needsUpdate = sc.needsUpdate = true;
+    // the gutters darken where the book lies open (only there: a closed side's shading would float over the desk)
+    const lift = turning.visible ? Math.sin(Math.PI*p)*.22 : 0;
+    for (const [g, o, open] of [[meshes.gutL, dim*.32 + lift*p, boardP[0] === 1], [meshes.gutR, dim*.32 + lift*(1 - p), boardP[1] === 0]]) {
+      g.material.opacity = o; g.visible = open && o > .002;
+    }
   }
   const sb = {root:group, paper,
     get W(){ return W; }, get H(){ return H; }, MARGIN,
@@ -176,41 +263,32 @@ export function makeBook({desk = true} = {}){
     },
     // where the covers lie, each 0 (on the right) to 1 (on the left), stiff as they swing over the spine:
     // open is (1, 0), closed on the front cover (0, 0), closed on the back cover (1, 1)
-    setBoards(front, back){ boardP[0] = front; boardP[1] = back; hinge(); sb.curl(turnP); },
+    setBoards(front, back){ boardP[0] = front; boardP[1] = back; hinge(); draw(); },
     // the x range of the boards as they lie now, so a camera can follow the book as its covers open and close
     extent(){ const [l, r] = span(), bw = W + MARGIN; return [-l*bw, r*bw]; },
     // how full each side's stack of pages is, 0..1; 0 leaves no pages on that side
-    setStacks(l, r){ stackL = l; stackR = r; stack(); sb.curl(turnP); },
+    setStacks(l, r){ stackL = l; stackR = r; stack(); draw(); },
     pageY(side){ return (side < 0 ? meshes.left : meshes.right).position.y; },
     turnY(){ return meshes.turning.position.y; },
     // gutter shading over the resting pages, 0..1: 0 leaves the page images exactly as they are
-    setShade(k){ dim = k; sb.curl(turnP); },
+    setShade(k){ dim = k; draw(); },
     turnPage(front, back){
       for (const [m, t] of [[meshes.front, front], [meshes.back, back]]) if (m.material.map !== t) { m.material.map = t; m.material.needsUpdate = true; }
-      meshes.turning.visible = true;
+      meshes.turning.visible = meshes.cast.visible = true;
     },
-    settle(){ meshes.turning.visible = false; sb.curl(0); },
-    // p runs 0 (lying on the right) to 1 (lying on the left); lead > 0 curls the free edge ahead
-    // when turning forward, < 0 when turning back, 0 turns the page stiff
-    curl(p, lead = 0){
-      turnP = p;
-      const a = meshes.front.geometry.attributes.position, col = meshes.front.geometry.attributes.color, base = meshes.base, n = SEG + 1;
-      const xs = [0], ys = [0], sh = [1], k = Math.sin(Math.PI*p)*.65*lead;
-      for (let i = 1, x = 0, y = 0; i < n; i++) {
-        const ang = Math.max(0, Math.min(Math.PI, p*Math.PI + k*i/SEG));
-        x += Math.cos(ang)*W/SEG; y += Math.sin(ang)*W/SEG; xs.push(x); ys.push(y); sh.push(1 - .32*Math.sin(ang));
-      }
-      // shaded a little warmer as it tips away from the light; lying flat it is exactly its image
-      for (let v = 0; v < a.count; v++) { const i = v % n, d = 1 - sh[i]; a.setXYZ(v, xs[i], ys[i], base[v*3 + 2]); col.setXYZ(v, sh[i], sh[i] - d*.06, sh[i] - d*.15); }
-      a.needsUpdate = col.needsUpdate = true;
-      meshes.turning.position.y = meshes.right.position.y + (meshes.left.position.y - meshes.right.position.y)*p + LIFT;
-      // the turning page darkens the side it is leaving and the side it is about to cover
-      // (only on a side where the book lies open; a closed side has no pages, or its shading would float over the desk)
-      const lift = meshes.turning.visible ? Math.sin(Math.PI*p)*.38 : 0;
-      for (const [g, o, open] of [[meshes.gutL, dim*.32 + lift*p, boardP[0] === 1], [meshes.gutR, dim*.32 + lift*(1 - p), boardP[1] === 0]]) {
-        g.material.opacity = o; g.visible = open && o > .002;
-      }
-    }
+    settle(){ meshes.turning.visible = meshes.cast.visible = false; sb.curl(0); },
+    // p runs 0 (lying on the right) to 1 (lying on the left). Called each frame of a turn with the frame's
+    // dt, the leaf bends and twists with the speed of the turn, as paper does; without dt it lies stiff.
+    curl(p, dt){
+      if (dt > 0) {
+        const w = Math.max(-14, Math.min(14, (p - leaf.p)*Math.PI/dt));
+        leaf.twist += (.13*w - leaf.twist)*Math.min(1, dt*12);
+        leaf.bendV += (110*(-.075*w - leaf.bend) - 7.5*leaf.bendV)*dt; leaf.bend += leaf.bendV*dt;
+      } else if (dt === undefined) leaf.bend = leaf.bendV = leaf.twist = 0;
+      leaf.p = p; draw();
+    },
+    // still bending: a leaf that has stopped turning is still settling flat
+    fluttering(){ return Math.abs(leaf.bend) + Math.abs(leaf.bendV)*.1 > .004; }
   };
   sb.setAspect(1);
   return sb;
@@ -224,6 +302,14 @@ export function makeStorybook(canvas){
   scene.add(new THREE.HemisphereLight(0xfff2dd, 0x5a3a50, .6));
   const key = new THREE.DirectionalLight(0xffe2bf, .5); key.position.set(-3, 6, 4); scene.add(key);
   const desk = new THREE.Mesh(flatGeo(60, 60, 0), T(0xffffff, {map:deskTex()})); desk.material.map.repeat.set(14, 14); scene.add(desk);
+  // lamplight: a warm pool round the book, the desk falling away into shadow beyond it
+  const pool = tex(256, 256, (g, w, h) => {
+    const gr = g.createRadialGradient(w/2, h/2, 0, w/2, h/2, w/2);
+    gr.addColorStop(0, 'rgb(255,238,210)'); gr.addColorStop(.13, 'rgb(236,206,170)'); gr.addColorStop(.32, 'rgb(112,86,70)'); gr.addColorStop(.55, 'rgb(40,28,24)'); gr.addColorStop(1, 'rgb(40,28,24)');
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  });
+  const lamp = new THREE.Mesh(flatGeo(60, 60, 0), new THREE.MeshBasicMaterial({map:pool, transparent:true, blending:THREE.MultiplyBlending, premultipliedAlpha:true, depthWrite:false}));
+  lamp.position.set(-1, .002, 0); scene.add(lamp);
   const book = makeBook(); scene.add(book.root);
   return Object.assign(book, {renderer, scene, camera,
     resize(w, h){ renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix(); },

@@ -102,7 +102,9 @@ export async function phone(url, {device = 'iphone-15', landscape = false, dpr} 
     },
     wait: sleep,
     async shot(file){ const {data} = await send('Page.captureScreenshot', {format: 'png'}); await writeFile(file, Buffer.from(data, 'base64')); return file; },
-    async close(){ process.off('exit', orphan); ws.close(); chrome.kill(); await sleep(200); await rm(profile, {recursive: true, force: true}); },
+    // Chrome keeps writing to its profile for a moment after the signal, so wait for it to exit
+    async close(){ process.off('exit', orphan); ws.close(); const gone = new Promise(r => chrome.exitCode !== null ? r() : chrome.once('exit', r));
+      chrome.kill(); await gone; await rm(profile, {recursive: true, force: true, maxRetries: 5}); },
   };
   return p;
 }
