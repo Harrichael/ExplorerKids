@@ -136,6 +136,10 @@ export function bFlush(parent){
 
 export const glowTex = tex(64,64,(g,w,h)=>{ const gr = g.createRadialGradient(32,32,0,32,32,32); gr.addColorStop(0,'rgba(255,240,180,1)'); gr.addColorStop(.3,'rgba(255,210,110,.6)'); gr.addColorStop(1,'rgba(255,200,90,0)'); g.fillStyle = gr; g.fillRect(0,0,w,h); });
 glowTex.wrapS = glowTex.wrapT = THREE.ClampToEdgeWrapping;
+// a storybook four-point twinkle
+export const sparkTex = tex(64,64,(g,w,h)=>{ const gr = g.createRadialGradient(32,32,0,32,32,20); gr.addColorStop(0,'rgba(255,240,190,.55)'); gr.addColorStop(1,'rgba(255,220,150,0)'); g.fillStyle = gr; g.fillRect(0,0,w,h);
+  g.fillStyle = '#fff6dc'; g.beginPath(); for (let i = 0; i < 8; i++) { const r = i % 2 ? 4.5 : 31, a = i*Math.PI/4 - Math.PI/2; g.lineTo(32 + Math.cos(a)*r, 32 + Math.sin(a)*r); } g.fill(); });
+sparkTex.wrapS = sparkTex.wrapT = THREE.ClampToEdgeWrapping;
 
 export const shade = (c, f) => { const r = Math.round(((c >> 16) & 255) * f), g = Math.round(((c >> 8) & 255) * f), b = Math.round((c & 255) * f); return (r << 16) | (g << 8) | b; };
 

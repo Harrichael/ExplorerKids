@@ -58,6 +58,20 @@ node tools/earth/build.mjs
 node --test tools/earth/*.test.mjs
 ```
 
+#### Testing on a phone
+
+Many players are on phones, and the touch UI only switches on when the page loads on a touch screen (`input.js` reads `(pointer: coarse)` once), so a narrow desktop window doesn't show it. Two ways to check a change:
+
+**Emulated, scriptable.** `lantern-hill/tools/phone.mjs` (no dependencies, Node 22+) starts the installed Chrome headless as a phone: viewport, pixel ratio, touch, and notch insets (`env(safe-area-inset-*)`), all set before the page loads. Taps and drags are real touch events.
+
+```sh
+node lantern-hill/tools/phone.mjs http://localhost:8080/ --device iphone-15 --landscape --out shot.png
+```
+
+Devices are `iphone-15` (notch), `iphone-se` (small, no notch) and `pixel-7`; check portrait and landscape. For a walkthrough, import `phone()` in a script and use `tap`, `tapOn(selector)`, `drag`, `box(selector)`, `eval` and `shot` (see the top of the file). A fresh profile starts at the explorer creator, so `tapOn('#wDone')` first. Scripts can jump the explorer next to something with `eval` (import `js/player.js` relative to `document.baseURI` and set `player.x`/`player.z`), and check fit by projecting world points through `camera` from `js/core/render.js`. It renders on this computer's GPU, so it says nothing about a phone's frame rate.
+
+**A real phone**, for frame rate, how things feel under a thumb, and Safari's quirks. `rebar3 shell` listens on every interface, so on the same Wi-Fi open `http://<this Mac's LAN IP>:8080/` (`ipconfig getifaddr en0`); edits in `web/` reach the phone live. For the console, connect by cable: Safari's Develop menu (iPhone) or `chrome://inspect` (Android).
+
 ### Marble Lab quick start
 
 ```sh
