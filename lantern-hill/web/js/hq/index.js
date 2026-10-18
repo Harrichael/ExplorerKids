@@ -13,6 +13,7 @@ import './toy-crane.js';
 import './sky.js';
 import { bFlush } from '../core/kit.js';
 import { addUsable } from '../core/world.js';
+import { game } from '../state.js';
 import { openWardrobe } from '../ui/wardrobe.js';
 import { LAB_DESK, WINDOW_SEAT } from './cottage.js';
 import { BENCH } from './garden-life.js';
@@ -77,11 +78,12 @@ addUsable(HQ, {name:'Wardrobe', x:8.95, z:3.2, range:1.7, verb:'Open the wardrob
 addUsable(HQ, {name:'Flashcards', x:-.45, z:5.4, range:1.5, verb:'Practice phonogram cards', short:'Cards', glow:[-.45, 1.25, 6.1], action:openFlashcards});
 addUsable(HQ, {name:'Globe', x:-5.6, z:.75, range:1.3, verb:'Spin the globe', short:'Spin', glow:[-5.6, 1.6, -.2], action:openGlobe});
 addUsable(HQ, {name:'Library desk', x:-7.3, z:-1.55, range:1.2, verb:'Borrow a book', short:'Borrow', glow:[-7.2, 1.3, -2.5], action:borrowBook});
-addUsable(HQ, {name:'Window seat', x:WINDOW_SEAT.x + 1.15, z:WINDOW_SEAT.z, range:1.3, verb:'Sit in the window seat', short:'Sit', glow:[WINDOW_SEAT.x, 1.0, WINDOW_SEAT.z], action:sitInWindow});
+const windowSeat = addUsable(HQ, {name:'Window seat', x:WINDOW_SEAT.x + 1.15, z:WINDOW_SEAT.z, range:1.3, verb:'Sit in the window seat', short:'Sit', glow:[WINDOW_SEAT.x, 1.0, WINDOW_SEAT.z], action:sitInWindow});
+// reading from the backpack settles down on the reading rug, or in the window seat if they're by it
 HQ.read = async item => {
   if (item.kind !== 'book') return;
   const { openReader } = await import('../library/reader.js');
-  openReader(item.id);
+  openReader(item.id, game.reach.includes(windowSeat) ? 'window' : 'rug');
 };
 addUsable(HQ, {name:'Toy crane', x:PLAY.x, z:PLAY.z + 1.2, range:1.4, verb:'Build a block tower', short:'Build', glow:[PLAY.x, 1.0, PLAY.z], action:openTower});
 addUsable(HQ, {name:'Experiment desk', x:LAB_DESK.x, z:LAB_DESK.z + 1.05, range:1.2, verb:'Do an experiment', short:'Lab', glow:[LAB_DESK.x, 1.35, LAB_DESK.z + .1], action:openLab});
