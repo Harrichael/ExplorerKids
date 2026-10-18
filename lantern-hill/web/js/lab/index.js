@@ -62,13 +62,8 @@ css.textContent = `
 .lb-card.done .st{background:#cfe8d4;color:#22543a}
 .lb-card.new{background:#fff7d8;border-color:var(--rust);box-shadow:0 3px 0 var(--rust),0 0 0 3px rgba(217,164,65,.5)}
 .lb-card.new .st{background:var(--rust);color:var(--parch)}
-.lb-card.locked{cursor:not-allowed;background:#e6dbc2;color:#7a6a6a;box-shadow:0 3px 0 #7a6a6a;border-color:#7a6a6a}
-.lb-card.locked .num{background:#9a8a8a}
 .lb-card.free{grid-column:1/-1;padding-left:56px;background:linear-gradient(90deg,#d8efe6,#fbf4e2)}
 .lb-card.free .num{width:36px;height:36px;font-size:18px;background:var(--rust)}
-.lb-card.free.locked{background:#e6dbc2}
-.lb-card.nope{animation:nope .35s}
-@keyframes nope{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 #labBook footer{display:flex;justify-content:flex-end;margin-top:12px}
 #labBook footer .lab-pill{background:var(--plum)}`;
 document.head.appendChild(css);
@@ -141,26 +136,28 @@ function openBook(){
   if (convo) endConvo(false);
   lab.phase = 'book'; lab.run = null; clearDesk(); handsOff(); hud.hidden = true;
   const done = progress(), grid = $('lbGrid'); grid.innerHTML = '';
+  // locked experiments stay out of the book entirely, so each unlock reveals something new
   let firstNew = null;
   EXPERIMENTS.forEach((e, i) => {
-    const open = unlocked(i, done), fin = done.has(e.id), b = document.createElement('button');
-    b.className = 'lb-card ' + (fin ? 'done' : open ? 'new' : 'locked');
-    b.innerHTML = `<span class="num">${i + 1}</span><b>${open ? e.title : 'Mystery experiment'}</b><span class="bl">${open ? e.blurb : 'Finish the one before to unlock it.'}</span>
-      <span class="st">${fin ? '✓ Done · Grade ' + e.grade : open ? 'New! · Grade ' + e.grade : 'Locked'}</span>`;
-    b.addEventListener('click', () => open ? startRun(e) : nope(b));
-    if (open && !fin && !firstNew) firstNew = b;
+    if (!unlocked(i, done)) return;
+    const fin = done.has(e.id), b = document.createElement('button');
+    b.className = 'lb-card ' + (fin ? 'done' : 'new');
+    b.innerHTML = `<span class="num">${i + 1}</span><b>${e.title}</b><span class="bl">${e.blurb}</span>
+      <span class="st">${fin ? '✓ Done' : 'New!'} · Grade ${e.grade}</span>`;
+    b.addEventListener('click', () => startRun(e));
+    if (!fin && !firstNew) firstNew = b;
     grid.appendChild(b);
   });
-  const free = document.createElement('button'), fo = done.size >= FREE_AFTER;
-  free.className = 'lb-card free ' + (fo ? 'new' : 'locked');
-  free.innerHTML = `<span class="num">★</span><b>Free Lab</b><span class="bl">${fo ? 'Every supply on the desk. Mix anything with anything!' : `Finish ${FREE_AFTER} experiments to open it (${Math.min(done.size, FREE_AFTER)} of ${FREE_AFTER}).`}</span>
-    <span class="st">${fo ? 'Open' : 'Locked'}</span>`;
-  free.addEventListener('click', () => fo ? startRun(FREE) : nope(free));
-  grid.appendChild(free);
-  book.hidden = false; (firstNew || free).focus({preventScroll:true});
+  if (done.size >= FREE_AFTER) {
+    const free = document.createElement('button');
+    free.className = 'lb-card free new';
+    free.innerHTML = `<span class="num">★</span><b>Free Lab</b><span class="bl">Every supply on the desk. Mix anything with anything!</span><span class="st">Open</span>`;
+    free.addEventListener('click', () => startRun(FREE));
+    grid.appendChild(free);
+  }
+  book.hidden = false; (firstNew || grid.lastElementChild).focus({preventScroll:true});
   Sound.open();
 }
-function nope(b){ b.classList.remove('nope'); void b.offsetWidth; b.classList.add('nope'); Sound.tone(220, {type:'square', dur:.12, vol:.05, cut:900}); Sound.tone(180, {type:'square', t:.1, dur:.15, vol:.05, cut:900}); }
 
 // ---------- running an experiment ----------
 function startRun(exp, quiet){
