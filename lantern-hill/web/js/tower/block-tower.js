@@ -34,6 +34,7 @@ css.textContent = `
 #tower .tb{font-family:var(--display);font-size:17px;color:var(--parch);background:var(--plum);border:2.5px solid var(--gold);border-radius:14px;padding:8px 18px;box-shadow:0 0 0 3px var(--ink);cursor:pointer}
 #tower .tb.ghost{background:rgba(26,19,32,.55)}
 #tower .tb:focus-visible{outline:3px solid var(--parch);outline-offset:3px}
+@media (orientation:landscape) and (max-height:500px){#tower .tbar{justify-content:space-between;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}}
 #twob{position:absolute;left:0;right:0;top:64px;text-align:center;font-weight:900;font-size:18px;color:#e88b6b;text-shadow:0 2px 0 var(--ink);pointer-events:none;opacity:0}
 #tmsg{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;font-family:var(--display);color:var(--parch);text-shadow:0 3px 0 var(--ink),0 0 24px rgba(217,164,65,.5);font-size:clamp(26px,7vw,44px);line-height:1.15;width:90%}
 #tmsg small{display:block;font-family:var(--body);font-weight:900;font-size:16px;color:var(--gold);margin-top:8px;text-shadow:0 2px 0 var(--ink)}`;
