@@ -16,7 +16,7 @@ function begin(){
     if (isNewExplorer) setTimeout(() => openWardrobe(true), 350); }
 }
 startEl.addEventListener('pointerdown', begin);
-// flashcards, the globe, the book reader and the block tower catch keys before this handler while they are open
+// flashcards, the globe, the book reader, the telescope and the block tower catch keys before this handler while they are open
 addEventListener('keydown', e => {
   const k = e.key;
   if (e.target && e.target.tagName === 'INPUT') { if (k === 'Enter' || k === 'Escape') e.target.blur(); return; }

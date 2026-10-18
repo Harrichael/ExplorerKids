@@ -9,5 +9,5 @@ export const game = {
   camShake: 0,
   nearest: null,    // the NPC in talking range, if any
   nearUse: null,    // the usable thing in range, if any
-  activity: null    // 'flashcards', 'globe' or a page turn's 'storybook' while one fills the screen; the world pauses behind it
+  activity: null    // 'flashcards', 'globe', 'telescope', 'travel' or a page turn's 'storybook' while one fills the screen; the world pauses behind it
 };

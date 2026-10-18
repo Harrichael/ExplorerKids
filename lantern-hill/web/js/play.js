@@ -139,7 +139,7 @@ function update(dt){
   lastNearest = game.nearest;
   if (convo && convo.npc && Math.hypot(player.x - convo.npc.x, player.z - convo.npc.z) > convo.npc.range + .8) closeDialog();
   game.nearUse = null;
-  if (!dressing && !convo && !game.cutscene && startEl.hidden) for (const u of game.world.usables) { if (Math.hypot(player.x - u.x, player.z - u.z) < u.range && player.y < 1) { game.nearUse = u; break; } }
+  if (!dressing && !convo && !game.cutscene && startEl.hidden) for (const u of game.world.usables) { if (Math.hypot(player.x - u.x, player.z - u.z) < u.range && Math.abs(player.y - (u.y || 0)) < 1) { game.nearUse = u; break; } }
   if (game.nearUse && game.nearUse !== lastUse) Sound.near();
   lastUse = game.nearUse;
   if (!convo) {

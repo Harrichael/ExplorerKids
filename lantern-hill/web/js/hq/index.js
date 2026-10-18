@@ -16,7 +16,7 @@ import { addUsable } from '../core/world.js';
 import { openWardrobe } from '../ui/wardrobe.js';
 import { LAB_DESK } from './cottage.js';
 import { BENCH } from './garden-life.js';
-import { groundAt } from './garden.js';
+import { PLAT, groundAt } from './garden.js';
 import { npcs } from './residents.js';
 import { PLAY } from './toy-crane.js';
 import { colliders, hqAnims, occMeshes, occluders, scene, sun } from './scene.js';
@@ -61,6 +61,10 @@ async function openLab(){
   const { openLab } = await import('../lab/index.js');
   openLab();
 }
+async function lookThroughTelescope(){
+  const { openTelescope } = await import('../sky/telescope.js');
+  openTelescope();
+}
 async function boardWonderBus(){
   const [{ startTrip }, { tectonics }] = await Promise.all([import('../trips/field-trip.js'), import('../trips/tectonics/index.js')]);
   startTrip(tectonics);
@@ -72,4 +76,5 @@ addUsable(HQ, {name:'Globe', x:-5.6, z:.75, range:1.3, verb:'Spin the globe', sh
 addUsable(HQ, {name:'Toy crane', x:PLAY.x, z:PLAY.z + 1.2, range:1.4, verb:'Build a block tower', short:'Build', glow:[PLAY.x, 1.0, PLAY.z], action:openTower});
 addUsable(HQ, {name:'Experiment desk', x:LAB_DESK.x, z:LAB_DESK.z + 1.05, range:1.2, verb:'Do an experiment', short:'Lab', glow:[LAB_DESK.x, 1.35, LAB_DESK.z + .1], action:openLab});
 addUsable(HQ, {name:'Wonder Bus', x:15.9, z:3.6, range:1.9, verb:'Board the Wonder Bus', short:'Board', glow:[15.6, 2.9, 5.5], action:boardWonderBus});
+addUsable(HQ, {name:'Telescope', x:23.7, z:-1.05, y:PLAT, range:1.3, verb:'Look through the telescope', short:'Look', glow:[24.4, PLAT + 1.5, -.6], action:lookThroughTelescope});
 addUsable(HQ, {name:'Pond bench', x:BENCH.x, z:BENCH.z - .78, range:1.25, verb:'Sit on the bench', short:'Sit', glow:[BENCH.x, .9, BENCH.z], action:sitOnBench});

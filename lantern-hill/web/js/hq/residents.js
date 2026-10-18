@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { makeLabel } from '../characters/build.js';
 import { PERSONA } from '../characters/cast.js';
 import { C, T, add, col, cyl, grp, outlineMat, rand, rr } from '../core/kit.js';
+import { pipTalk } from '../travel/index.js';
 import { PLAT } from './garden.js';
 import { scene } from './scene.js';
 
@@ -56,7 +57,7 @@ addNPC(PERSONA.pip, 19.5, PLAT, -4.4, Math.PI*.25, [
   "Hey {name}, you made it up the ramp! Welcome to the treehouse. Juniper and I built the railing ourselves. Mostly.",
   "From up here you can see the whole garden. I count fireflies every night. My record is forty-six!",
   "Inside the hut there's a map of every place we want to explore: volcanoes, coral reefs, even the Moon. Want to help us fill it in?"
-]);
+], {converse:pipTalk});
 
 addNPC(PERSONA.juniper, 23.2, PLAT, -1.3, -Math.PI*.6, [
   "Hi! I'm Juniper. I always wear my raincoat, because you never know what an adventure will bring.",
