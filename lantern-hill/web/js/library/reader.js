@@ -124,8 +124,8 @@ function turn(dir) {
     // a cover swings over as a stiff board, onto or off the first or last spread of pages
     if (board !== null) B.setPages(leaf(2 * k - 1), leaf(2 * k));
     // the turning page carries one page image on each face; the page it uncovers is already in place beneath
-    else if (dir > 0) { B.turnPage(pageTex(b, Rr), pageTex(b, Rr + 1)); B.setPages(leaf(L), leaf(Rr + 2)); B.curl(0, 1); }
-    else { B.turnPage(pageTex(b, L - 1), pageTex(b, L)); B.setPages(leaf(L - 2), leaf(Rr)); B.curl(1, -1); }
+    else if (dir > 0) { B.turnPage(pageTex(b, Rr), pageTex(b, Rr + 1)); B.setPages(leaf(L), leaf(Rr + 2)); B.curl(0); }
+    else { B.turnPage(pageTex(b, L - 1), pageTex(b, L)); B.setPages(leaf(L - 2), leaf(Rr)); B.curl(1); }
     flip = { dir, board, t: 0 };
     Sound.tone(dir > 0 ? 700 : 620, { type: 'triangle', dur: .05, vol: .04 }); Sound.tone(1400, { type: 'sine', t: .05, dur: .08, vol: .02 });
   });
@@ -159,8 +159,9 @@ function readCam(pos, look) {
 hqAnims.push(dt => {
   if (!open || !book || !flip) return;
   flip.t = Math.min(1, flip.t + dt / (flip.board === null ? .6 : .8)); const e = ease(flip.t), p = flip.dir > 0 ? e : 1 - e;
-  if (flip.board === 0) B.setBoards(p, 0); else if (flip.board === 1) B.setBoards(1, p); else B.curl(p, flip.dir);
-  if (flip.t >= 1) { spread += flip.dir; flip = null; B.settle(); setFlat(); if (queued) { const d = Math.sign(queued); queued -= d; turn(d); } }
+  if (flip.board === 0) B.setBoards(p, 0); else if (flip.board === 1) B.setBoards(1, p); else B.curl(p, dt);
+  // a page that has landed lets its edge flutter flat, unless the next turn is already waiting
+  if (flip.t >= 1 && (flip.board !== null || queued || !B.fluttering())) { spread += flip.dir; flip = null; B.settle(); setFlat(); if (queued) { const d = Math.sign(queued); queued -= d; turn(d); } }
 });
 
 function showShelf() {

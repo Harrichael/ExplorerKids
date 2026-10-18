@@ -194,16 +194,19 @@ button.snd:focus-visible,button.word:focus-visible{outline:3px solid #6d3b5e;out
 @media (prefers-reduced-motion: reduce){#banner,#badge,#badge .page{animation:none}}
 @media (prefers-reduced-motion: reduce){#dialog .more,#start .go,#use,#learn,#trip,.tdlg .more,.tbtn.next,.card.enter{animation:none}.card{transition:none}.wbtn:active,.lbtn:active{transform:none}}
 
-/* updates: the toast offered mid-activity, and the caption over the book while the page turns */
+/* updates: the toast offered mid-activity, and the ink dots on the book while the page turns */
 #updateToast{position:fixed;left:50%;top:calc(84px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:6;display:flex;align-items:center;gap:12px;width:max-content;max-width:calc(100vw - 32px);box-sizing:border-box;background:rgba(26,19,32,.92);color:var(--parch);border:2px solid var(--gold);border-radius:14px;box-shadow:0 0 0 3px var(--ink),0 10px 26px rgba(0,0,0,.4);padding:8px 10px 8px 14px;font-size:13.5px;font-weight:700;line-height:1.35;animation:toastIn .45s cubic-bezier(.2,1.4,.4,1) both}
 #updateToast b{color:var(--gold);font-weight:900}
 #updateToast .pill{flex:none;background:var(--plum)}
 @keyframes toastIn{0%{opacity:0;transform:translate(-50%,-12px) scale(.96)}100%{opacity:1;transform:translate(-50%,0) scale(1)}}
-#turnNote{position:fixed;left:50%;bottom:calc(36px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:9;pointer-events:none;text-align:center;background:#efe0bf;color:#1a1320;border:3px solid var(--gold);border-radius:14px;box-shadow:0 0 0 4px var(--ink),0 12px 30px rgba(0,0,0,.45);padding:9px 26px 11px;width:max-content;max-width:calc(100vw - 48px);box-sizing:border-box;animation:noteIn .5s .15s ease-out both;transition:opacity .45s}
-#turnNote.leaving{opacity:0;transition-delay:.35s}
+/* three dots of ink breathing under the words printed on the book, placed by ui/page-turn.js; they
+   animate on the compositor, so they keep breathing while the new version's scripts load */
+#turnNote{position:fixed;transform:translate(-50%,-50%);z-index:9;pointer-events:none;display:flex;gap:.9vmin;animation:fadein .4s both;transition:opacity .3s}
+#turnNote i{width:1.3vmin;height:1.3vmin;min-width:6px;min-height:6px;border-radius:50%;background:#6d3b5e;animation:ink 1.2s ease-in-out infinite both}
+#turnNote i:nth-child(3){animation-delay:.18s}
+#turnNote i:nth-child(4){animation-delay:.36s}
+#turnNote.leaving{opacity:0}
 #turnNote.carried{animation:none}
-.tn-ch{font-weight:900;font-size:12px;letter-spacing:2.5px;text-transform:uppercase;color:#6d3b5e}
-.tn-t{font-family:var(--display);font-size:clamp(22px,5.5vw,32px);line-height:1.1}
-.tn-sub{font-weight:800;font-size:14px;color:#5a4a3c;margin-top:2px}
-@keyframes noteIn{0%{opacity:0;transform:translate(-50%,12px)}100%{opacity:1;transform:translate(-50%,0)}}
-@media (prefers-reduced-motion: reduce){#updateToast,#turnNote{animation:none}}
+#turnNote .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+@keyframes ink{0%,100%{transform:scale(.55);opacity:.35}45%{transform:scale(1);opacity:.9}}
+@media (prefers-reduced-motion: reduce){#updateToast{animation:none}#turnNote i{animation:none;opacity:.7}}
