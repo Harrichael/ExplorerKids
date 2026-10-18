@@ -1,0 +1,4 @@
+start fitness -11.66
+1/2 T=0.67 move shelf fit=-14.78 F=0 find=0.00  best=-11.66 0.2min
+2/2 T=0.15 move shelf fit=-14.19 F=0 find=0.00  best=-11.66 0.4min
+done

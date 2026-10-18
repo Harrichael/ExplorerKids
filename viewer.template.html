@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Marble Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Nunito:wght@600;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--night:#221c33;--ink:#1a1320;--parch:#efe0bf;--gold:#d9a441;--plum:#6d3b5e;--teal:#2f5552;--rust:#b5552f;--card:#2c2440}
+:root:not([data-theme="light"]){color-scheme:dark}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){--night:#f3e9d4;--ink:#2a2030;--parch:#2a2030;--card:#fffaf0}}
+:root[data-theme="dark"]{--night:#221c33;--parch:#efe0bf;--card:#2c2440}
+*{box-sizing:border-box}
+body{margin:0;background:var(--night);color:var(--parch);font:15px/1.45 Nunito,system-ui,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:16px}
+h1{font-family:Caprasimo,Georgia,serif;font-weight:400;font-size:clamp(24px,5vw,34px);margin:4px 0 2px}
+.sub{color:var(--gold);font-weight:800;font-size:13px;letter-spacing:.6px;text-transform:uppercase}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+.tabs button,.fam,.ctrl button{font:inherit;font-weight:800;color:var(--parch);background:var(--card);border:2px solid rgba(217,164,65,.45);border-radius:12px;padding:6px 12px;cursor:pointer}
+.tabs button[aria-pressed=true],.fam[aria-pressed=true]{background:var(--plum);border-color:var(--gold);color:#efe0bf}
+.stage{background:#3b2a2a;border:3px solid var(--gold);border-radius:16px;overflow:hidden;box-shadow:0 0 0 4px var(--ink)}
+canvas{display:block;width:100%;height:auto}
+.row{display:grid;grid-template-columns:1fr;gap:14px;margin-top:14px}
+@media(min-width:820px){.row{grid-template-columns:1.5fr 1fr}}
+.card{background:var(--card);border:2px solid rgba(217,164,65,.35);border-radius:14px;padding:12px 14px}
+.card h2{font-family:Caprasimo,Georgia,serif;font-weight:400;font-size:20px;margin:0 0 6px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
+.stat{background:rgba(217,164,65,.08);border-radius:10px;padding:6px 8px}
+.stat b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;opacity:.75}
+.fams{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.fam{text-align:left;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.fam small{opacity:.7;font-weight:700;white-space:nowrap}
+.ctrl{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.status{font-weight:900;margin-left:auto}
+.ok{color:#7fd08a}.bad{color:#e88b6b}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;margin-top:8px;opacity:.85}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:4px;vertical-align:-2px}
+.cand{display:flex;gap:6px;flex-wrap:wrap}
+.hist{font-size:12px;opacity:.8;margin-top:6px}
+svg.spark{width:100%;height:60px}
+</style></head><body><main>
+<div class="sub">Throwaway level lab</div>
+<h1>Marble Run Rescue — evolved levels</h1>
+<div class="tabs" id="tabs"></div>
+<div class="stage"><canvas id="c" width="1200" height="720"></canvas></div>
+<div class="ctrl"><button id="play">Pause</button><button id="restart">Replay</button><button id="speed">Speed 1×</button><button id="clear">No pieces</button><span class="status" id="status"></span></div>
+<div class="legend"><span><i style="background:#c9a06a"></i>ruler</span><span><i style="background:#8a5ab0"></i>book</span><span><i style="background:#e0c050"></i>domino</span><span><i style="background:#b5552f"></i>ABC block</span><span><i style="background:#5fb0a0"></i>lever + reel</span><span><i style="background:#d36a8f"></i>yarn</span><span><i style="background:#8a5a3a"></i>wooden ball</span><span><i style="background:#e9d9b8"></i>gate</span><span><i style="background:#ffd36b"></i>golden button</span></div>
+<div class="row">
+  <div class="card"><h2 id="lname">Level</h2><div class="stats" id="stats"></div><div class="hist" id="notes"></div><svg class="spark" id="spark" viewBox="0 0 300 60" preserveAspectRatio="none"></svg><div class="hist">Fitness over the annealing run (best so far)</div></div>
+  <div class="card"><h2>Route families</h2><div class="hist">Each family is a different way to solve it. Tap one to watch the solver's simplest version.</div><div class="cand" id="cands"></div><div class="fams" id="fams"></div></div>
+</div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+<script>/*SIM*/</script>
+<script>
+const DATA = /*DATA*/;
+const $ = id => document.getElementById(id), cv = $('c'), g = cv.getContext('2d');
+let lvlKey = Object.keys(DATA)[0], candIdx = 0, famIdx = 0, R = null, playing = true, speed = 1, acc = 0;
+const COL = {ruler:'#c9a06a', book:'#8a5ab0', domino:'#e0c050', block:'#b5552f', lever:'#5fb0a0', yarn:'#d36a8f', ball:'#8a5a3a', gate:'#e9d9b8', tail:'#d68a45', shelf:'#6b4430', furniture:'#4a2e22', floor:'#7a4e34', cup:'#efe0bf', reel:'#2f8f8a'};
+function tabs(){ const t = $('tabs'); t.textContent = ''; for (const k of Object.keys(DATA)) { const b = document.createElement('button'); b.textContent = DATA[k].cands[0].level.name; b.setAttribute('aria-pressed', k === lvlKey); b.onclick = () => { lvlKey = k; candIdx = 0; famIdx = 0; render(); }; t.append(b); } }
+function render(){
+  tabs(); const L = DATA[lvlKey], C = L.cands[candIdx], rep = C.report;
+  $('lname').textContent = C.level.name + (L.cands.length > 1 ? ` — candidate ${candIdx + 1}` : '');
+  const st = [['Route families', rep.F ?? 0], ['Variety (entropy)', rep.H ?? 0], ['Fewest steps', rep.minDepth ?? '—'], ['Fewest pieces', rep.minPieces ?? '—'], ['Solver hit rate', Math.round((rep.findRate||0)*100)+'%'], ['Robustness', Math.round((rep.robust||0)*100)+'%'], ['Buttons reachable', (rep.btnReach||[]).filter(Boolean).length + '/3'], ['Fitness', (rep.fitness||0).toFixed(1)]];
+  $('stats').innerHTML = st.map(([k, v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('');
+  $('notes').textContent = `Tray: ${Object.entries(C.level.tray).filter(([,n])=>n>0).map(([k,n])=>n+'× '+k).join(', ')}. Trivial-solution penalty ${rep.trivial ?? '—'}, difficulty off-band ${rep.band ?? '—'}.`;
+  const cd = $('cands'); cd.textContent = ''; if (L.cands.length > 1) L.cands.forEach((_, i) => { const b = document.createElement('button'); b.className = 'fam'; b.textContent = 'Candidate ' + (i + 1); b.setAttribute('aria-pressed', i === candIdx); b.onclick = () => { candIdx = i; famIdx = 0; render(); }; cd.append(b); });
+  const f = $('fams'); f.textContent = '';
+  (rep.families || []).forEach((fm, i) => { const b = document.createElement('button'); b.className = 'fam'; b.setAttribute('aria-pressed', i === famIdx);
+    b.innerHTML = `<span>${fm.fam.split('>').map(x => x.replace('T:', '⚑ by ')).join(' → ')}</span><small>${fm.minPieces} pcs · ${fm.count}× · ${Math.round(fm.robust*100)}%</small>`;
+    b.onclick = () => { famIdx = i; render(); }; f.append(b); });
+  const h = L.history || []; if (h.length) { const mx = Math.max(...h), mn = Math.min(...h); $('spark').innerHTML = `<polyline fill="none" stroke="#d9a441" stroke-width="2" points="${h.map((v, i) => (i/(h.length-1||1)*300).toFixed(1)+','+(58-(v-mn)/((mx-mn)||1)*54).toFixed(1)).join(' ')}"/>`; }
+  start();
+}
+function start(pl){ const C = DATA[lvlKey].cands[candIdx], fam = (C.report.families || [])[famIdx]; R = MarbleSim.runner(C.level, pl || (fam ? fam.example : []), {maxSteps: 1100}); $('status').textContent = ''; }
+function poly(b, fill, stroke = '#1a1320'){ const parts = b.parts.length > 1 ? b.parts.slice(1) : [b]; for (const p of parts) { g.beginPath(); p.vertices.forEach((v, i) => i ? g.lineTo(v.x, v.y) : g.moveTo(v.x, v.y)); g.closePath(); g.fillStyle = fill; g.fill(); g.lineWidth = 3; g.strokeStyle = stroke; g.stroke(); } }
+function draw(){
+  const S = R.S, L = S.level;
+  g.fillStyle = '#4a3346'; g.fillRect(0, 0, 1200, 720);
+  g.fillStyle = 'rgba(255,255,255,.03)'; for (let x = 0; x < 1200; x += 60) g.fillRect(x, 0, 30, 640);
+  for (const t of S.triggers) { g.beginPath(); g.arc(t.position.x, t.position.y, t.circleRadius, 0, 7); g.fillStyle = t.gate.open ? 'rgba(127,208,138,.5)' : 'rgba(232,139,107,.55)'; g.fill(); g.strokeStyle = '#1a1320'; g.lineWidth = 2; g.stroke(); g.fillStyle = '#1a1320'; g.font = '900 14px Nunito'; g.textAlign = 'center'; g.fillText('⚑', t.position.x, t.position.y + 5); }
+  for (const b of S.statics) poly(b, COL[b.label] || '#6b4430');
+  for (const b of S.buttons) { if (b.got) continue; g.beginPath(); g.arc(b.position.x, b.position.y, 11, 0, 7); g.fillStyle = '#ffd36b'; g.fill(); g.strokeStyle = '#1a1320'; g.lineWidth = 2.5; g.stroke(); }
+  for (const gt of S.gates) if (!gt.gone) poly(gt.plank, gt.g.kind === 'latch' ? '#d9a441' : COL.gate);
+  for (const b of [...S.dyn, ...S.placed, ...S.tails]) { if (b.circleRadius) { g.beginPath(); g.arc(b.position.x, b.position.y, b.circleRadius, 0, 7); g.fillStyle = COL[b.label]; g.fill(); g.strokeStyle = '#1a1320'; g.lineWidth = 3; g.stroke(); } else poly(b, COL[b.label] || '#999'); }
+  g.strokeStyle = 'rgba(255,255,255,.25)'; g.setLineDash([4, 6]); g.lineWidth = 2; g.beginPath(); R.trail.forEach((t, i) => i ? g.lineTo(t[0], t[1]) : g.moveTo(t[0], t[1])); g.stroke(); g.setLineDash([]);
+  const m = S.marble; const gr = g.createRadialGradient(m.position.x - 3, m.position.y - 3, 1, m.position.x, m.position.y, 11); gr.addColorStop(0, '#e9fbff'); gr.addColorStop(1, '#3fa0c8');
+  g.beginPath(); g.arc(m.position.x, m.position.y, 10, 0, 7); g.fillStyle = gr; g.fill(); g.strokeStyle = '#1a1320'; g.lineWidth = 2.5; g.stroke();
+  g.fillStyle = '#efe0bf'; g.font = '800 15px Nunito'; g.textAlign = 'left'; g.fillText('start', L.start.x - 18, L.start.y - 18); g.fillText('teacup', L.cup.x - 24, L.cup.y - 40);
+}
+let last = performance.now();
+function loop(t){ const dt = Math.min(50, t - last); last = t; if (playing && R && !R.done) { acc += dt * speed; while (acc >= 1000/60 && !R.done) { R.step(); acc -= 1000/60; } if (R.done) $('status').innerHTML = R.success ? '<span class="ok">In the teacup!</span>' : '<span class="bad">Missed</span>'; } if (R) draw(); requestAnimationFrame(loop); }
+$('play').onclick = () => { playing = !playing; $('play').textContent = playing ? 'Pause' : 'Play'; };
+$('restart').onclick = () => start();
+$('speed').onclick = () => { speed = speed === 1 ? 2 : speed === 2 ? .5 : 1; $('speed').textContent = 'Speed ' + speed + '×'; };
+$('clear').onclick = () => start([]);
+render(); requestAnimationFrame(loop);
+</script></body></html>
