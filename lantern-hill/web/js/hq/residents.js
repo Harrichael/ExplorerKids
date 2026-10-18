@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { makeLabel } from '../characters/build.js';
 import { PERSONA } from '../characters/cast.js';
 import { C, T, add, col, cyl, grp, outlineMat, rand, rr } from '../core/kit.js';
+import { pembrookTalk } from '../library/nook.js';
 import { pipTalk } from '../travel/index.js';
 import { PLAT } from './garden.js';
 import { scene } from './scene.js';
@@ -37,7 +38,7 @@ addNPC(PERSONA.pembrook, -7.3, 0, -3.55, 0, [
   "Every book on these shelves is a door. The red ones open onto adventures, the blue ones onto sky and sea, and the green ones are full of animals.",
   "I keep a pencil in my hair so I never lose it. I have lost it anyway, twice today.",
   "You can borrow a book at my desk, dear. Take it to the window seat; it's the coziest spot in the cottage to read."
-]);
+], {converse:pembrookTalk});
 
 addNPC(PERSONA.sparks, 7.6, 0, -4.7, 0, [
   "Aha, {name}! A new lab partner! Dr. Vega Sparks, at your service. Goggles are optional. Curiosity is required.",
