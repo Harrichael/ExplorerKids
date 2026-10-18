@@ -42,6 +42,7 @@ addNPC(PERSONA.sparks, 7.6, 0, -4.7, 0, [
   "Aha, {name}! A new lab partner! Dr. Vega Sparks, at your service. Goggles are optional. Curiosity is required.",
   "See the bus parked in the garden? That's the Wonder Bus. It can float, shrink, and dive, and one day we'll take it on a field trip.",
   "A real scientist makes a guess, tests it, and is happy to be wrong. Wrong answers are just clues wearing a disguise.",
+  "My experiment desk is all set up, {name}! Step up to it and open my experiment book. Fizzing, floating, color-changing... and it's all hands-on.",
   "Those glowing jars? Mostly colored water and a little fizz. The real magic is asking 'why?' until you find out."
 ]);
 

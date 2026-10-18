@@ -1,0 +1,145 @@
+// Everything that can sit on the experiment desk: how big it is, how it pours, floats or sticks,
+// and how to build it. Sizes are in world units, desk top at y = 0, each model's bottom at y = 0.
+//
+// kind 'vessel' holds contents and pours from its mouth when tipped (flow: liquid, drops or shake);
+// kind 'solid' sinks or floats by its density; kind 'tool' is a spoon, swab or magnet.
+
+import * as THREE from 'three';
+import { C, T, add, box, cyl, outline, sph, tex } from '../core/kit.js';
+
+export const UNITS_PER_M3 = 145000;
+export const capacity = d => d.cap || UNITS_PER_M3*Math.PI*d.ri*d.ri*d.hi;
+
+const GLASS = T(0xdff1f5, {transparent:true, opacity:.2, side:THREE.DoubleSide, depthWrite:false});
+const RIM = T(0xeef8fb, {transparent:true, opacity:.55, depthWrite:false});
+function glass(b, ri, h, floor, wall=.006){
+  const w = add(new THREE.CylinderGeometry(ri + wall, ri + wall*.6, h, 24, 1, true), GLASS, 0, h/2, 0, b, false); w.renderOrder = 3;
+  const f = cyl(ri + wall*.6, ri + wall*.6, floor, GLASS, 0, floor/2, 0, b, 24, false); f.renderOrder = 3;
+  const rim = add(new THREE.TorusGeometry(ri + wall*.5, wall*.5, 5, 24), RIM, 0, h, 0, b, false); rim.rotation.x = Math.PI/2; rim.renderOrder = 4;
+}
+function label(text, bg, fg, w=256, h=96, size=34){
+  return T(0xffffff, {map:tex(w, h, (g, W, H) => { g.fillStyle = bg; g.fillRect(0, 0, W, H); g.fillStyle = fg; g.font = `900 ${size}px Nunito, sans-serif`;
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, W/2, H/2 + 2); })});
+}
+function band(b, r, y, h, mat){ const m = add(new THREE.CylinderGeometry(r, r, h, 20, 1, true), mat, 0, y, 0, b, false); m.rotation.y = -Math.PI/2; return m; }
+function bottle(b, r, h, col, capCol, neckR, bodyH){
+  outline(cyl(r, r, bodyH, T(col), 0, bodyH/2, 0, b, 18), 1.04);
+  cyl(neckR*1.15, r, h*.12, T(col), 0, bodyH + h*.06, 0, b, 16);
+  cyl(neckR, neckR, h - bodyH - h*.12, T(capCol), 0, (h + bodyH + h*.12)/2, 0, b, 12);
+}
+function dropper(col){
+  return b => { outline(cyl(.019, .02, .05, T(col), 0, .025, 0, b, 14), 1.06); cyl(.012, .016, .01, T(0xf4f0e6), 0, .055, 0, b, 12);
+    add(new THREE.ConeGeometry(.009, .022, 10), T(0xf4f0e6), 0, .071, 0, b); };
+}
+function shaker(topCol){
+  return b => { const w = add(new THREE.CylinderGeometry(.022, .026, .065, 16, 1, true), GLASS, 0, .0325, 0, b, false); w.renderOrder = 3;
+    cyl(.02, .024, .05, T(0xf7f7f2), 0, .027, 0, b, 14, false);
+    outline(add(new THREE.SphereGeometry(.024, 14, 8, 0, Math.PI*2, 0, Math.PI/2), T(topCol), 0, .064, 0, b), 1.06);
+    for (let i = 0; i < 5; i++) sph(.003, T(C.ink), Math.cos(i*1.26)*.01, .087, Math.sin(i*1.26)*.01, b, 4, false); };
+}
+function powderBox(text, bg, fg){
+  return b => { outline(box(.095, .13, .065, T(bg), 0, .065, 0, b), 1.03);
+    const f = add(new THREE.PlaneGeometry(.085, .05), label(text, bg, fg, 256, 150, 38), 0, .07, .0331, b, false); f.renderOrder = 1;
+    box(.03, .012, .03, T(0xf6f4ee), -.025, .136, 0, b); };
+}
+function flat(b, mesh){ mesh.rotation.x = Math.PI/2; return mesh; }
+
+export const ITEMS = {
+  // ---------- containers to pour into ----------
+  cup:    {name:'Cup', kind:'vessel', r:.066, h:.13, ri:.058, floor:.012, hi:.115, see:true, flow:'liquid', rate:80, build: b => glass(b, .058, .13, .012)},
+  jar:    {name:'Tall jar', kind:'vessel', r:.058, h:.25, ri:.05, floor:.015, hi:.23, see:true, flow:'liquid', rate:70, build: b => glass(b, .05, .25, .015)},
+  tub:    {name:'Tub of water', kind:'vessel', r:.17, h:.12, ri:.16, floor:.01, hi:.105, see:true, flow:'liquid', rate:120, build: b => glass(b, .16, .12, .01, .008)},
+  dish:   {name:'Dish', kind:'vessel', r:.12, h:.032, ri:.11, floor:.006, hi:.024, see:true, flow:'liquid', rate:70, build: b => glass(b, .11, .032, .006, .007)},
+  saucer: {name:'Soap dish', kind:'vessel', r:.056, h:.024, ri:.048, floor:.008, hi:.014, see:true, flow:'liquid', rate:30,
+    build: b => { outline(add(new THREE.CylinderGeometry(.056, .045, .024, 20, 1, true), T(0xf4f0e6, {side:THREE.DoubleSide}), 0, .012, 0, b), 1.05); cyl(.045, .045, .008, T(0xf4f0e6), 0, .004, 0, b, 20); }},
+  bottle: {name:'Bottle', kind:'vessel', r:.05, h:.19, ri:.044, floor:.012, hi:.11, see:true, flow:'liquid', rate:40, mouth:.02, neck:true,
+    build: b => { const w = add(new THREE.CylinderGeometry(.05, .05, .12, 22, 1, true), GLASS, 0, .06, 0, b, false); w.renderOrder = 3;
+      const sh = add(new THREE.CylinderGeometry(.024, .05, .03, 22, 1, true), GLASS, 0, .135, 0, b, false); sh.renderOrder = 3;
+      const nk = add(new THREE.CylinderGeometry(.022, .024, .04, 16, 1, true), GLASS, 0, .17, 0, b, false); nk.renderOrder = 3;
+      const f = cyl(.05, .05, .012, GLASS, 0, .006, 0, b, 22, false); f.renderOrder = 3;
+      const rim = add(new THREE.TorusGeometry(.023, .004, 5, 16), RIM, 0, .19, 0, b, false); rim.rotation.x = Math.PI/2; rim.renderOrder = 4; }},
+  volcano: {name:'Volcano', kind:'vessel', r:.2, h:.17, ri:.036, floor:.06, hi:.1, see:true, flow:'liquid', rate:40, mouth:.045, cone:true,
+    build: b => { outline(add(new THREE.CylinderGeometry(.05, .2, .17, 18, 1, true), T(0x8a5a3a, {side:THREE.DoubleSide}), 0, .085, 0, b), 1.03);
+      for (const [y, r, c] of [[.04, .175, 0x6b4430], [.11, .1, 0x9a6a45]]) { const s = add(new THREE.TorusGeometry(r, .012, 5, 18), T(c), 0, y, 0, b); s.rotation.x = Math.PI/2; s.scale.z = .5; }
+      cyl(.036, .036, .06, T(C.woodDk), 0, .03 + .06, 0, b, 14, false);
+      const rim = add(new THREE.TorusGeometry(.046, .008, 6, 18), T(0x5a3626), 0, .17, 0, b); rim.rotation.x = Math.PI/2; }},
+  // ---------- supplies ----------
+  pitcher: {name:'Water', kind:'vessel', r:.08, h:.19, ri:.068, floor:.012, hi:.17, see:true, flow:'liquid', rate:90,
+    build: b => { glass(b, .068, .19, .012); const hd = add(new THREE.TorusGeometry(.045, .009, 6, 14, Math.PI), T(0xdff1f5, {transparent:true, opacity:.6}), .072, .1, 0, b, false); hd.rotation.z = -Math.PI/2; }},
+  vinegar: {name:'Vinegar', kind:'vessel', r:.036, h:.19, ri:.032, floor:.01, hi:.13, flow:'liquid', rate:55, mouth:.012,
+    build: b => { bottle(b, .036, .19, 0xf4f1e8, C.rust, .013, .13); band(b, .037, .07, .06, label('VINEGAR', '#f4f1e8', '#b5552f', 256, 64, 40)); }},
+  lemon:  {name:'Lemon juice', kind:'vessel', r:.038, h:.11, ri:.03, floor:.01, hi:.07, flow:'liquid', rate:35, mouth:.008,
+    build: b => { const l = outline(sph(.038, T(0xf2d43a), 0, .045, 0, b, 16), 1.05); l.scale.set(1, 1.15, 1); add(new THREE.ConeGeometry(.012, .03, 10), T(0x4f9a3e), 0, .098, 0, b); }},
+  milk:   {name:'Milk', kind:'vessel', r:.054, h:.19, ri:.034, floor:.01, hi:.13, flow:'liquid', rate:60, mouth:.016,
+    build: b => { outline(box(.075, .14, .075, T(0xf7f6f0), 0, .07, 0, b), 1.03);
+      const f = add(new THREE.PlaneGeometry(.07, .06), label('MILK', '#4a7ad0', '#ffffff', 128, 110, 40), 0, .075, .0381, b, false); f.renderOrder = 1;
+      for (const sz of [-1, 1]) box(.077, .005, .054, T(0x4a7ad0), 0, .158, sz*.019, b).rotation.x = sz*.78;
+      box(.077, .014, .006, T(0xf7f6f0), 0, .181, 0, b); }},
+  cabbage: {name:'Cabbage juice', kind:'vessel', r:.064, h:.16, ri:.054, floor:.012, hi:.14, see:true, flow:'liquid', rate:70,
+    build: b => { glass(b, .054, .16, .012); const hd = add(new THREE.TorusGeometry(.038, .008, 6, 14, Math.PI), T(0xdff1f5, {transparent:true, opacity:.6}), .058, .085, 0, b, false); hd.rotation.z = -Math.PI/2; }},
+  oil:    {name:'Oil', kind:'vessel', r:.035, h:.22, ri:.03, floor:.01, hi:.14, see:true, flow:'liquid', rate:45, mouth:.012,
+    build: b => { const w = add(new THREE.CylinderGeometry(.035, .035, .15, 18, 1, true), GLASS, 0, .075, 0, b, false); w.renderOrder = 3;
+      const nk = add(new THREE.CylinderGeometry(.013, .035, .045, 16, 1, true), GLASS, 0, .172, 0, b, false); nk.renderOrder = 3;
+      cyl(.014, .014, .02, T(C.gold), 0, .21, 0, b, 10); }},
+  soap:   {name:'Dish soap', kind:'vessel', r:.034, h:.18, ri:.028, floor:.01, hi:.13, flow:'liquid', rate:25, mouth:.008,
+    build: b => { bottle(b, .034, .18, 0x5fbf73, 0xf4f0e6, .012, .14); band(b, .035, .075, .05, label('SOAP', '#f4f0e6', '#2f8f4a', 256, 64, 42)); }},
+  red:    {name:'Red coloring', kind:'vessel', r:.021, h:.082, ri:.016, floor:.005, hi:.045, flow:'drops', mouth:.003, build: dropper(0xd8303a)},
+  yellow: {name:'Yellow coloring', kind:'vessel', r:.021, h:.082, ri:.016, floor:.005, hi:.045, flow:'drops', mouth:.003, build: dropper(0xf2c82e)},
+  blue:   {name:'Blue coloring', kind:'vessel', r:.021, h:.082, ri:.016, floor:.005, hi:.045, flow:'drops', mouth:.003, build: dropper(0x2f6fe0)},
+  soda:   {name:'Baking soda', kind:'vessel', r:.06, h:.14, ri:.04, floor:.01, hi:.12, flow:'liquid', rate:22, mouth:.03, build: powderBox('BAKING SODA', '#e8752e', '#ffffff')},
+  sugar:  {name:'Sugar', kind:'vessel', r:.06, h:.14, ri:.04, floor:.01, hi:.12, flow:'liquid', rate:18, mouth:.03, build: powderBox('SUGAR', '#f4efe2', '#6d3b5e')},
+  sand:   {name:'Sand', kind:'vessel', r:.046, h:.075, ri:.04, floor:.008, hi:.06, see:true, flow:'liquid', rate:18,
+    build: b => { outline(add(new THREE.CylinderGeometry(.046, .036, .075, 16, 1, true), T(0xd8473a, {side:THREE.DoubleSide}), 0, .0375, 0, b), 1.04); cyl(.036, .036, .008, T(0xd8473a), 0, .004, 0, b, 16);
+      const hd = add(new THREE.TorusGeometry(.046, .003, 4, 16, Math.PI), T(C.ink), 0, .075, 0, b, false); hd.rotation.y = Math.PI/2; }},
+  salt:   {name:'Salt', kind:'vessel', r:.026, h:.09, ri:.02, floor:.005, hi:.06, flow:'shake', mouth:.01, build: shaker(0xc9ced6)},
+  pepper: {name:'Pepper', kind:'vessel', r:.026, h:.09, ri:.02, floor:.005, hi:.06, flow:'shake', mouth:.01, build: shaker(0x3a2e26)},
+  balloon: {name:'Balloon', kind:'vessel', r:.045, h:.11, ri:.03, floor:.01, hi:.08, flow:'liquid', rate:30, mouth:.016, catch:.05, balloon:true,
+    build: b => {
+      // the blob is built mouth-down at its origin so it can hang off a bottle neck; standing free it's flipped over
+      const blob = new THREE.Group(); b.add(blob);
+      const skin = T(0xe0423a), sk = outline(sph(.042, skin, 0, .06, 0, blob, 16), 1.05); sk.scale.set(.85, 1.15, .85);
+      cyl(.012, .016, .03, skin, 0, .012, 0, blob, 10); const lip = add(new THREE.TorusGeometry(.012, .004, 5, 12), skin, 0, 0, 0, blob); lip.rotation.x = Math.PI/2;
+      blob.rotation.z = Math.PI; blob.position.y = .11; return {blob, skin: sk}; }},
+  // ---------- things that sink or float ----------
+  egg:    {name:'Egg', kind:'solid', r:.028, h:.07, density:1.03, build: b => { const e = outline(sph(.028, T(0xf4e8d2), 0, .035, 0, b, 16), 1.06); e.scale.y = 1.25; }},
+  apple:  {name:'Apple', kind:'solid', r:.043, h:.09, density:.8, build: b => { const a = outline(sph(.043, T(0xd23a2e), 0, .042, 0, b, 16), 1.05); a.scale.y = .92;
+    cyl(.004, .004, .025, T(C.woodDk), 0, .085, 0, b, 5); const lf = sph(.012, T(C.moss), .012, .088, 0, b, 8); lf.scale.set(1.4, .4, .8); }},
+  rock:   {name:'Rock', kind:'solid', r:.032, h:.05, density:2.6, build: b => { const r = outline(add(new THREE.DodecahedronGeometry(.032), T(0x8a8494), 0, .024, 0, b), 1.06); r.scale.y = .75; r.rotation.set(.4, .7, .2); }},
+  cork:   {name:'Cork', kind:'solid', r:.02, h:.042, density:.24, build: b => outline(cyl(.018, .021, .042, T(0xc89a64), 0, .021, 0, b, 12), 1.06)},
+  coin:   {name:'Coin', kind:'solid', r:.021, h:.006, density:8.9, build: b => outline(cyl(.021, .021, .006, T(0xc8783a), 0, .003, 0, b, 18), 1.08)},
+  duck:   {name:'Rubber duck', kind:'solid', r:.036, h:.07, density:.25, build: b => { const y = T(0xf7d23a), bd = outline(sph(.032, y, 0, .026, 0, b, 14), 1.05); bd.scale.set(1.2, .8, 1);
+    outline(sph(.02, y, .022, .058, 0, b, 12), 1.06); const bk = sph(.009, T(0xe8752e), .043, .055, 0, b, 8); bk.scale.set(1.4, .6, 1);
+    for (const z of [-.009, .009]) sph(.0035, T(C.ink), .035, .064, z, b, 5, false); }},
+  paperclip: {name:'Paperclip', kind:'solid', r:.022, h:.006, density:7.8, magnetic:true,
+    build: b => { const m = T(0xc8ced8); for (const [s, x] of [[1, 0], [.62, .004]]) { const t = flat(b, add(new THREE.TorusGeometry(.01*s, .0018, 4, 14), m, x, .003, 0, b)); t.scale.x = 1.9; } }},
+  nail:   {name:'Nail', kind:'solid', r:.036, h:.012, density:7.8, magnetic:true,
+    build: b => { const s = cyl(.0028, .0028, .065, T(0x9aa0aa), 0, .005, 0, b, 6); s.rotation.z = Math.PI/2; const hd = cyl(.008, .008, .003, T(0x9aa0aa), -.033, .005, 0, b, 10); hd.rotation.z = Math.PI/2;
+      const tp = add(new THREE.ConeGeometry(.0028, .008, 6), T(0x9aa0aa), .036, .005, 0, b); tp.rotation.z = -Math.PI/2; }},
+  key:    {name:'Key', kind:'solid', r:.03, h:.008, density:7.8, magnetic:true,
+    build: b => { const m = T(0xb8bec8); flat(b, add(new THREE.TorusGeometry(.011, .004, 5, 14), m, -.018, .004, 0, b)); box(.034, .005, .006, m, .01, .004, 0, b); box(.006, .005, .008, m, .022, .004, .006, b); box(.005, .005, .006, m, .014, .004, .005, b); }},
+  foil:   {name:'Foil ball', kind:'solid', r:.024, h:.046, density:.4,
+    build: b => { const g = new THREE.IcosahedronGeometry(.023, 1), p = g.attributes.position;
+      for (let i = 0; i < p.count; i++) { const k = .82 + ((i*7919) % 13)/13*.3; p.setXYZ(i, p.getX(i)*k, p.getY(i)*k, p.getZ(i)*k); } g.computeVertexNormals();
+      outline(add(g, T(0xdfe4ea, {emissive:0x555a60, emissiveIntensity:.3}), 0, .023, 0, b), 1.06); }},
+  crayon: {name:'Crayon', kind:'solid', r:.037, h:.016, density:1.1,
+    build: b => { const c = cyl(.008, .008, .06, T(0x3f63c8), 0, .008, 0, b, 8); c.rotation.z = Math.PI/2; const t = add(new THREE.ConeGeometry(.008, .014, 8), T(0x3f63c8), .037, .008, 0, b); t.rotation.z = -Math.PI/2;
+      const w = cyl(.0085, .0085, .03, T(0xf4f0e6), -.005, .008, 0, b, 8); w.rotation.z = Math.PI/2; }},
+  button: {name:'Button', kind:'solid', r:.02, h:.007, density:1.2,
+    build: b => { outline(cyl(.02, .02, .007, T(0xd36a8f), 0, .0035, 0, b, 16), 1.08); for (const [x, z] of [[-.005, -.005], [.005, -.005], [-.005, .005], [.005, .005]]) cyl(.0025, .0025, .008, T(0x8a3a5a), x, .004, z, b, 6, false); }},
+  tablet: {name:'Fizzy tablet', kind:'solid', r:.02, h:.008, density:2, fizz:8, build: b => outline(cyl(.02, .02, .008, T(0xf6f6f0), 0, .004, 0, b, 16), 1.08)},
+  // ---------- tools ----------
+  spoon:  {name:'Spoon', kind:'tool', tool:'spoon', r:.02, h:.2, grip:.17,
+    build: b => { const m = T(0xc8ced8); box(.008, .17, .004, m, 0, .11, 0, b); const bowl = outline(sph(.016, m, 0, .016, 0, b, 12), 1.08); bowl.scale.set(1, 1.3, .5); }},
+  swab:   {name:'Cotton swab', kind:'tool', tool:'swab', r:.012, h:.15, grip:.12,
+    build: b => { cyl(.0025, .0025, .13, T(0xf4f0e6), 0, .075, 0, b, 6); const tip = sph(.008, T(0xffffff), 0, .009, 0, b, 10); tip.scale.y = 1.5; const top = sph(.008, T(0xffffff), 0, .141, 0, b, 10); top.scale.y = 1.5; return {tip}; }},
+  magnet: {name:'Magnet', kind:'tool', tool:'magnet', r:.045, h:.085, grip:.07,
+    build: b => { outline(add(new THREE.TorusGeometry(.03, .011, 8, 18, Math.PI), T(0xd8303a), 0, .05, 0, b), 1.06);
+      for (const x of [-.03, .03]) { box(.022, .03, .022, T(0xd8303a), x, .035, 0, b); box(.022, .018, .022, T(0xc8ced8), x, .011, 0, b); } }}
+};
+
+// what each supply comes filled with, and how much it holds; Free Lab tops them up whenever they're set down
+const STOCK = {pitcher:[340, {water:340}], vinegar:[250, {vinegar:250}], lemon:[150, {lemon:150}], milk:[300, {milk:300}],
+  cabbage:[300, {cabbage:300}], oil:[200, {oil:200}], soap:[150, {soap:150}], saucer:[20, {soap:20}],
+  red:[60, {red:60}], yellow:[60, {yellow:60}], blue:[60, {blue:60}], soda:[160, {soda:160}], sugar:[120, {sugar:120}],
+  sand:[80, {sand:80}], salt:[60, {salt:60}], pepper:[40, {pepper:40}]};
+for (const k in STOCK) Object.assign(ITEMS[k], {cap:STOCK[k][0], fill:STOCK[k][1], supply:true});
