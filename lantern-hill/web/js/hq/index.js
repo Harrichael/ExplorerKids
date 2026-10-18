@@ -1,0 +1,45 @@
+// Lantern Hill HQ: the cottage, garden and hills around them. Importing this builds it.
+// The areas share one seeded RNG, so their import order is the layout; reordering
+// them reshuffles every tree, flower and rock.
+
+import './scene.js';
+import './ground.js';
+import './cottage.js';
+import './garden.js';
+import './residents.js';
+import './wider.js';
+import './garden-life.js';
+import { bFlush } from '../core/kit.js';
+import { addUsable } from '../core/world.js';
+import { openWardrobe } from '../ui/wardrobe.js';
+import { groundAt } from './garden.js';
+import { npcs } from './residents.js';
+import { colliders, hqAnims, occMeshes, occluders, scene, sun } from './scene.js';
+
+bFlush(scene);
+
+const surfaceAt = (x, z, y) => y > .3 ? 'deck' : (x < 10.2 ? 'wood' : 'grass');
+
+function areaFor(x, z, y){
+  if (y > 2) return 'The Treehouse';
+  if (x > 10.3) { if (x > 13 && x < 18.5 && z > 3 && z < 8) return 'Wonder Bus'; if (x > 20 && z > 2.5) return 'Lily Pond'; return 'Garden Yard'; }
+  if (x < -4.5) return 'Library Nook';
+  if (x > 4.5 && z < -1.2) return 'Science Corner';
+  if (x > 4.5) return 'Entry Hall';
+  return 'Hearth Room';
+}
+
+export const HQ = {scene, colliders, occluders, occMeshes, npcs, usables:[], sun, cam:null, bounds:null,
+  ground:groundAt, surface:surfaceAt, area:areaFor, update:(dt, t) => hqAnims.forEach(f => f(dt, t))};
+
+async function openFlashcards(){
+  const { openLearn } = await import('../learn/flashcards.js');
+  openLearn();
+}
+async function boardWonderBus(){
+  const [{ startTrip }, { tectonics }] = await Promise.all([import('../trips/field-trip.js'), import('../trips/tectonics/index.js')]);
+  startTrip(tectonics);
+}
+addUsable(HQ, {name:'Wardrobe', x:8.95, z:3.2, range:1.7, verb:'Open the wardrobe', short:'Open', glow:[8.9, 2.95, 3.2], action: () => openWardrobe(false)});
+addUsable(HQ, {name:'Flashcards', x:-.45, z:5.4, range:1.5, verb:'Practice phonogram cards', short:'Cards', glow:[-.45, 1.25, 6.1], action:openFlashcards});
+addUsable(HQ, {name:'Wonder Bus', x:15.9, z:3.6, range:1.9, verb:'Board the Wonder Bus', short:'Board', glow:[15.6, 2.9, 5.5], action:boardWonderBus});

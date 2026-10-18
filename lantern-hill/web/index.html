@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Lantern Hill HQ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Andika:wght@400;700&family=Caprasimo&family=Nunito:wght@600;800;900&display=swap">
+<link rel="stylesheet" href="css/lantern-hill.css">
+<script type="importmap">{"imports": {"three": "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js"}}</script>
+<script type="module" src="js/main.js"></script>
+</head>
+<body>
+
+<canvas id="world"></canvas>
+<div class="vignette"></div>
+<div class="hud">
+  <div class="plate"><h1>Lantern Hill HQ</h1><div class="area" id="area">Hearth Room</div><div class="obj" id="obj" hidden></div></div>
+  <div class="right">
+    <div class="hudbtns"><button class="pill" id="leaveTrip" hidden>Leave trip</button><button id="sound" aria-pressed="true">♪ Sound on</button></div>
+    <div class="keys"><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> walk · <kbd>Shift</kbd> run<br><kbd>Space</kbd> talk · <kbd>E</kbd> use · <kbd>M</kbd> sound</div>
+  </div>
+</div>
+<div id="prompt" hidden></div>
+<div id="dialog" hidden>
+  <div class="bust" aria-hidden="true"><canvas id="bustCan"></canvas></div>
+  <div class="tab"><span class="dot" id="dDot"></span><span class="name" id="dName"></span></div>
+  <div class="role" id="dRole"></div>
+  <p id="dText"></p>
+  <span class="more" id="dMore" hidden>▼</span>
+</div>
+<div id="wardrobe" hidden role="dialog" aria-labelledby="wTitle">
+  <header><h2 id="wTitle">Wardrobe</h2><div class="hint">Drag your explorer to spin them around</div></header>
+  <div class="wbody" id="wbody"></div>
+  <footer><button class="wbtn ghost" id="wRand">Surprise me</button><button class="wbtn" id="wDone">Let's explore!</button></footer>
+</div>
+<div id="stick"><div id="knob"></div></div>
+<button id="talk" aria-label="Talk">Talk</button>
+<button id="use" hidden>Open</button>
+<div id="learn" hidden role="dialog" aria-labelledby="lTitle">
+  <div class="lwrap">
+    <div class="ltop">
+      <div><div class="sub">Lantern Hill learning table</div><h2 id="lTitle">Phonogram Cards</h2></div>
+      <button class="pill" id="lBack">← Back to Lantern Hill</button>
+    </div>
+    <div class="decks" id="decks" role="group" aria-label="Choose a deck"></div>
+    <div class="hoot"><span class="ow" aria-hidden="true"></span><span id="hootTip"><b>Professor Hoot:</b> Say every sound the card makes, in order. Then flip it to check.</span></div>
+    <div class="progress"><span id="lCount">0 of 25 learned</span><span class="bar"><i id="lBar"></i></span></div>
+    <div id="lPlay">
+      <div class="stage">
+        <div class="card" id="card" tabindex="0" role="button" aria-label="Flip card">
+          <div class="face front-face"><span class="tag" id="cTag"></span><span class="stars" id="cStars"></span><span class="ph" id="cPh"></span><span class="dots" id="cDots"></span></div>
+          <div class="face back-face"><span class="tag" id="cTag2"></span><span class="bph" id="cPh2"></span><ul class="sounds" id="cSounds"></ul></div>
+        </div>
+      </div>
+      <div class="lbtns" id="preBtns"><button class="lbtn" id="bFlip">Flip the card</button></div>
+      <div class="lbtns" id="postBtns" hidden><button class="lbtn soft" id="bAgain">Practice again</button><button class="lbtn soft" id="bHearS">Hear the sounds</button><button class="lbtn soft" id="bHear">Hear the words</button><button class="lbtn yes" id="bKnew">I knew it!</button></div>
+      <div class="keyhint" style="margin-top:10px">Space flips · S hears the sounds · W hears the words · → I knew it · ← practice again · Esc goes back</div>
+    </div>
+    <div id="lDone" hidden></div>
+  </div>
+</div>
+<div id="pageTurn" hidden><div class="pt-stack"></div><div class="pt-shadow" id="ptShadow"></div><div class="pt-book" id="ptBook"></div></div>
+<div id="banner" hidden><div class="bn-ch" id="bnCh"></div><div class="bn-t" id="bnT"></div></div>
+<div id="badge" hidden role="dialog" aria-labelledby="bTitle"><div class="page"><canvas id="badgeCan" width="360" height="360"></canvas><div class="ch">Field trip badge earned</div><h3 id="bTitle">Plate Tectonics Explorer</h3><p id="bText"></p><button class="wbtn" id="badgeOk">Hooray!</button></div></div>
+<div id="start"><div class="card"><h2>Lantern Hill HQ</h2><div class="sub">A cozy place for curious explorers</div><div class="go" id="go">Press any key to begin</div></div></div>
+</body>
+</html>

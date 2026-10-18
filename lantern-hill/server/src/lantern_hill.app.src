@@ -1,0 +1,8 @@
+{application, lantern_hill,
+ [{description, "Serves the Lantern Hill HQ game"},
+  {vsn, "0.1.0"},
+  {registered, [lantern_hill_sup]},
+  {mod, {lantern_hill_app, []}},
+  {applications, [kernel, stdlib, cowboy]},
+  {env, [{port, 8080}]},
+  {licenses, ["Apache-2.0"]}]}.
