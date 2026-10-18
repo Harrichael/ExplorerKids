@@ -15,7 +15,9 @@ img{max-width:100%}
 html,body{height:100%;overflow:hidden}
 [hidden]{display:none!important}
 body{background:var(--night);color:var(--parch);font-family:var(--body);touch-action:none;user-select:none;-webkit-user-select:none}
-#world{position:fixed;inset:0;display:block;width:100%;height:100%}
+#world,#storybook,#storyStash{position:fixed;inset:0;display:block;width:100%;height:100%}
+.hud,#prompt,#stick,#talk,#use{transition:opacity .3s}
+.turning .hud,.turning #prompt,.turning #stick,.turning #talk,.turning #use{opacity:0}
 .vignette{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(20,12,28,.55) 100%)}
 .hud{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));display:flex;justify-content:space-between;align-items:flex-start;gap:12px;pointer-events:none}
 .plate{background:rgba(26,19,32,.82);border:2px solid var(--gold);border-radius:14px;padding:6px 14px 6px;box-shadow:0 0 0 3px var(--ink), 0 6px 18px rgba(0,0,0,.35)}
@@ -166,16 +168,17 @@ button.snd:focus-visible,button.word:focus-visible{outline:3px solid #6d3b5e;out
 #dialog .tab{left:164px}
 .bust{position:absolute;left:14px;bottom:14px;width:134px;height:134px;border-radius:18px;background:radial-gradient(circle at 50% 30%, #5e4474 0%, #2a1f3a 72%);border:2.5px solid var(--gold);box-shadow:0 0 0 3px var(--ink), 0 6px 16px rgba(0,0,0,.4);overflow:hidden}
 #bustCan{display:block;width:100%;height:100%}
+/* the explorer's own thoughts: a dreamy cloud instead of a speech box, with bubbles floating up from it */
+#dialog.thought{--mist:#b9c8f0;background:linear-gradient(180deg, rgba(62,58,104,.93), rgba(38,34,70,.93));border:2.5px dashed var(--mist);border-radius:38px;box-shadow:0 0 0 4px var(--ink), inset 0 0 24px rgba(185,200,240,.18), 0 10px 30px rgba(0,0,0,.45)}
+#dialog.thought p{font-style:italic;font-weight:700;color:#eef0ff}
+#dialog.thought .tab{background:#4b4a88;border-color:var(--mist);border-radius:999px}
+#dialog.thought .role,#dialog.thought .more{color:var(--mist)}
+#dialog.thought .bust{border-color:var(--mist);border-radius:50%;background:radial-gradient(circle at 50% 30%, #6a6aa8 0%, #2c2a52 72%)}
+#dialog.thought::before,#dialog.thought::after{content:'';position:absolute;border-radius:50%;background:#3e3a68;border:2.5px solid var(--mist);box-shadow:0 0 0 3px var(--ink)}
+#dialog.thought::before{right:62px;top:-26px;width:20px;height:20px}
+#dialog.thought::after{right:42px;top:-46px;width:11px;height:11px}
 @media (max-width:600px){#dialog{padding-left:18px;padding-top:30px;min-height:0}#dialog .tab{left:118px}.bust{left:12px;bottom:calc(100% - 22px);width:98px;height:98px}}
 .plate .obj{margin-top:4px;font-size:12.5px;font-weight:800;color:var(--parch);opacity:.92;max-width:34ch;line-height:1.35}
-#pageTurn{position:fixed;inset:0;perspective:2400px;pointer-events:none;z-index:6;overflow:hidden}
-.pt-page{position:absolute;inset:0;transform-origin:0 50%;transform-style:preserve-3d;transition:transform 1.3s cubic-bezier(.45,.05,.25,1)}
-.pt-page.turn{transform:rotateY(-178deg)}
-.pt-front,.pt-back{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
-.pt-front{background:#1a1320 center/cover no-repeat}
-.pt-front::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg, rgba(0,0,0,0) 55%, rgba(20,10,20,.45));opacity:0;transition:opacity 1.3s}
-.pt-page.turn .pt-front::after{opacity:1}
-.pt-back{transform:rotateY(180deg);background:#efe0bf repeating-linear-gradient(0deg, rgba(109,59,94,.07) 0 2px, transparent 2px 34px);box-shadow:inset -50px 0 70px -30px rgba(90,50,20,.55)}
 #banner{position:fixed;left:50%;top:calc(92px + env(safe-area-inset-top,0px));transform:translateX(-50%);text-align:center;pointer-events:none;background:#efe0bf;color:#1a1320;border:3px solid var(--gold);border-radius:14px;box-shadow:0 0 0 4px var(--ink),0 12px 30px rgba(0,0,0,.45);padding:9px 26px 11px;width:max-content;max-width:calc(100vw - 48px);animation:bannerIn 3.3s ease both;z-index:4}
 .bn-ch{font-weight:900;font-size:12px;letter-spacing:2.5px;text-transform:uppercase;color:#6d3b5e}
 .bn-t{font-family:var(--display);font-size:clamp(22px,5.5vw,34px);line-height:1.1;text-wrap:balance}
@@ -186,14 +189,5 @@ button.snd:focus-visible,button.word:focus-visible{outline:3px solid #6d3b5e;out
 #badge .ch{font-weight:900;font-size:12px;letter-spacing:2.5px;text-transform:uppercase;color:#6d3b5e}
 #badge h3{margin:0;font-family:var(--display);font-weight:400;font-size:28px;line-height:1.1}
 #badge p{margin:0 0 6px;font-weight:800;font-size:15px;line-height:1.45;max-width:36ch}
-.pt-book{position:absolute;inset:0;transform-style:preserve-3d}
-.pt-s{position:absolute;top:0;height:100%;transform-style:preserve-3d;transform-origin:0 50%;will-change:transform}
-.pt-f,.pt-b{position:absolute;top:0;left:0;height:100%;width:calc(100% + 1px);backface-visibility:hidden;-webkit-backface-visibility:hidden;background-color:#1a1320;background-repeat:no-repeat}
-.pt-b{transform:rotateY(180deg);background:#efe0bf repeating-linear-gradient(0deg, rgba(109,59,94,.07) 0 2px, transparent 2px 34px)}
-.pt-sh{position:absolute;inset:0;background:#120a10;opacity:0;pointer-events:none}
-.pt-b .pt-sh{background:#5a3a20}
-.pt-edge{position:absolute;top:0;left:100%;height:100%;width:12px;transform-origin:0 50%;transform:rotateY(90deg);background:repeating-linear-gradient(90deg,#fbf3df 0 1px,#d8c49c 1px 2px);box-shadow:inset 0 0 6px rgba(90,50,20,.5)}
-.pt-shadow{position:absolute;top:0;left:0;height:100%;width:260px;background:linear-gradient(90deg, rgba(12,6,16,.55), rgba(12,6,16,0));opacity:0;pointer-events:none}
-.pt-stack{position:absolute;top:0;right:0;height:100%;width:10px;background:repeating-linear-gradient(90deg,#f3e8cf 0 1px,#cdb88f 1px 2px);box-shadow:-3px 0 8px rgba(0,0,0,.35)}
-@media (prefers-reduced-motion: reduce){.pt-page,.pt-front::after{transition:none}#banner,#badge,#badge .page{animation:none}}
+@media (prefers-reduced-motion: reduce){#banner,#badge,#badge .page{animation:none}}
 @media (prefers-reduced-motion: reduce){#dialog .more,#start .go,#use,#learn,#trip,.tdlg .more,.tbtn.next,.card.enter{animation:none}.card{transition:none}.wbtn:active,.lbtn:active{transform:none}}

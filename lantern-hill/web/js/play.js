@@ -198,3 +198,6 @@ function frame(){
   requestAnimationFrame(frame);
 }
 export function start(){ frame(); }
+// draws now, without advancing time, the frame the play loop will draw next; a page turn prints it
+// on the page it turns to, so handing back to the live world shows no jump
+export function drawWorld(){ update(0); renderer.render(game.world.scene, camera); }

@@ -18,6 +18,24 @@ rebar3 ct                        # server tests
 rebar3 as prod release           # self-contained release with a copy of web/ inside
 ```
 
+Updates go live without a restart, and open tabs follow them. The page at `/` is pinned to a content hash of `web/` (`<base href="/v/<hash>/">`), each hash is kept as a snapshot under `server/snapshots/` (the last five), and `/updates` tells tabs over Server-Sent Events when a new one is live; a tab moves onto it once the player is back in HQ with nothing open, behind a storybook page turn, and lands where they stood. In `rebar3 shell`, saving a file in `web/` publishes it within a second, and `r3:compile()` hot-loads server code. In production, ship a release upgrade: bump the version in `src/lantern_hill.app.src` and `rebar.config`, add the step to `ebin/lantern_hill.appup` (load what changed, `lantern_hill_sup:reconcile()`, then `lantern_hill_app:upgraded()`), then
+
+```sh
+rebar3 as prod release && rebar3 as prod relup -n lantern_hill -v NEW -u OLD && rebar3 as prod tar -n lantern_hill -v NEW
+cp _build/prod/rel/lantern_hill/lantern_hill-NEW.tar.gz <installed release>/releases/
+<installed release>/bin/lantern_hill upgrade NEW
+```
+
+The old release must be in `_build/prod/rel/lantern_hill` when the relup is built.
+
+To keep a server on whatever a branch says, follow it:
+
+```sh
+FOLLOW_BRANCH=main FOLLOW_INTERVAL=5 rebar3 shell     # interval in seconds, 3-10, default 5
+```
+
+The server checks the branch out into `server/follow/` (never your working copy) and polls the remote. Each new commit goes live whole or not at all: frontend changes publish like any edit, and when `server/` changed it runs `rebar3 compile` on the checkout and hot-loads the new code; the supervision tree then reconciles itself, starting, stopping or restarting children to match. A new dependency is added and started. A commit that fails to compile, or that upgrades an existing dependency (Cowboy, say), is logged and held back; the node stays on the last good commit until the branch moves again. An upgraded dependency needs a restart, which open tabs ride out (snapshots outlive the node and the update stream reconnects); a zero-gap handover, starting the new node on the same port with `SO_REUSEPORT` while the old one drains, is a possible follow-up.
+
 The frontend is plain ES modules with no build step; three.js and Matter.js come from a CDN through the import map in `web/index.html`. `web/js/main.js` is the entry point:
 
 - `core/`: renderer, sound, the mesh/material build kit, world building blocks

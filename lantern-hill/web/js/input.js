@@ -38,6 +38,7 @@ addEventListener('pointerdown', () => Sound.init(), {passive:true});
 
 const soundBtn = document.getElementById('sound');
 function toggleSound(){ const on = Sound.toggle(); soundBtn.textContent = on ? '♪ Sound on' : '♪ Sound off'; soundBtn.setAttribute('aria-pressed', on); }
+export function setSound(want){ if (Sound.isOn() !== want) toggleSound(); }
 soundBtn.addEventListener('click', e => { e.stopPropagation(); Sound.init(); toggleSound(); soundBtn.blur(); });
 
 export const stick = document.getElementById('stick'), knob = document.getElementById('knob');

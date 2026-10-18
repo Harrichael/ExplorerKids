@@ -135,11 +135,13 @@ const bees = [];
 }
 
 // ----- a bench facing the pond, a birdbath, and a wheelbarrow of flowers -----
-{ const bn = grp(22.6, 0, 8.25, Math.PI);
+// tucked back against the hedge: the pond's own collider leaves only a narrow strip to stand in front of it
+export const BENCH = {x:22.6, z:8.4};
+{ const bn = grp(BENCH.x, 0, BENCH.z);
   for (let i = 0; i < 3; i++) { const sl = box(1.6, .06, .14, T(C.woodLt), 0, .48, -.15 + i*.15, bn); outline(sl, 1.04); }
   for (let i = 0; i < 2; i++) { const sl = box(1.6, .14, .05, T(C.woodLt), 0, .72 + i*.2, .2, bn); outline(sl, 1.04); }
   for (const sx of [-.7, .7]) { box(.08, .48, .08, T(C.woodDk), sx, .24, -.15, bn); box(.08, 1.0, .08, T(C.woodDk), sx, .5, .2, bn); box(.08, .06, .45, T(C.woodDk), sx, .66, 0, bn); }
-  col(21.75, 23.45, 7.9, 8.6);
+  col(BENCH.x - .85, BENCH.x + .85, BENCH.z - .25, BENCH.z + .35);
   const bb = grp(19.2, 0, 4.4);
   cyl(.12, .18, .7, T(0x9a90a0), 0, .35, 0, bb, 10); cyl(.32, .2, .05, T(0x9a90a0), 0, .03, 0, bb, 12);
   const bowl = add(new THREE.SphereGeometry(.42, 16, 8, 0, Math.PI*2, Math.PI/2, Math.PI/2), T(0x9a90a0, {side:THREE.DoubleSide}), 0, .9, 0, bb); bowl.scale.y = .45; outline(bowl, 1.04);
@@ -164,3 +166,55 @@ for (let i = 0; i < 7; i++) { const g = grp(0, 0, 0), c = [0xe9d9b8, 0xd36a8f, 0
   flutters.push({g, ws, cx:fr(13, 25), cz:fr(-8, 7), ph:fr(0, 6.28), r:fr(.8, 2), sp:fr(.4, .8)}); }
 hqAnims.push((dt, t) => { for (const f of flutters) { const a = f.ph + t*f.sp; f.g.position.set(f.cx + Math.cos(a)*f.r + Math.sin(a*2.3)*.4, .7 + Math.sin(t*1.9 + f.ph)*.35 + .3, f.cz + Math.sin(a*1.4)*f.r); f.g.rotation.y = -a; const fl = Math.sin(t*16 + f.ph)*.9; f.ws[0].rotation.z = fl; f.ws[1].rotation.z = -fl; } });
 hqAnims.push((dt, t) => { lily.forEach((p, i) => p.rotation.y = p.userData.ry + Math.sin(t * .5 + i) * .2); });
+
+// ----- pond critters at every stage of growing up, for whoever sits on the bench to wonder about -----
+// placed by formula rather than the seeded RNG so adding them reshuffles nothing else
+const spawn = grp(21.45, .072, 6.15), jelly = T(0xdcefd6, {transparent:true, opacity:.55});
+for (let i = 0; i < 26; i++) { const a = i*2.4, r = Math.sqrt(i/26)*.2, x = Math.cos(a)*r, y = (i%3)*.03, z = Math.sin(a)*r*.8;
+  sph(.05, jelly, x, y, z, spawn, 8, false); sph(.016, T(C.ink), x, y + .012, z, spawn, 5, false); }
+const tads = [];
+for (let i = 0; i < 6; i++) { const g = grp(0, .078, 0); sph(.042, T(0x3a3428), 0, 0, 0, g, 8, false).scale.set(1, .7, 1.25);
+  const tail = grp(0, 0, -.035, 0, g), fin = add(new THREE.ConeGeometry(.03, .13, 4), T(0x4a4232), 0, 0, -.06, tail, false); fin.rotation.x = -Math.PI/2; fin.scale.z = .35;
+  tads.push({g, tail, ph:i*1.05, r:.16 + (i%3)*.08, sp:i%2 ? .8 : -.65}); }
+hqAnims.push((dt, t) => { for (const d of tads) { const a = d.ph + t*d.sp; d.g.position.set(22.05 + Math.cos(a)*d.r*1.4, .078, 6.25 + Math.sin(a)*d.r);
+  d.g.rotation.y = -a + (d.sp < 0 ? Math.PI : 0); d.tail.rotation.y = Math.sin(t*14 + d.ph)*.6; } });
+// a froglet on the pad nearest the bench: legs grown, tail not quite gone
+const froglet = grp(.04, .01, -.03, 2.2, lily[4]);
+{ const fb = sph(.065, T(0x7aa84a), 0, .045, 0, froglet, 10); fb.scale.set(1.15, .8, 1); outline(fb, 1.1);
+  for (const sd of [-1, 1]) { outline(sph(.03, T(0x7aa84a), .035, .1, sd*.038, froglet, 8), 1.1); sph(.015, T(C.ink), .058, .105, sd*.04, froglet, 6, false);
+    sph(.03, T(0x6a9a3e), -.035, .02, sd*.06, froglet, 6, false).scale.set(1.6, .6, .8); }
+  add(new THREE.ConeGeometry(.028, .12, 5), T(0x6a9a3e), -.11, .04, 0, froglet, false).rotation.z = Math.PI/2; }
+const striders = [];
+for (let i = 0; i < 3; i++) { const g = grp(0, .076, 0); sph(.025, T(0x2a2230), 0, .02, 0, g, 6, false).scale.set(.7, .6, 2.2);
+  for (const sd of [-1, 1]) for (const k of [-1, 0, 1]) { const l = cyl(.004, .004, k ? .2 : .12, T(0x2a2230), sd*.07, .012, k*.06, g, 3, false); l.rotation.z = sd*1.4; l.rotation.y = k*sd*.5; }
+  const ring = add(new THREE.RingGeometry(.11, .125, 18), T(0xdff1f5, {transparent:true, opacity:.35}), 0, .002, 0, g, false); ring.rotation.x = -Math.PI/2;
+  striders.push({g, ph:i*2.1}); }
+hqAnims.push((dt, t) => { for (const s of striders) { const a = s.ph + t*.4 + Math.sin(t*5 + s.ph)*.075, r = .32 + .1*Math.sin(s.ph);
+  s.g.position.set(23.35 + Math.cos(a)*r*1.4, .076, 6.05 + Math.sin(a)*r); s.g.rotation.y = -a; } });
+// a dragonfly patrolling the reeds it climbed out on
+const dfly = grp(24.2, .9, 6.3), dWings = []; dfly.rotation.order = 'YXZ';
+{ const abd = cyl(.012, .022, .36, T(0x2f7fae), 0, 0, -.06, dfly, 6); abd.rotation.x = Math.PI/2; outline(abd, 1.12);
+  outline(sph(.035, T(0x2f8f8a), 0, 0, .13, dfly, 8), 1.1);
+  for (const sd of [-1, 1]) { sph(.026, T(0x1e5a6e), sd*.025, .015, .16, dfly, 6, false);
+    for (const k of [0, 1]) { const piv = grp(0, .02, .1 - k*.07, 0, dfly), w = add(new THREE.CircleGeometry(.05, 10), T(0xe4f4ff, {transparent:true, opacity:.6, side:THREE.DoubleSide}), sd*.15, 0, 0, piv, false);
+      w.rotation.x = -Math.PI/2; w.scale.set(3, 1, 1); dWings.push({piv, sd}); } } }
+const dPrev = new THREE.Vector3();
+hqAnims.push((dt, t) => { const u = t*.3 + Math.sin(t*4.4)*.09; dPrev.copy(dfly.position);
+  dfly.position.set(24.1 + Math.sin(u*1.7)*.55, .85 + Math.sin(t*1.3)*.1, 6.0 + Math.sin(u*2.3)*.45);
+  const vx = dfly.position.x - dPrev.x, vz = dfly.position.z - dPrev.z; if (Math.hypot(vx, vz) > 1e-4) dfly.rotation.y = Math.atan2(vx, vz);
+  for (const w of dWings) w.piv.rotation.z = w.sd*Math.sin(t*45)*.35; });
+// Mama Duck and her ducklings paddling laps; now and then she tips bottom-up to dabble for food
+function duck(s, body, head){ const g = grp(0, .07, 0); g.rotation.order = 'YXZ';
+  const b = sph(.16*s, T(body), 0, .07*s, 0, g, 12); b.scale.set(.9, .65, 1.3); outline(b, 1.06);
+  sph(.07*s, T(body), 0, .13*s, -.2*s, g, 8, false).scale.set(.8, .5, 1);
+  outline(sph(.1*s, T(head), 0, .25*s, .16*s, g, 10), 1.08);
+  sph(.05*s, T(0xe8962e), 0, .22*s, .26*s, g, 8, false).scale.set(1, .4, 1.4);
+  for (const sd of [-1, 1]) sph(.018*s, T(C.ink), sd*.075*s, .28*s, .21*s, g, 6, false);
+  return g; }
+const ducks = [duck(1, 0x9a7650, 0x7d5d3e), duck(.48, 0xf2d25a, 0xf2d25a), duck(.48, 0xf2d25a, 0xf2d25a), duck(.48, 0xf2d25a, 0xf2d25a)];
+hqAnims.push((dt, t) => { ducks.forEach((g, i) => { const a = t*.14 - (i ? .2 + i*.24 : 0);
+  g.position.set(POND.x + Math.cos(a)*1.45, .07 + Math.sin(t*3 + i)*.006, POND.z + Math.sin(a)*1.0);
+  g.rotation.y = Math.atan2(-Math.sin(a)*1.45, Math.cos(a)*1.0); g.rotation.x = i ? 0 : Math.max(0, Math.sin(t*.45) - .86)*8.5; }); });
+export const pondLife = {pond:new THREE.Vector3(POND.x, .1, POND.z + .4), spawn, tadpoles:new THREE.Vector3(22.05, .08, 6.25), froglet, frog,
+  striders:striders[0].g, dragonfly:dfly, wigglers:new THREE.Vector3(23.0, .07, 6.6), ducks:ducks[0], ducklings:ducks[2],
+  pads:lily[lily.length - 1], koi:koi[0].g};

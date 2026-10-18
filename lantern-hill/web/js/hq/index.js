@@ -12,6 +12,7 @@ import './garden-life.js';
 import { bFlush } from '../core/kit.js';
 import { addUsable } from '../core/world.js';
 import { openWardrobe } from '../ui/wardrobe.js';
+import { BENCH } from './garden-life.js';
 import { groundAt } from './garden.js';
 import { npcs } from './residents.js';
 import { colliders, hqAnims, occMeshes, occluders, scene, sun } from './scene.js';
@@ -44,6 +45,10 @@ async function openTower(){
   const { openTower } = await import('../tower/block-tower.js');
   openTower();
 }
+async function sitOnBench(){
+  const { sit } = await import('./pond-bench.js');
+  sit();
+}
 async function boardWonderBus(){
   const [{ startTrip }, { tectonics }] = await Promise.all([import('../trips/field-trip.js'), import('../trips/tectonics/index.js')]);
   startTrip(tectonics);
@@ -53,3 +58,4 @@ addUsable(HQ, {name:'Flashcards', x:-.45, z:5.4, range:1.5, verb:'Practice phono
 addUsable(HQ, {name:'Story corner', x:-7.3, z:3.9, range:1.5, verb:'Read a library book', short:'Read', glow:[-7.0, .55, 4.1], action:openReader});
 addUsable(HQ, {name:'Toy blocks', x:1.6, z:5.1, range:1.4, verb:'Build a block tower', short:'Build', glow:[1.6, .75, 5.35], action:openTower});
 addUsable(HQ, {name:'Wonder Bus', x:15.9, z:3.6, range:1.9, verb:'Board the Wonder Bus', short:'Board', glow:[15.6, 2.9, 5.5], action:boardWonderBus});
+addUsable(HQ, {name:'Pond bench', x:BENCH.x, z:BENCH.z - .78, range:1.25, verb:'Sit on the bench', short:'Sit', glow:[BENCH.x, .9, BENCH.z], action:sitOnBench});

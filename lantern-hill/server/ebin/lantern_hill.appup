@@ -1,0 +1,15 @@
+%% Hot upgrades. Each release adds its own entry: load what changed, let the supervisor
+%% reshape itself to the new code (lantern_hill_sup:reconcile/0), then end with
+%% lantern_hill_app:upgraded(), which re-routes the listener and publishes the new frontend.
+%% Going back down to 0.1.0 just restarts the application, which is all 0.1.0 knows how to do.
+{"0.1.1",
+ [{"0.1.0", [{add_module, lantern_hill_versions},
+             {add_module, lantern_hill_frontend},
+             {add_module, lantern_hill_updates},
+             {add_module, lantern_hill_watch},
+             {add_module, lantern_hill_follow},
+             {load_module, lantern_hill_app},
+             {update, lantern_hill_sup, supervisor},
+             {apply, {lantern_hill_sup, reconcile, []}},
+             {apply, {lantern_hill_app, upgraded, []}}]}],
+ [{"0.1.0", [{restart_application, lantern_hill}]}]}.

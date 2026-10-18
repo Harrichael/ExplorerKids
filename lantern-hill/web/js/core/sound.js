@@ -110,6 +110,7 @@ export const Sound = (() => {
   return {
     init, blip, tone, hiss, playSeq, stopSeq,
     setTheme(name){ const th = THEMES[name]; if (!th) return; if (!ctx) { theme = th; return; } if (th !== theme) pendingTheme = th; },
+    isOn(){ return on; },
     toggle(){ on = !on; if (ctx) master.gain.setTargetAtTime(on ? .9 : 0, ctx.currentTime, .05); return on; },
     duck(d){ if (ctx) music.gain.setTargetAtTime(d ? .05 : .14, ctx.currentTime, .3); },
     open(){ tone(784, {type:'triangle', dur:.14, vol:.13}); tone(1175, {type:'triangle', t:.08, dur:.22, vol:.12}); },

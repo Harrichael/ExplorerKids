@@ -1,8 +1,9 @@
 import * as THREE from 'three';
+import { human } from '../characters/build.js';
 import { PERSONA } from '../characters/cast.js';
 import { outlineMat } from '../core/kit.js';
 import { Sound } from '../core/sound.js';
-import { cfg } from '../explorer.js';
+import { cfg, heroOpts } from '../explorer.js';
 import { game } from '../state.js';
 import { $ } from './dom.js';
 
@@ -13,6 +14,7 @@ const shownSpan = document.createElement('span'), restSpan = document.createElem
 dText.append(shownSpan, restSpan);
 function showItem(it){
   curItem = it; const p = it.p;
+  dlg.classList.toggle('thought', !!it.thought);
   $('dName').textContent = p.name; $('dRole').textContent = p.role; $('dDot').style.background = p.dot;
   typing.text = it.text.replace(/\{name\}/g, cfg.name || 'Explorer'); typing.shown = 0; typing.acc = -5; typing.letters = 0; typing.done = false;
   shownSpan.textContent = ''; restSpan.textContent = typing.text; dMore.hidden = true;
@@ -41,6 +43,13 @@ export function endConvo(sound){
 }
 export function closeDialog(){ if (convo && !convo.then) endConvo(true); }
 export function story(lines, then){ startConvo(lines.map(([id, text]) => ({p: PERSONA[id], text})), then, null); }
+// the explorer's inner voice; extra fields on each line (like what to look at) ride along on curItem
+const THINK_VOICE = {type:'sine', base:523, scale:[0,4,7,12], len:.12, vol:.05, glide:1.03};
+export function think(lines, then){
+  // a fresh persona each time so the bust wears whatever the explorer has on now
+  const p = {name:cfg.name || 'Explorer', role:'Thinking…', dot:'#b9c8f0', kind:'human', voice:THINK_VOICE, make: () => human(heroOpts(cfg))};
+  startConvo(lines.map(l => Object.assign({p, thought:true}, l)), then, null);
+}
 export function talk(){
   if (convo) { if (!typing.done) { finishLine(); return; } Sound.next(); nextItem(); return; }
   if (!game.nearest || game.cutscene) return;
@@ -83,7 +92,7 @@ export function renderBust(dt){
   if (!bust || dlg.hidden) return;
   const r = bustCan.getBoundingClientRect(); if (!r.width) return;
   if (bustCan.width !== Math.round(r.width*bustR.getPixelRatio())) bustR.setSize(r.width, r.height, false);
-  bustT += dt; const talking = !typing.done, m = bust;
+  bustT += dt; const talking = !typing.done && !(curItem && curItem.thought), m = bust;
   if (bustP.kind === 'owl') {
     const flap = talking ? Math.abs(Math.sin(bustT*10))*.5 : 0; m.wingL.rotation.z = -flap; m.wingR.rotation.z = flap;
     m.head.rotation.z = talking ? Math.sin(bustT*9)*.08 : Math.sin(bustT*.8)*.04; m.lids.forEach(l => l.scale.y = (bustT % 3.4) < .14 ? 1 : .15);
