@@ -57,20 +57,23 @@ function pageTex(book, i) {
   return texCache.get(k);
 }
 let book = null, spread = 0, flip = null;
-// pages: index 0 is the cover, shown alone on the right; spread k shows pages 2k-1 (left) and 2k (right)
+// pages: the first two are the front cover's outside and inside, the last two the back cover's inside and
+// outside. Spread 0 is the book closed on its front cover and the last spread closed on its back; spread k
+// between shows pages 2k-1 (left) and 2k (right)
 const spreads = () => Math.floor(book.pages / 2) + 1;
-const pageAt = i => i >= 0 && i < book.pages ? pageTex(book, i) : null;
+// a page printed on the paper between the covers (the covers' own pages are printed on the boards)
+const leaf = i => i >= 2 && i < book.pages - 2 ? pageTex(book, i) : null;
 function setFlat() {
-  const L = 2 * spread - 1, Rr = 2 * spread;
-  S.setPages(pageAt(L), pageAt(Rr));
-  const frac = book.pages ? spread / (spreads() - 1) : 0;
-  S.setStacks(spread > 0 ? .1 + frac * .9 : 0, .1 + (1 - frac) * .9);   // the stacks follow progress through the book
-  $r('rPg').textContent = book.pages ? (spread === 0 ? 'Cover' : `${L + 1}–${Math.min(Rr + 1, book.pages)} / ${book.pages}`) : '';
-  $r('rPrev').disabled = spread === 0; $r('rNext').disabled = spread >= spreads() - 1;
+  const last = spreads() - 1, L = 2 * spread - 1, Rr = 2 * spread;
+  // the stacks follow progress through the book, leaf by leaf; the inside covers lie on the bare boards
+  const f = Math.max(0, Math.min(1, (spread - 1) / ((book.pages - 4) / 2)));
+  S.setBoards(spread > 0 ? 1 : 0, spread < last ? 0 : 1); S.setStacks(f, 1 - f); S.setPages(leaf(L), leaf(Rr));
+  $r('rPg').textContent = spread === 0 ? 'Cover' : spread === last ? 'Back cover' : `${L + 1}–${Rr + 1} / ${book.pages}`;
+  $r('rPrev').disabled = spread === 0; $r('rNext').disabled = spread >= last;
   // remember every page seen; finishing the last spread marks the book as read
   const st = state[book.id] = state[book.id] || { seen: [], read: false };
   for (const i of [L, Rr]) if (i >= 0 && i < book.pages && !st.seen.includes(i)) st.seen.push(i);
-  if (!st.read && spread >= spreads() - 1 && book.pages) { st.read = true; st.at = new Date().toISOString(); celebrate(); }
+  if (!st.read && spread >= last) { st.read = true; st.at = new Date().toISOString(); celebrate(); }
   saveState();
 }
 function celebrate() {
@@ -80,12 +83,16 @@ function celebrate() {
 }
 function turn(dir) {
   if (!book || flip) return;
-  if (dir > 0 && spread >= spreads() - 1) return; if (dir < 0 && spread <= 0) return;
+  const last = spreads() - 1, to = spread + dir;
+  if (to < 0 || to > last) return;
   const L = 2 * spread - 1, Rr = 2 * spread;
+  // a cover swings over as a stiff board, onto or off the first or last spread of pages
+  const board = Math.min(spread, to) === 0 ? 0 : Math.max(spread, to) === last ? 1 : null;
+  if (board !== null) { const k = board ? last - 1 : 1; S.setPages(leaf(2 * k - 1), leaf(2 * k)); }
   // the turning page carries one page image on each face; the page it uncovers is already in place beneath
-  if (dir > 0) { S.turnPage(pageTex(book, Rr), pageTex(book, Rr + 1)); S.setPages(pageAt(L), pageAt(Rr + 2)); S.curl(0, 1); }
-  else { S.turnPage(pageTex(book, L - 1), pageTex(book, L)); S.setPages(pageAt(L - 2), pageAt(Rr)); S.curl(1, -1); }
-  flip = { dir, t: 0 };
+  else if (dir > 0) { S.turnPage(pageTex(book, Rr), pageTex(book, Rr + 1)); S.setPages(leaf(L), leaf(Rr + 2)); S.curl(0, 1); }
+  else { S.turnPage(pageTex(book, L - 1), pageTex(book, L)); S.setPages(leaf(L - 2), leaf(Rr)); S.curl(1, -1); }
+  flip = { dir, board, t: 0 };
   Sound.tone(dir > 0 ? 700 : 620, { type: 'triangle', dur: .05, vol: .04 }); Sound.tone(1400, { type: 'sine', t: .05, dur: .08, vol: .02 });
 }
 let raf = 0, last = 0;
@@ -96,14 +103,14 @@ function loop(ts) {
   if (cv.width !== Math.round(r.width * S.renderer.getPixelRatio())) S.resize(r.width, r.height);
   if (book) {
     if (flip) {
-      flip.t = Math.min(1, flip.t + dt / .6); const e = ease(flip.t);
-      S.curl(flip.dir > 0 ? e : 1 - e, flip.dir);
+      flip.t = Math.min(1, flip.t + dt / (flip.board === null ? .6 : .8)); const e = ease(flip.t), p = flip.dir > 0 ? e : 1 - e;
+      if (flip.board === 0) S.setBoards(p, 0); else if (flip.board === 1) S.setBoards(1, p); else S.curl(p, flip.dir);
       if (flip.t >= 1) { spread += flip.dir; flip = null; S.settle(); setFlat(); }
     }
-    // frame the open book so it fills the screen in portrait or landscape
-    const asp = S.camera.aspect, w = 2 * (S.W + S.MARGIN) + .4, h = S.H + 2 * S.MARGIN + .4, fov = S.camera.fov * Math.PI / 180;
+    // frame the book, open or closed, so it fills the screen in portrait or landscape
+    const [x0, x1] = S.extent(), mx = (x0 + x1) / 2, asp = S.camera.aspect, w = x1 - x0 + .4, h = S.H + 2 * S.MARGIN + .4, fov = S.camera.fov * Math.PI / 180;
     const dist = Math.max(h / 2 / Math.tan(fov / 2), w / 2 / Math.tan(fov / 2) / asp) * 1.04;
-    S.camera.position.set(0, dist * .97, dist * .26); S.camera.lookAt(0, .3, .05);
+    S.camera.position.set(mx, dist * .97, dist * .26); S.camera.lookAt(mx, .3, .05);
   }
   S.render();
   raf = requestAnimationFrame(loop);
@@ -123,7 +130,8 @@ function showShelf() {
 function openBook(b) {
   book = b; shelfEl.hidden = true; cv.style.visibility = ''; el.querySelector('.rbar').style.visibility = '';
   $r('rTitle').textContent = b.title; $r('rSub').textContent = b.sub; $r('rCredit').textContent = b.credit || '';
-  stage().setAspect(b.aspect); S.setShade(1); spread = 0; setFlat();
+  stage().setAspect(b.aspect); S.setShade(1); spread = 0;
+  S.setCovers([pageTex(b, 0), pageTex(b, 1)], [pageTex(b, b.pages - 1), pageTex(b, b.pages - 2)]); setFlat();
   // warm the next few pages so flipping feels instant
   for (let i = 0; i < Math.min(6, b.pages); i++) pageTex(b, i);
 }

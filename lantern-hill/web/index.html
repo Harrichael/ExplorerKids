@@ -64,6 +64,8 @@
     <div id="lDone" hidden></div>
   </div>
 </div>
+<div id="turnNote" hidden><div class="tn-ch">A new page!</div><div class="tn-t">Lantern Hill is updating</div><div class="tn-sub">Back in a blink</div></div>
+<div id="updateToast" hidden role="status"><span class="ut-text"><b>A new page is ready!</b> It turns by itself when you finish what you're doing.</span><button class="pill" id="updateNow">Turn it now</button></div>
 <div id="banner" hidden><div class="bn-ch" id="bnCh"></div><div class="bn-t" id="bnT"></div></div>
 <div id="badge" hidden role="dialog" aria-labelledby="bTitle"><div class="page"><canvas id="badgeCan" width="360" height="360"></canvas><div class="ch">Field trip badge earned</div><h3 id="bTitle">Plate Tectonics Explorer</h3><p id="bText"></p><button class="wbtn" id="badgeOk">Hooray!</button></div></div>
 <div id="start"><div class="card"><h2>Lantern Hill HQ</h2><div class="sub">A cozy place for curious explorers</div><div class="go" id="go">Press any key to begin</div></div></div>
@@ -79,8 +81,9 @@
   // hidden until the image decodes, so the first thing painted is the frame itself
   de.style.visibility = 'hidden'; de.classList.add('turning'); document.getElementById('start').hidden = true;
   im.src = s.book; im.hidden = false; im.decode().then(show, show);
+  var note = document.getElementById('turnNote'); note.hidden = false; note.className = 'carried';
   // load fires once main.js has built the world, however slow the device
-  addEventListener('load', function(){ setTimeout(function(){ if (!im.hidden) { im.hidden = true; de.classList.remove('turning'); sessionStorage.removeItem(KEY); } }, 10000); });
+  addEventListener('load', function(){ setTimeout(function(){ if (!im.hidden) { im.hidden = note.hidden = true; de.classList.remove('turning'); sessionStorage.removeItem(KEY); } }, 10000); });
 } catch (e) {} })();
 </script>
 </body>

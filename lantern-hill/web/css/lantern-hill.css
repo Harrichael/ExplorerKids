@@ -16,6 +16,8 @@ html,body{height:100%;overflow:hidden}
 [hidden]{display:none!important}
 body{background:var(--night);color:var(--parch);font-family:var(--body);touch-action:none;user-select:none;-webkit-user-select:none}
 #world,#storybook,#storyStash{position:fixed;inset:0;display:block;width:100%;height:100%}
+/* above every overlay: an update may turn the page from inside an activity */
+#storybook,#storyStash{z-index:8}
 .hud,#prompt,#stick,#talk,#use{transition:opacity .3s}
 .turning .hud,.turning #prompt,.turning #stick,.turning #talk,.turning #use{opacity:0}
 .vignette{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(20,12,28,.55) 100%)}
@@ -191,3 +193,17 @@ button.snd:focus-visible,button.word:focus-visible{outline:3px solid #6d3b5e;out
 #badge p{margin:0 0 6px;font-weight:800;font-size:15px;line-height:1.45;max-width:36ch}
 @media (prefers-reduced-motion: reduce){#banner,#badge,#badge .page{animation:none}}
 @media (prefers-reduced-motion: reduce){#dialog .more,#start .go,#use,#learn,#trip,.tdlg .more,.tbtn.next,.card.enter{animation:none}.card{transition:none}.wbtn:active,.lbtn:active{transform:none}}
+
+/* updates: the toast offered mid-activity, and the caption over the book while the page turns */
+#updateToast{position:fixed;left:50%;top:calc(84px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:6;display:flex;align-items:center;gap:12px;width:max-content;max-width:calc(100vw - 32px);box-sizing:border-box;background:rgba(26,19,32,.92);color:var(--parch);border:2px solid var(--gold);border-radius:14px;box-shadow:0 0 0 3px var(--ink),0 10px 26px rgba(0,0,0,.4);padding:8px 10px 8px 14px;font-size:13.5px;font-weight:700;line-height:1.35;animation:toastIn .45s cubic-bezier(.2,1.4,.4,1) both}
+#updateToast b{color:var(--gold);font-weight:900}
+#updateToast .pill{flex:none;background:var(--plum)}
+@keyframes toastIn{0%{opacity:0;transform:translate(-50%,-12px) scale(.96)}100%{opacity:1;transform:translate(-50%,0) scale(1)}}
+#turnNote{position:fixed;left:50%;bottom:calc(36px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:9;pointer-events:none;text-align:center;background:#efe0bf;color:#1a1320;border:3px solid var(--gold);border-radius:14px;box-shadow:0 0 0 4px var(--ink),0 12px 30px rgba(0,0,0,.45);padding:9px 26px 11px;width:max-content;max-width:calc(100vw - 48px);box-sizing:border-box;animation:noteIn .5s .15s ease-out both;transition:opacity .45s}
+#turnNote.leaving{opacity:0;transition-delay:.35s}
+#turnNote.carried{animation:none}
+.tn-ch{font-weight:900;font-size:12px;letter-spacing:2.5px;text-transform:uppercase;color:#6d3b5e}
+.tn-t{font-family:var(--display);font-size:clamp(22px,5.5vw,32px);line-height:1.1}
+.tn-sub{font-weight:800;font-size:14px;color:#5a4a3c;margin-top:2px}
+@keyframes noteIn{0%{opacity:0;transform:translate(-50%,12px)}100%{opacity:1;transform:translate(-50%,0)}}
+@media (prefers-reduced-motion: reduce){#updateToast,#turnNote{animation:none}}
