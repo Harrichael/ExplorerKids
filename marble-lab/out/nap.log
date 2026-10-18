@@ -1,0 +1,39 @@
+start fitness -11.30
+1/120 T=2.93 undefined fit=-11.30 F=0 find=0.00 ACCEPT best=-11.30 0.6min
+2/120 T=2.85 undefined fit=-11.30 F=0 find=0.00 ACCEPT best=-11.30 0.8min
+3/120 T=2.78 undefined fit=-11.30 F=0 find=0.00 ACCEPT best=-11.30 1.1min
+4/120 T=2.71 undefined fit=-11.30 F=0 find=0.00 ACCEPT best=-11.30 1.4min
+5/120 T=2.65 undefined fit=-11.30 F=0 find=0.00 ACCEPT best=-11.30 1.7min
+6/120 T=2.58 undefined fit=-11.30 F=0 find=0.00 ACCEPT best=-11.30 2.0min
+7/120 T=2.52 undefined fit=-11.30 F=0 find=0.00 ACCEPT best=-11.30 2.3min
+8/120 T=2.46 undefined fit=-11.30 F=0 find=0.00 ACCEPT best=-11.30 2.6min
+9/120 T=2.40 nudge furniture fit=-10.95 F=0 find=0.00 ACCEPT best=-10.95 2.9min
+10/120 T=2.34 move button fit=-10.86 F=0 find=0.00 ACCEPT best=-10.86 3.2min
+11/120 T=2.28 move shelf fit=-10.64 F=0 find=0.00 ACCEPT best=-10.64 3.5min
+12/120 T=2.22 tray domino fit=-10.64 F=0 find=0.00 ACCEPT best=-10.64 3.8min
+13/120 T=2.17 tail fit=-9.57 F=0 find=0.00 ACCEPT best=-9.57 4.0min
+14/120 T=2.12 move trigger fit=-10.66 F=0 find=0.00 ACCEPT best=-9.57 4.3min
+15/120 T=2.06 tail fit=-11.22 F=0 find=0.00 ACCEPT best=-9.57 4.6min
+16/120 T=2.01 move shelf fit=-8.80 F=0 find=0.00 ACCEPT best=-8.80 4.8min
+17/120 T=1.96 tray lever fit=-11.79 F=0 find=0.00  best=-8.80 5.0min
+18/120 T=1.91 tray domino fit=-8.80 F=0 find=0.00 ACCEPT best=-8.80 5.3min
+19/120 T=1.87 tail fit=-10.89 F=0 find=0.00 ACCEPT best=-8.80 5.5min
+20/120 T=1.82 add shelf fit=-11.72 F=0 find=0.00  best=-8.80 5.8min
+21/120 T=1.78 move shelf fit=-11.74 F=0 find=0.00 ACCEPT best=-8.80 6.0min
+22/120 T=1.73 move shelf fit=-11.63 F=0 find=0.00 ACCEPT best=-8.80 6.3min
+23/120 T=1.69 move button fit=-11.63 F=0 find=0.00 ACCEPT best=-8.80 6.5min
+24/120 T=1.65 nudge furniture fit=-11.74 F=0 find=0.00 ACCEPT best=-8.80 6.7min
+25/120 T=1.61 move shelf fit=-11.62 F=0 find=0.00 ACCEPT best=-8.80 7.0min
+26/120 T=1.57 move shelf fit=-11.64 F=0 find=0.00 ACCEPT best=-8.80 7.2min
+27/120 T=1.53 move shelf fit=-11.67 F=0 find=0.00 ACCEPT best=-8.80 7.4min
+28/120 T=1.49 move trigger fit=-11.68 F=0 find=0.00 ACCEPT best=-8.80 7.6min
+29/120 T=1.45 add shelf fit=-11.31 F=0 find=0.00 ACCEPT best=-8.80 7.8min
+30/120 T=1.42 move shelf fit=-10.64 F=0 find=0.00 ACCEPT best=-8.80 8.0min
+31/120 T=1.38 nudge furniture fit=-10.92 F=0 find=0.00 ACCEPT best=-8.80 8.3min
+32/120 T=1.35 move shelf fit=-11.74 F=0 find=0.00  best=-8.80 8.5min
+33/120 T=1.32 tray block fit=-11.14 F=0 find=0.00 ACCEPT best=-8.80 8.7min
+34/120 T=1.28 move shelf fit=-10.54 F=0 find=0.00 ACCEPT best=-8.80 9.0min
+35/120 T=1.25 remove shelf fit=5.87 F=1 find=0.33 ACCEPT best=5.87 9.2min
+36/120 T=1.22 tail fit=8.84 F=2 find=0.33 ACCEPT best=8.84 9.4min
+37/120 T=1.19 move trigger fit=15.26 F=7 find=0.67 ACCEPT best=15.26 9.7min
+38/120 T=1.16 tail fit=-11.74 F=0 find=0.00  best=15.26 9.9min
