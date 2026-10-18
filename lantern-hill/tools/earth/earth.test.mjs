@@ -1,11 +1,13 @@
-// The world model against places a child might tap, and the food webs against the rules every web
-// must keep. Runs on the built data:  node --test tools/earth/*.test.mjs   (from lantern-hill/)
+// The world model against places a child might tap, Hoot's riddles against the map, and the food
+// webs against the rules every web must keep. Runs on the built data:
+//   node --test tools/earth/*.test.mjs   (from lantern-hill/)
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { BIOMES, WEBS, visit } from '../../web/js/earth/biomes.js';
 import { makeEarth } from '../../web/js/earth/model.js';
+import { eatenBy, hunter, whatIf } from '../../web/js/globe/food-web.js';
 
 const earth = makeEarth(JSON.parse(readFileSync(new URL('../../web/data/earth.json', import.meta.url), 'utf8')));
 
@@ -89,4 +91,31 @@ test('every food web is a web: it starts from plants or algae and has no loops',
     w.species.forEach(s => climb(s, []));
   }
   for (const id of Object.keys(BIOMES)) assert.ok(WEBS.some(w => w.biomes.includes(id)), `no food web for ${id}`);
+});
+
+test("Hoot's riddles point the right way: most of each biome lies in the band of latitude its hints use", () => {
+  const inBand = {}, all = {};
+  for (let lat = -89.5; lat < 90; lat += 1) for (let lon = -179.5; lon < 180; lon += 2) {
+    const p = earth.placeAt(lat, lon), area = Math.cos(lat*Math.PI/180), [lo, hi] = BIOMES[p.biomeId].hunt.band;
+    all[p.biomeId] = (all[p.biomeId] || 0) + area;
+    if (Math.abs(lat) >= lo && Math.abs(lat) <= hi) inBand[p.biomeId] = (inBand[p.biomeId] || 0) + area;
+  }
+  for (const id of Object.keys(BIOMES)) {
+    assert.ok((inBand[id] || 0)/all[id] > .85, `${id}: only ${Math.round(100*(inBand[id] || 0)/all[id])}% inside ${BIOMES[id].hunt.band}`);
+    assert.equal(!!BIOMES[id].water, !!earth.placeAt(...visit(id)).biome.water, `${id} is ${BIOMES[id].water ? 'water' : 'land'}`);
+  }
+});
+
+test("every food web can carry Hoot's lessons", () => {
+  for (const w of WEBS) {
+    const h = hunter(w);
+    assert.ok(h && h.eats.length > 1, `${w.id} has no hunter that eats more than one thing`);
+    const q = whatIf(w);
+    assert.ok(q, `${w.id} has nothing to make disappear`);
+    assert.ok(q.gone.eats.includes(q.food.name), `${w.id}: ${q.gone.name} doesn't eat ${q.food.name}`);
+    assert.ok(eatenBy(w, q.gone.name).includes(q.eater.name), `${w.id}: ${q.eater.name} doesn't eat ${q.gone.name}`);
+  }
+  // the classic case: with no prairie dogs, more grass and fewer of the ferrets that hunt them
+  const plains = whatIf(WEBS.find(w => w.id === 'great-plains'));
+  assert.deepEqual([plains.gone.name, plains.food.name, plains.eater.name], ['Prairie dog', 'Grass', 'Black-footed ferret']);
 });

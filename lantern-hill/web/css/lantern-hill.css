@@ -201,6 +201,9 @@ button.snd:focus-visible,button.word:focus-visible{outline:3px solid #6d3b5e;out
 #updateToast{position:fixed;left:50%;top:calc(84px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:6;display:flex;align-items:center;gap:12px;width:max-content;max-width:calc(100vw - 32px);box-sizing:border-box;background:rgba(26,19,32,.92);color:var(--parch);border:2px solid var(--gold);border-radius:14px;box-shadow:0 0 0 3px var(--ink),0 10px 26px rgba(0,0,0,.4);padding:8px 10px 8px 14px;font-size:13.5px;font-weight:700;line-height:1.35;animation:toastIn .45s cubic-bezier(.2,1.4,.4,1) both}
 #updateToast b{color:var(--gold);font-weight:900}
 #updateToast .pill{flex:none;background:var(--plum)}
+#updateClose{flex:none;width:28px;height:28px;border-radius:50%;border:2px solid var(--gold);background:transparent;color:var(--parch);font:900 17px/1 var(--display);cursor:pointer;padding:0;display:grid;place-items:center}
+#updateClose:hover{background:rgba(217,164,65,.2)}
+#updateClose:focus-visible{outline:3px solid var(--parch);outline-offset:2px}
 @keyframes toastIn{0%{opacity:0;transform:translate(-50%,-12px) scale(.96)}100%{opacity:1;transform:translate(-50%,0) scale(1)}}
 /* three dots of ink breathing under the words printed on the book, placed by ui/page-turn.js; they
    animate on the compositor, so they keep breathing while the new version's scripts load */
