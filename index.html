@@ -1115,6 +1115,22 @@ function latheGeo(prof, cy, seg=22){
   const pts = curve.getPoints(28).map(v => new THREE.Vector2(Math.max(.0001, v.x), v.y));
   return new THREE.LatheGeometry(pts, seg);
 }
+const _wrapRay = new THREE.Raycaster();
+// shoots rays in a vertical plane at local x toward (x, cy, cz) and returns points just outside the first surface hit
+function wrapPath(body, targets, x, cy, cz, phi0, phi1, n, off){
+  body.updateMatrixWorld(true);
+  const pts = [], c = new THREE.Vector3();
+  for (let i = 0; i <= n; i++) {
+    const ph = phi0 + (phi1 - phi0)*i/n, d = new THREE.Vector3(0, Math.sin(ph), Math.cos(ph));
+    const o = body.localToWorld(new THREE.Vector3(x, cy, cz).addScaledVector(d, 1.0)), cw = body.localToWorld(c.set(x, cy, cz));
+    _wrapRay.set(o, cw.clone().sub(o).normalize()); _wrapRay.far = 1.05;
+    const hit = _wrapRay.intersectObjects(targets, false)[0];
+    pts.push((hit ? body.worldToLocal(hit.point.clone()) : new THREE.Vector3(x, cy, cz).addScaledVector(d, .28)).addScaledVector(d, off));
+  }
+  // smooth out little bumps from collars and seams
+  for (let k = 0; k < 2; k++) for (let i = 1; i < pts.length - 1; i++) pts[i].lerp(pts[i-1].clone().add(pts[i+1]).multiplyScalar(.5), .5);
+  return pts;
+}
 function human(o){
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
   body.scale.setScalar(o.scale || 1);
@@ -1143,6 +1159,9 @@ function human(o){
   const flows = [];
   if (o.dress) { const df = o.dressFlare || .46; const dm = P(new THREE.CylinderGeometry(.25,df,.5,24,4), o.dress, 0, .66, 0, body); const tm = P(new THREE.CylinderGeometry(df+.005,df+.005,.04,24), o.dressTrim || C.cream, 0, .43, 0, body, false); flows.push([dm,.91,.5],[tm,.91,.5]); }
   const mid = (shR + waistR)/2;
+  const torsoProf = [[.74, .0001], [.755, waistR*.9], [.84, waistR*1.03], [.98, waistR*1.03], [1.14, mid*1.01], [1.3, shR*1.05], [1.39, shR*.98], [1.46, shR*.74], [1.5, .11], [1.53, .0001]];
+  const torsoPts = new THREE.SplineCurve(torsoProf.map(([y, r]) => new THREE.Vector2(r, y))).getPoints(60);
+  const torsoR = y => { for (let i = 1; i < torsoPts.length; i++) { const a = torsoPts[i-1], b = torsoPts[i]; if (b.y >= y) return a.x + (b.x - a.x)*(y - a.y)/((b.y - a.y) || 1); } return .1; };
   P(latheGeo([[.74, .0001], [.755, waistR*.9], [.84, waistR*1.03], [.98, waistR*1.03], [1.14, mid*1.01], [1.3, shR*1.05], [1.39, shR*.98], [1.46, shR*.74], [1.5, .11], [1.53, .0001]], 1.13), shirtMat, 0, 1.13, 0, body).scale.set(1, 1, .9);
   // a soft hem band where the top meets the trousers (storybook stitching detail)
   if (!o.dress && !(o.coat && o.closed)) { const hm = P(new THREE.TorusGeometry(waistR*.94, .028, 8, 22), o.hem || o.sleeve || o.shirt, 0, .79, 0, body, false); hm.rotation.x = Math.PI/2; hm.scale.set(1, .9, 1); }
@@ -1165,12 +1184,6 @@ function human(o){
   if (o.collar) for (const sx of [-1,1]) { const c = P(new THREE.BoxGeometry(.14,.06,.12), o.collar, sx*.09, 1.47, .2, body, false); c.rotation.y = sx*.5; c.rotation.z = -sx*.2; }
   if (o.hood) { const hd = P(new THREE.TorusGeometry(.17,.08,8,14), o.hood, 0, 1.5, -.12, body); hd.rotation.x = Math.PI/2 + .5; }
   if (o.strings) for (const sx of [-1,1]) P(CG(.012,.012,.2,4), C.cream, sx*.06, 1.33, .27, body, false);
-  if (o.backpack) {
-    P(new THREE.BoxGeometry(.46,.52,.24), o.backpack, 0, 1.12, -.36, body);
-    P(new THREE.BoxGeometry(.36,.2,.08), o.backpackFlap || C.gold, 0, .98, -.5, body, 1.05);
-    P(SG(.05,8,6), C.cream, .1, 1.22, -.49, body, false);
-    for (const sx of [-1,1]) P(new THREE.BoxGeometry(.06,.5,.04), o.backpack, sx*.16, 1.18, .27, body, false).rotation.x = -.15;
-  }
   if (o.satchel) { const st = P(new THREE.TorusGeometry(.36,.025,4,20), C.woodDk, 0, 1.12, 0, body, false); st.rotation.set(.1, 0, .8); P(new THREE.BoxGeometry(.26,.22,.1), C.woodLt, .3, .8, .2, body).rotation.y = .5; }
   if (o.binoculars) { for (const sx of [-1,1]) P(CG(.045,.05,.14,8), C.ink, sx*.05, 1.26, .34, body, false).rotation.x = Math.PI/2; const bs = P(new THREE.TorusGeometry(.16,.012,4,16,Math.PI), C.woodDk, 0, 1.4, .17, body, false); bs.rotation.x = -.6; bs.rotation.z = Math.PI; }
   if (o.patches) for (const [px,py] of [[-.18,1.2],[.2,.98]]) P(new THREE.CircleGeometry(.05,8), o.patches, px, py, .305, body, false).rotation.y = px*1.5;
@@ -1290,6 +1303,64 @@ function human(o){
   if (o.hold === 'book') { P(new THREE.BoxGeometry(.3,.38,.07), C.rust, .05, -.62, .12, arms[0]).rotation.y = .3; P(new THREE.BoxGeometry(.31,.04,.075), C.gold, .05, -.55, .12, arms[0], false).rotation.y = .3; arms[0].rotation.x = -.6; }
   if (o.hold === 'clipboard') { P(new THREE.BoxGeometry(.3,.4,.03), C.woodLt, 0, -.64, .14, arms[0]); P(new THREE.BoxGeometry(.24,.3,.01), C.cream, 0, -.66, .16, arms[0], false); P(new THREE.BoxGeometry(.1,.04,.03), C.ink, 0, -.45, .16, arms[0], false); arms[0].rotation.x = -.7; }
   if (o.hold === 'notebook') { P(new THREE.BoxGeometry(.22,.28,.05), 0x2f8f8a, 0, -.64, .12, arms[1]); arms[1].rotation.x = -.5; }
+  if (o.vest) {
+    // explorer vest: a fitted shell that follows the torso, open in a V at the front, with patch pockets and piping
+    const N = 26, rows = 9, y0 = .8, y1 = 1.42, pos = [], idx = [];
+    for (let j = 0; j <= rows; j++) {
+      const t = j/rows, y = y0 + (y1 - y0)*t, r = torsoR(Math.min(y, 1.4)) + .034 + (1 - t)*.012, gap = .16 + Math.pow(t, 1.6)*.62;
+      for (let i = 0; i <= N; i++) { const ph = gap + (Math.PI*2 - gap*2)*i/N; pos.push(r*Math.sin(ph), y, r*Math.cos(ph)*.9); }
+    }
+    for (let j = 0; j < rows; j++) for (let i = 0; i < N; i++) { const a = j*(N+1) + i, b = a + N + 1; idx.push(a, a + 1, b, a + 1, b + 1, b); }
+    const vg = new THREE.BufferGeometry(); vg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); vg.setIndex(idx); vg.computeVertexNormals();
+    const vm = new THREE.Mesh(vg, T(o.vest, {side:THREE.DoubleSide})); vm.castShadow = true; body.add(vm);
+    const ink = new THREE.Mesh(vg, outlineMat); ink.scale.set(1.04, 1.005, 1.04); vm.add(ink);
+    const trim = o.vestTrim || C.ink;
+    // piping down both front edges and along the hem
+    for (const sd of [-1, 1]) { const ep = [];
+      for (let j = 0; j <= rows; j++) { const t = j/rows, y = y0 + (y1 - y0)*t, r = torsoR(Math.min(y, 1.4)) + .04 + (1 - t)*.012, ph = sd*(.16 + Math.pow(t, 1.6)*.62); ep.push(new THREE.Vector3(r*Math.sin(ph), y, r*Math.cos(ph)*.9)); }
+      body.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(ep), 20, .016, 5), T(trim))); }
+    const hem = []; for (let i = 0; i <= 30; i++) { const ph = .16 + (Math.PI*2 - .32)*i/30, r = torsoR(y0) + .05; hem.push(new THREE.Vector3(r*Math.sin(ph), y0, r*Math.cos(ph)*.9)); }
+    body.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(hem), 40, .018, 5), T(trim)));
+    // four patch pockets with flaps and buttons, set flush to the curve
+    const pocket = (y, ph, w, h) => { const r = torsoR(y) + .046, g = new THREE.Group(); g.position.set(r*Math.sin(ph), y, r*Math.cos(ph)*.9); g.rotation.y = Math.atan2(Math.sin(ph), Math.cos(ph)*.9); body.add(g);
+      P(new THREE.BoxGeometry(w, h, .022), shade(o.vest, .9), 0, 0, 0, g, 1.04);
+      P(new THREE.BoxGeometry(w*1.08, h*.32, .03), shade(o.vest, .78), 0, h*.38, .008, g, 1.04);
+      P(SG(.016, 6, 5), C.gold, 0, h*.3, .03, g, false); };
+    for (const sd of [-1, 1]) { pocket(1.2, sd*.62, .13, .12); pocket(.95, sd*.55, .15, .14); }
+    // a compass badge stitched above the right chest pocket
+    { const ph = -.7, y = 1.33, r = torsoR(y) + .05, b = P(CG(.035, .035, .015, 14), C.gold, r*Math.sin(ph), y, r*Math.cos(ph)*.9, body, 1.12); b.rotation.x = Math.PI/2; b.rotation.z = -Math.atan2(Math.sin(ph), Math.cos(ph)*.9); }
+  }
+  const wearTargets = () => body.children.filter(m => m.isMesh);
+  if (o.suspenders) {
+    for (const sx of [-1, 1]) {
+      const pts = wrapPath(body, wearTargets(), sx*.13, 1.12, -.01, -.95, Math.PI + .95, 22, .018);
+      const st = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, .024, 6), T(o.suspenders)); st.scale.x = 1; st.castShadow = true; body.add(st);
+      for (const e of [pts[0], pts[pts.length - 1]]) P(SG(.024, 8, 6), C.gold, e.x, e.y + .02, e.z + Math.sign(e.z)*.01, body, false);
+    }
+  }
+  if (o.bowtie) {
+    _wrapRay.set(body.localToWorld(new THREE.Vector3(0, 1.45, 1)), new THREE.Vector3(0, 0, -1)); body.updateMatrixWorld(true);
+    const hit = _wrapRay.intersectObjects(wearTargets(), false)[0], bz = hit ? body.worldToLocal(hit.point.clone()).z + .03 : .26;
+    const bt = new THREE.Group(); bt.position.set(0, 1.45, bz); body.add(bt);
+    for (const sd of [-1, 1]) { const w = P(new THREE.ConeGeometry(.055, .1, 4), o.bowtie, sd*.05, 0, 0, bt, 1.08); w.rotation.z = sd*Math.PI/2; w.scale.set(1, 1, .45); }
+    P(SG(.03, 8, 6), shade(o.bowtie, .8), 0, 0, .01, bt, 1.1);
+  }
+  if (o.backpack) {
+    // sit the pack on the back of whatever is worn, then run the straps over the shoulders into it
+    body.updateMatrixWorld(true);
+    _wrapRay.set(body.localToWorld(new THREE.Vector3(0, 1.12, -1.2)), body.localToWorld(new THREE.Vector3(0, 1.12, 0)).sub(body.localToWorld(new THREE.Vector3(0, 1.12, -1.2))).normalize());
+    const hit = _wrapRay.intersectObjects(wearTargets(), false)[0], back = hit ? body.worldToLocal(hit.point.clone()).z : -.28;
+    const pz = back - .115;
+    const pack = P(new THREE.BoxGeometry(.46, .52, .24), o.backpack, 0, 1.12, pz, body);
+    P(SG(.23, 14, 8, 0, Math.PI*2, 0, Math.PI/2), o.backpack, 0, 1.36, pz, body, 1.04).scale.set(1, .35, .52);
+    P(new THREE.BoxGeometry(.36, .2, .08), o.backpackFlap || C.gold, 0, .98, pz - .14, body, 1.05);
+    P(SG(.05, 8, 6), C.cream, .1, 1.22, pz - .13, body, false);
+    for (const sx of [-1, 1]) {
+      const pts = wrapPath(body, wearTargets().filter(m => m !== pack), sx*.16, 1.15, -.02, -.7, Math.PI - .55, 18, .02);
+      const st = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, .03, 6), T(shade(o.backpack, .8))); st.castShadow = true; body.add(st);
+      P(new THREE.BoxGeometry(.06, .05, .03), C.gold, pts[3].x, pts[3].y, pts[3].z + .01, body, false);
+    }
+  }
   if (o.pens) for (let i=0;i<2;i++) P(CG(.012,.012,.18,5), [C.rust, C.navy][i], -.16 + i*.04, 1.27, .3, body, false);
   return {root, body, legL:legs[0], legR:legs[1], armL:arms[0], armR:arms[1], head, eyes, smile, mouthOpen, holdsRight: o.hold === 'notebook', flows: o.flow ? flows : null};
 }
@@ -1844,7 +1915,7 @@ const SHOES = [0xe9d9b8,0xb5552f,0x4a2e22,0x2f8f8a,0xd9a441,0x1a1320];
 const HAIR_OPTS = {boy:[['short','Short'],['curly','Curly'],['spiky','Spiky'],['cap','Cap']], girl:[['long','Long'],['braids','Braids'],['bob','Bob'],['bun','Bun'],['puffs','Puffs']]};
 const OUTFIT_OPTS = {boy:[['hoodie','Hoodie'],['raincoat','Raincoat'],['vest','Explorer vest'],['sweater','Striped sweater']], girl:[['dress','Dress'],['raincoat','Raincoat'],['cardigan','Cardigan'],['sweater','Striped sweater']]};
 const BOTTOM_OPTS = {boy:[['pants','Pants'],['shorts','Shorts']], girl:[['skirt','Skirt'],['leggings','Leggings']]};
-const EXTRA_OPTS = {boy:[['glasses','Glasses'],['freckles','Freckles'],['binoculars','Binoculars']], girl:[['glasses','Glasses'],['freckles','Freckles'],['bow','Hair bow']]};
+const EXTRA_OPTS = {boy:[['glasses','Glasses'],['freckles','Freckles'],['binoculars','Binoculars'],['suspenders','Suspenders'],['bowtie','Bow tie']], girl:[['glasses','Glasses'],['freckles','Freckles'],['bow','Hair bow']]};
 const GENDER_DEFAULTS = {boy:{hairStyle:'short', outfit:'hoodie', bottom:'pants', top:0, bow:false}, girl:{hairStyle:'long', outfit:'dress', bottom:'skirt', top:8, binoculars:false}};
 function groupsFor(kind){
   const dress = kind === 'girl' && cfg.outfit === 'dress';
@@ -1865,7 +1936,7 @@ function groupsFor(kind){
     {key:'extras', label:'Extras', toggles:EXTRA_OPTS[kind]});
   return g;
 }
-const DEFAULT_CFG = {name:'Explorer', kind:'boy', skin:1, eyes:0, hairStyle:'short', hairColor:2, outfit:'hoodie', top:0, bottom:'pants', bottomColor:0, shoes:0, pack:'backpack', glasses:false, freckles:false, binoculars:false, bow:false};
+const DEFAULT_CFG = {name:'Explorer', kind:'boy', skin:1, eyes:0, hairStyle:'short', hairColor:2, outfit:'hoodie', top:0, bottom:'pants', bottomColor:0, shoes:0, pack:'backpack', glasses:false, freckles:false, binoculars:false, bow:false, suspenders:false, bowtie:false};
 const CFG_KEY = 'lantern-hill-explorer';
 let savedCfg = null;
 try { savedCfg = JSON.parse(localStorage.getItem(CFG_KEY) || 'null'); } catch (e) {}
@@ -1878,7 +1949,7 @@ function normalize(){
   if (!BOTTOM_OPTS[k].some(o => o[0] === cfg.bottom)) cfg.bottom = D.bottom;
   if (!['backpack','satchel','none'].includes(cfg.pack)) cfg.pack = 'backpack';
   const allowed = EXTRA_OPTS[k].map(e => e[0]);
-  for (const e of ['glasses','freckles','binoculars','bow']) cfg[e] = allowed.includes(e) && cfg[e] === true;
+  for (const e of ['glasses','freckles','binoculars','bow','suspenders','bowtie']) cfg[e] = allowed.includes(e) && cfg[e] === true;
   for (const [key, arr] of [['skin',SKIN],['eyes',EYES],['hairColor',HAIRC],['top',CLOTH],['bottomColor',BOTTOM],['shoes',SHOES]])
     if (!Number.isInteger(cfg[key]) || cfg[key] < 0 || cfg[key] >= arr.length) cfg[key] = DEFAULT_CFG[key];
   cfg.name = (typeof cfg.name === 'string' ? cfg.name.slice(0, 14).trim() : '') || 'Explorer';
@@ -1906,7 +1977,9 @@ function heroOpts(c){
   if (c.pack === 'satchel') o.satchel = true;
   if (c.outfit === 'hoodie') Object.assign(o, {shirt:top, sleeve:top, hood:top, strings:true, cuff:dk, patches: c.top === 3 ? C.plum : C.gold});
   if (c.outfit === 'raincoat') Object.assign(o, {shirt:top, coat:top, closed:true, coatLen:.8, coatFlare: girl ? .48 : .4, buttons:4, buttonColor:C.ink, collar:dk, hood:top});
-  if (c.outfit === 'vest') Object.assign(o, {shirt:C.cream, sleeve:C.cream, shortSleeve:true, coat:top, coatLen:.55, coatFlare:.34, pockets:true});
+  if (c.outfit === 'vest') Object.assign(o, {shirt:C.cream, sleeve:C.cream, shortSleeve:true, vest:top, vestTrim:dk});
+  if (!girl && c.suspenders) o.suspenders = c.top === 1 ? C.navy : C.rust;
+  if (!girl && c.bowtie) o.bowtie = c.top === 6 || c.top === 1 ? C.navy : 0x8c3b3b;
   if (c.outfit === 'sweater') Object.assign(o, {shirt:top, shirtMap:stripes(top), sleeve:top, cuff:C.cream});
   if (c.outfit === 'cardigan') Object.assign(o, {shirt:C.cream, sleeve:top, coat:top, coatLen:.62, coatFlare:.32, cuff:C.cream, buttons:3, buttonColor:C.gold});
   if (c.outfit === 'dress') Object.assign(o, {shirt:top, sleeve:top, shortSleeve:true, puffSleeve:true, dress:top, dressTrim:C.cream, collar:C.cream, skirt:null, pants:BOTTOM[c.bottomColor], slimLegs:true, buttons:2, buttonColor:C.cream});
@@ -2101,7 +2174,7 @@ function pick(k, v){
 }
 function surprise(){
   const r = a => a[Math.floor(Math.random() * a.length)];
-  cfg.kind = Math.random() < .5 ? 'boy' : 'girl';
+  // the explorer keeps the gender they picked; everything else is fair game
   Object.assign(cfg, GENDER_DEFAULTS[cfg.kind]);
   for (let pass = 0; pass < 2; pass++) for (const g of groupsFor(cfg.kind)) {
     if (g.key === 'kind') continue;
