@@ -194,7 +194,7 @@ function update(dt){
 
 function frame(){
   const dt = Math.min(clock.getDelta(), .05);
-  if (!game.learning) { update(dt); renderer.render(game.world.scene, camera); renderBust(dt); }
+  if (!game.activity) { update(dt); renderer.render(game.world.scene, camera); renderBust(dt); }
   requestAnimationFrame(frame);
 }
 export function start(){ frame(); }

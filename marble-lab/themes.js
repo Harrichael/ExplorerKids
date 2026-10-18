@@ -19,14 +19,15 @@ module.exports = {
   //     shelf behind a little gate; open it at the right moment and it can drop onto a lever to fling the marble up.
   nap: {
     name: "Biscuit's Nap", depthTarget: 4, band: [.1, .5], maxShelves: 4,
-    start: { x: 90, y: 444, vx: 3.2 },
+    start: { x: 70, y: 284, vx: 3.0 },
     cup: { x: 1030, y: 500 },
-    statics: [floor(0, 1200), box(30, 460, 220, 474, 'shelf'), { x: 300, y: 250, w: 120, h: 14, a: .06, kind: 'shelf' }, box(800, 500, 1080, 640), box(1080, 300, 1130, 640), box(780, 470, 820, 500)],
-    gates: [{ hx: 270, hy: 232, len: 50, dir: 1, kind: 'latch', trigger: { x: 200, y: 440, r: 18 } }],
-    props: [{ type: 'ball', x: 248, y: 224 }],
-    tails: [{ px: 700, py: 640, len: 100, amp: .6, period: 2.4 }],
-    buttons: [{ x: 560, y: 260 }, { x: 640, y: 560 }, { x: 900, y: 420 }],
-    tray: { ruler: 3, book: 1, domino: 3, block: 1, lever: 1, yarn: 0 },
+    statics: [floor(0, 1200), box(20, 300, 190, 640), { x: 600, y: 662, r: 100, kind: 'cat' },
+      box(820, 500, 1080, 640), box(1080, 300, 1130, 640), box(800, 462, 840, 500), { x: 320, y: 225, w: 130, h: 14, a: .06, kind: 'shelf' }],
+    gates: [{ hx: 300, hy: 205, len: 46, dir: 1, kind: 'latch', trigger: { x: 152, y: 250, r: 14 } }],
+    props: [{ type: 'ball', x: 276, y: 199 }],
+    tails: [{ px: 720, py: 640, len: 90, amp: .6, period: 2.4 }],
+    buttons: [{ x: 600, y: 380 }, { x: 430, y: 600 }, { x: 900, y: 420 }],
+    tray: { ruler: 2, book: 1, domino: 3, block: 1, lever: 1, yarn: 0 },
   },
   // 3 — The Midnight Snack Machine: cup on the mantel. Open the bridge over the gap, cross it, then release the
   //     block from the high shelf onto a lever to reach the mantel — with the cat's tail sweeping by the hearth.

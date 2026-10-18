@@ -18,14 +18,14 @@ rebar3 ct                        # server tests
 rebar3 as prod release           # self-contained release with a copy of web/ inside
 ```
 
-The frontend is plain ES modules with no build step; three.js comes from a CDN through the import map in `web/index.html`. `web/js/main.js` is the entry point:
+The frontend is plain ES modules with no build step; three.js and Matter.js come from a CDN through the import map in `web/index.html`. `web/js/main.js` is the entry point:
 
 - `core/`: renderer, sound, the mesh/material build kit, world building blocks
 - `hq/`: the home world (cottage, garden, hills, residents), built on import
 - `characters/`, `props/`: models and the cast of speaking characters
 - `ui/`: dialogue, wardrobe, page turns
 - `state.js` holds the few pieces of frame state several modules write; `save.js` owns localStorage
-- `learn/` (phonogram flashcards) and `trips/` (the Wonder Bus field trip) load only when used, and the phonogram audio in `web/audio/` is fetched clip by clip
+- `learn/` (phonogram flashcards), `library/` (the story-corner book reader), `tower/` (Block Tower, with Matter.js) and `trips/` (the Wonder Bus field trip) load only when used; each takes over the screen through `game.activity` or a cutscene. Phonogram audio in `web/audio/` is fetched clip by clip, book pages from `web/books/` page by page
 
 ### Marble Lab quick start
 

@@ -130,17 +130,17 @@ function finishDeck(){
   setTimeout(() => b1.focus({preventScroll:true}), 60);
 }
 export function openLearn(){
-  if (game.learning) return;
+  if (game.activity) return;
   closeDialog();
-  game.learning = true; for (const k in keys) keys[k] = false; joy.x = joy.y = 0; joy.id = null; knob.style.transform = '';
+  game.activity = 'flashcards'; for (const k in keys) keys[k] = false; joy.x = joy.y = 0; joy.id = null; knob.style.transform = '';
   document.documentElement.classList.add('learning'); learnEl.hidden = false; learnEl.scrollTop = 0;
   Sound.duck(true); [523, 784, 1046].forEach((f, i) => Sound.tone(f, {type:'triangle', t:i * .07, dur:.25, vol:.08}));
   startDeck(L.deck);
   setTimeout(() => cardEl.focus({preventScroll:true}), 80);
 }
 function closeLearn(){
-  if (!game.learning) return;
-  game.learning = false; learnEl.hidden = true; document.documentElement.classList.remove('learning');
+  if (game.activity !== 'flashcards') return;
+  game.activity = null; learnEl.hidden = true; document.documentElement.classList.remove('learning');
   Sound.stopSeq();
   Sound.duck(false); Sound.close(); clock.getDelta();
 }
@@ -162,4 +162,4 @@ $('bAgain').addEventListener('click', again);
 $('bHear').addEventListener('click', () => playWords());
 $('bHearS').addEventListener('click', () => playSounds());
 $('lBack').addEventListener('click', closeLearn);
-addEventListener('keydown', e => { if (!game.learning) return; e.stopPropagation(); learnKey(e); }, true);
+addEventListener('keydown', e => { if (game.activity !== 'flashcards') return; e.stopPropagation(); learnKey(e); }, true);

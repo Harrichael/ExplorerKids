@@ -1,3 +1,4 @@
 node_modules/
 out/*.png
 out/debug*
+out/matter.min.js

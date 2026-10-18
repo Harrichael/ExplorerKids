@@ -8,7 +8,7 @@ async def main():
         errs=[]; pg.on('pageerror', lambda e: errs.append(str(e)))
         async def route(r):
             u=r.request.url
-            if 'matter' in u: await r.fulfill(path='/home/claude/marble-lab/out/matter.min.js', content_type='application/javascript')
+            if 'matter' in u: await r.fulfill(path='/home/claude/explorerkids/marble-lab/out/matter.min.js', content_type='application/javascript')
             elif u.startswith('file:'): await r.continue_()
             else: await r.abort()
         await pg.route('**/*', route)
