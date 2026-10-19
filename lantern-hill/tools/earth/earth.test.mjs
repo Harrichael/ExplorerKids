@@ -3,7 +3,7 @@
 //   node --test tools/earth/*.test.mjs   (from lantern-hill/)
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { BIOMES, WEBS, visit } from '../../web/js/earth/biomes.js';
 import { makeEarth } from '../../web/js/earth/model.js';
@@ -118,4 +118,14 @@ test("every food web can carry Hoot's lessons", () => {
   // the classic case: with no prairie dogs, more grass and fewer of the ferrets that hunt them
   const plains = whatIf(WEBS.find(w => w.id === 'great-plains'));
   assert.deepEqual([plains.gone.name, plains.food.name, plains.eater.name], ['Prairie dog', 'Grass', 'Black-footed ferret']);
+});
+
+test('everyone in every food web has a photo, with credit to whoever took it', () => {
+  const photos = JSON.parse(readFileSync(new URL('../../web/wildlife/photos.json', import.meta.url), 'utf8'));
+  for (const w of WEBS) for (const s of w.species) {
+    const p = photos[`${w.id}/${s.name}`] || photos[s.name];
+    assert.ok(p, `${w.id}: no photo of ${s.name}; run tools/earth/photos.mjs`);
+    assert.ok(existsSync(new URL(`../../web/wildlife/${p.file}`, import.meta.url)), `${s.name}: ${p.file} is missing`);
+    assert.ok(p.by && p.license && p.page, `${s.name}: the photo has no credit`);
+  }
 });

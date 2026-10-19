@@ -60,6 +60,11 @@ css.textContent = `
 .gstrip button.gone{opacity:.25}
 .gsay{font-weight:800;font-size:15px;line-height:1.45;min-height:2.9em}
 .gsay .eats{color:#2f7a3a}.gsay .by{color:#b5552f}
+.gpick{display:flow-root}
+.gphoto{margin:0 0 6px}
+.gphoto img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:12px;border:3px solid var(--ink);background:#d8c8a4}
+.gphoto figcaption{margin-top:2px;font-size:10px;font-weight:700;color:#7a6a7e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gphoto figcaption a{color:inherit}
 .gwhat{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:900;font-size:15px}
 .gwhat span{flex:1;min-width:120px}
 .gwhat button{font-weight:900;font-size:14px;border:2px solid var(--ink);border-radius:999px;padding:3px 11px;background:#fbf4e2;color:var(--ink)}
@@ -81,7 +86,9 @@ css.textContent = `
 #gtoast small{font-weight:900;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#6d3b5e}
 @media (max-aspect-ratio:1/1){#gCard{left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));width:auto;top:calc(68px + env(safe-area-inset-top,0px));max-height:38%}
   .talking #gCard{max-height:38%}#gCard{padding:9px 12px 11px;gap:6px}#gCard .gicon{width:36px;height:36px;font-size:19px}#gCard h3{font-size:18px}
-  #gCard p{font-size:14px}#gCard .gask{font-size:15px}.gstrip button{width:34px;height:34px;font-size:18px}.gcredit{display:none}}
+  #gCard p{font-size:14px}#gCard .gask{font-size:15px}.gstrip button{width:34px;height:34px;font-size:18px}.gcredit{display:none}
+  #gCard:has(.gphoto){max-height:50%}}
+@media (max-aspect-ratio:1/1),(max-height:500px){.gphoto{float:left;width:42%;margin:0 10px 2px 0}.gphoto img{border-width:2px;border-radius:9px}}
 @media (prefers-reduced-motion:reduce){#globeHud,#gtoast{animation:none}}`;
 document.head.appendChild(css);
 
@@ -290,7 +297,7 @@ function setGlow(id){
 function openWeb(){
   if (!G || !here) return;
   stopHunt(); if (convo) endConvo(false);
-  G.mode = 'web'; view.zoom = 1; view.orbit = 0; pin.visible = false;
+  G.mode = 'web'; view.zoom = 1; view.orbit = 0; pin.visible = false; loadPhotos();
   const web = here.web;
   showDiorama(scene, new THREE.Vector3(GLOBE.x, .7, GLOBE.z), web, here.biomeId);
   tune([523, 784], {dur: .14}); [880, 1175, 1568].forEach((f, i) => Sound.tone(f, {type: 'sine', t: .25 + i*.06, dur: .3, vol: .035}));
@@ -330,7 +337,7 @@ function drawWeb(){
     ${isFar(here) ? `<div class="gfrom">${farNote(here)}</div>` : ''}
     <p class="gask">${ask}</p>${what ? row('food', L.q.food) + row('eater', L.q.eater) : ''}
     ${what ? '' : `<div class="gstrip" role="group" aria-label="Who lives here">${web.species.map((s, i) => `<button data-i="${i}" class="${stripClass(s)}" aria-label="${s.name}" title="${s.name}" aria-pressed="${quiz ? L.guesses.has(s.name) : L.sel === s.name}">${s.icon}</button>`).join('')}</div>`}
-    ${L.step === 'explore' && L.sel ? `<div class="gsay">${sayFor(L.sel)}</div>` : ''}
+    ${L.step === 'explore' && L.sel ? `<div class="gpick">${photoFor(L.sel)}<div class="gsay">${sayFor(L.sel)}</div></div>` : ''}
     <div class="gbtns">${btns}</div>`;
   card.querySelectorAll('.gstrip button').forEach(b => b.addEventListener('click', () => tapAnimal(web.species[+b.dataset.i].name)));
   card.querySelectorAll('.gwhat button').forEach(b => b.addEventListener('click', () => { L.answers[b.dataset.k] = b.dataset.v; Sound.tone(880, {type: 'triangle', dur: .06, vol: .05}); draw(); }));
@@ -351,6 +358,20 @@ function sayFor(name){
     + ` · <span class="by">Eaten by:</span> ${by.length ? lower(by).join(', ') : 'nothing here'}`;
 }
 
+// photos of everyone in the webs, fetched the first time a web opens; tools/earth/photos.mjs makes them
+let photos = null;
+function loadPhotos(){
+  if (photos) return;
+  photos = {};
+  fetch('wildlife/photos.json').then(r => r.ok ? r.json() : {}).then(p => { photos = p; if (G && G.mode === 'web') draw(); }, () => {});
+}
+function photoFor(name){
+  const ph = photos[`${here.web.id}/${name}`] || photos[name];
+  if (!ph) return '';
+  const esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  return `<figure class="gphoto"><img src="wildlife/${ph.file}" alt="${esc(name)}"><figcaption title="${esc(ph.by)}">Photo: <a href="${ph.page}" target="_blank" rel="noopener">${esc(ph.by)}</a>, ${esc(ph.license)}</figcaption></figure>`;
+}
+
 function tapAnimal(name){
   const L = G.lesson; if (!L) return;
   if (L.step === 'makers' || L.step === 'hunter') {
@@ -362,6 +383,9 @@ function tapAnimal(name){
     if (L.sel) Sound.tone(880, {type: 'triangle', dur: .07, vol: .05});
   } else return;
   draw();
+  // on a short screen the card scrolls, and who they tapped would land out of sight below the strip
+  const pick = card.querySelector('.gpick');
+  if (pick) card.scrollTop = Math.max(card.scrollTop, pick.offsetTop + pick.offsetHeight - card.clientHeight);
 }
 
 // predict, then check: right guesses get a tick, wrong ones a cross, and the ones missed a "!"
