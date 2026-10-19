@@ -1,7 +1,7 @@
 // The Library Nook reader: the explorer settles down with a storybook open in front of them, on their
-// tummy on the reading rug or cross-legged in the window seat, and the camera looks down at the pages,
-// which curl as they turn. Everything happens in the room itself. Loaded the first time someone reads
-// a book from their backpack.
+// tummy on the floor wherever they are or cross-legged in the window seat, and the camera looks down at
+// the pages, which curl as they turn. Everything happens in the world itself. Loaded the first time
+// someone reads a book from their backpack.
 
 import * as THREE from 'three';
 import { ease } from '../core/kit.js';
@@ -11,7 +11,7 @@ import { WINDOW_SEAT } from '../hq/cottage.js';
 import { hqAnims, scene } from '../hq/scene.js';
 import { sitDown, standUp } from '../hq/sit.js';
 import { keys } from '../input.js';
-import { hero } from '../player.js';
+import { blocked, hero, player } from '../player.js';
 import { makeBook } from '../props/storybook.js';
 import { load, save } from '../save.js';
 import { game } from '../state.js';
@@ -83,14 +83,29 @@ function setFlat() {
   B.setBoards(spread > 0 ? 1 : 0, spread < last ? 0 : 1); B.setStacks(f, 1 - f); B.setPages(leaf(L), leaf(Rr));
   $r('rPg').textContent = spread === 0 ? 'Cover' : spread === last ? 'Back cover' : `${L + 1}–${Rr + 1} / ${book.pages}`;
   $r('rPrev').disabled = spread === 0; $r('rNext').disabled = spread >= last;
-  // two spreads either way are on hand before anyone asks for them
-  for (let i = L - 4; i <= Rr + 4; i++) pageTex(book, i);
-  // remember every page seen; finishing the last spread marks the book as read
-  const st = state[book.id] = state[book.id] || { seen: [], read: false };
+  // two spreads either way are on hand before anyone asks for them, and every spread still to come in a run
+  // of quick taps
+  const back = 4 + 2 * Math.max(0, -queued), ahead = 4 + 2 * Math.max(0, queued);
+  for (let i = L - back; i <= Rr + ahead; i++) pageTex(book, i);
+  record().spread = spread; dwell = 0; saveState();
+}
+const record = () => state[book.id] = state[book.id] || { seen: [], read: false };
+// a page counts as read once it has been open for a while, so flipping through doesn't fill the book in;
+// the book is read once every page between the covers has counted
+const COUNTS_AFTER = 10;
+let dwell = 0;
+function counted() {
+  const st = record(), L = 2 * spread - 1, Rr = 2 * spread;
   for (const i of [L, Rr]) if (i >= 0 && i < book.pages && !st.seen.includes(i)) st.seen.push(i);
-  if (!st.read && spread >= last) { st.read = true; st.at = new Date().toISOString(); celebrate(); }
+  if (!st.read && Array.from({ length: book.pages - 2 }, (_, i) => i + 1).every(i => st.seen.includes(i))) {
+    st.read = true; st.at = new Date().toISOString(); celebrate();
+  }
   saveState();
 }
+hqAnims.push(dt => {
+  if (!open || !book || flip || waiting || el.hidden || dwell >= COUNTS_AFTER) return;
+  if ((dwell += dt) >= COUNTS_AFTER) counted();
+});
 function celebrate() {
   const d = $r('rDone'); d.innerHTML = `You read the whole book!<small>${book.title} added to your reading list</small>`; d.style.opacity = 1;
   [523, 659, 784, 1046].forEach((f, i) => Sound.tone(f, { type: 'triangle', t: i * .09, dur: .3, vol: .08 }));
@@ -140,7 +155,7 @@ function lie(p) {
 }
 // cross-legged, each leg forward and across to the other side, leaning over the book with hands on their knees.
 // They walk up beside the seat and hop sideways onto it, since walking there would go through it
-const SEAT_HOP = -.8, CROSSED = [reach(.62, -.14, .78), reach(-.62, -.03, .78)], KNEES = [reach(.2, -.85, .5), reach(-.2, -.85, .5)];
+const SEAT_HOP = -.95, CROSSED = [reach(.62, -.14, .78), reach(-.62, -.03, .78)], KNEES = [reach(.2, -.85, .5), reach(-.2, -.85, .5)];
 function sit(p) {
   const hip = .74 * hero.body.scale.y;
   bend(.3 * p, hip + (WINDOW_SEAT.y + .1 - hip) * p + Math.sin(p * Math.PI) * .15, SEAT_HOP * p);
@@ -148,14 +163,26 @@ function sit(p) {
   [hero.legL, hero.legR].forEach((m, i) => m.quaternion.slerp(CROSSED[i], p));
   [hero.armL, hero.armR].forEach((m, i) => m.quaternion.slerp(KNEES[i], p));
 }
-// x, z, angle: where they walk to and face. book: where the book's spine lies, its tops away from the reader
-const PLACES = {
-  // along the rug facing the window, a big floor storybook (pages about 45 cm tall) past their head
-  rug: {x:-6.9, z:3.45, angle:-Math.PI/2, pose:lie, scale:.15, book:[-8.45, .052, 3.45]},
-  // at the end of the seat facing along it, side-on to the window, a smaller book open on the cushion
-  window: {x:WINDOW_SEAT.x - SEAT_HOP, z:WINDOW_SEAT.z - .45, angle:0, pose:sit, scale:.09, book:[WINDOW_SEAT.x, WINDOW_SEAT.y + .002, WINDOW_SEAT.z + .3]},
-};
-let at = PLACES.rug;
+// A place to read: x, z, angle are where they settle and face; book is where the book's spine lies, its tops
+// away from the reader.
+// At the end of the window seat facing along it, side-on to the window, a smaller book open on the cushion
+const WINDOW = {x:WINDOW_SEAT.x - SEAT_HOP, z:WINDOW_SEAT.z - .45, angle:0, pose:sit, scale:.09, book:[WINDOW_SEAT.x, WINDOW_SEAT.y + .002, WINDOW_SEAT.z + .3]};
+// On the floor right where they stand, a big floor storybook (pages about 45 cm tall) past their head. They
+// face the way they were facing, or turn the least they can to find floor clear of walls and furniture for
+// their feet, themselves and the book
+const AHEAD = 1.55, TURNS = [0, 1, -1, 2, -2, 3, -3, 4].map(k => k * Math.PI / 4);
+function onTheFloor() {
+  const { x, z, y } = player, clear = a => {
+    const fx = Math.sin(a), fz = Math.cos(a);
+    for (let d = -.9; d <= AHEAD + .5; d += .2) for (const s of d > AHEAD - .4 ? [-.4, 0, .4] : [0])
+      if (blocked(x + fx * d + fz * s, z + fz * d - fx * s, y)) return false;
+    return true;
+  };
+  const angle = player.angle + (TURNS.find(t => clear(player.angle + t)) || 0);
+  const bx = x + Math.sin(angle) * AHEAD, bz = z + Math.cos(angle) * AHEAD;
+  return {x, z, angle, pose:lie, scale:.15, book:[bx, game.world.ground(bx, bz) + .052, bz]};
+}
+let at = WINDOW;
 const fwd = new THREE.Vector3();
 // straight down onto the pages, so however far back a narrow screen needs it, the explorer's head stays
 // below the book rather than in front of it; far enough off to fit the book, open or closed, in the space
@@ -170,7 +197,9 @@ function readCam(pos, look) {
 }
 hqAnims.push(dt => {
   if (!open || !book || !flip) return;
-  flip.t = Math.min(1, flip.t + dt / (flip.board === null ? .6 : .8)); const e = ease(flip.t), p = flip.dir > 0 ? e : 1 - e;
+  // with more turns waiting, each turn hurries, so a run of taps riffles through rather than plodding
+  const hurry = 1 + Math.min(Math.abs(queued), 5);
+  flip.t = Math.min(1, flip.t + dt * hurry / (flip.board === null ? .6 : .8)); const e = ease(flip.t), p = flip.dir > 0 ? e : 1 - e;
   if (flip.board === 0) B.setBoards(p, 0); else if (flip.board === 1) B.setBoards(1, p); else B.curl(p, dt);
   // a page that has landed lets its edge flutter flat, unless the next turn is already waiting
   if (flip.t >= 1 && (flip.board !== null || queued || !B.fluttering())) { spread += flip.dir; flip = null; B.settle(); setFlat(); if (queued) { const d = Math.sign(queued); queued -= d; turn(d); } }
@@ -179,7 +208,10 @@ hqAnims.push(dt => {
 function openBook(b) {
   book = b;
   $r('rTitle').textContent = b.title; $r('rSub').textContent = b.sub; $r('rCredit').textContent = b.credit || '';
-  B.setAspect(b.aspect); B.setShade(1); spread = 0; flip = null; queued = 0;
+  // back where they left off, unless they had come to the end: the back cover, or the last pages of a book
+  // they've finished, which they'll want to read again from the start
+  const st = state[b.id] || {}, left = st.spread | 0, last = Math.floor(b.pages / 2);
+  B.setAspect(b.aspect); B.setShade(1); spread = left >= last || st.read && left >= last - 1 ? 0 : left; flip = null; queued = 0;
   B.setCovers([pageTex(b, 0), pageTex(b, 1)], [pageTex(b, b.pages - 1), pageTex(b, b.pages - 2)]); setFlat();
 }
 // swipe or tap a side of the book to turn
@@ -190,9 +222,9 @@ pagesEl.addEventListener('pointerup', e => { if (sx === null) return; const dx =
 $r('rPrev').addEventListener('click', () => turn(-1)); $r('rNext').addEventListener('click', () => turn(1));
 $r('rClose').addEventListener('click', () => close());
 
-// where: one of PLACES
-export function openReader(id, where = 'rug') {
-  const b = BOOKS.find(x => x.id === id), pl = PLACES[where];
+// where: 'window' for the window seat, otherwise the floor where they stand
+export function openReader(id, where) {
+  const b = BOOKS.find(x => x.id === id), pl = where === 'window' ? WINDOW : onTheFloor();
   if (!b || !b.pages || !sitDown({x: pl.x, z: pl.z, angle: pl.angle, pose: pl.pose, seated: () => { game.cutCam = readCam; el.hidden = false; }})) return;
   at = pl; fwd.set(Math.sin(at.angle), 0, Math.cos(at.angle));
   B.root.scale.setScalar(at.scale); B.root.rotation.y = at.angle + Math.PI; B.root.position.set(...at.book);

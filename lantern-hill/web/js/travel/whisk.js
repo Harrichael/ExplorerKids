@@ -36,5 +36,5 @@ async function wish(){
 function landed(place){
   if (place.home) return "Home sweet Lantern Hill! The stars here feel like old friends.";
   const south = place.lat < -10 ? " We're in the southern half of the world, so there are stars here we never see from home!" : '';
-  return `We made it, {name}! Welcome to ${place.name}! Quick, look through the telescope. The sky is different here!${south}`;
+  return `We made it, {name}! Welcome to ${place.name}! Quick, look through my telescope. The sky is different here!${south}`;
 }
