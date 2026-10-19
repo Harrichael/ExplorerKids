@@ -26,7 +26,8 @@ credits.addEventListener('pointerdown', e => { if (e.target.closest('a')) e.stop
 addEventListener('keydown', e => {
   const k = e.key;
   if (e.target && e.target.tagName === 'INPUT') { if (k === 'Enter' || k === 'Escape') e.target.blur(); return; }
-  if (game.cutscene && !convo) { e.preventDefault(); return; }
+  // a cutscene swallows keys, except on a focused button (the badge's, the notebook's) so it can be pressed
+  if (game.cutscene && !convo) { if (e.target.tagName !== 'BUTTON') e.preventDefault(); return; }
   if (dressing) { wardrobeKey(e); return; }
   if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(k)) e.preventDefault();
   const first = !startEl.hidden;

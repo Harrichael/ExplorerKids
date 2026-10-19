@@ -1,23 +1,33 @@
 // The weather on the real Earth right now, from Open-Meteo (open-meteo.com: free, no key, and it
 // works from a web page), and how a child might make sense of it: words for the sky, the feel of a
-// temperature, a breeze's name, and why it's hot or cold here. Also Hoot's weather missions: find
-// somewhere on Earth where it's snowing, say, right now, checked against the real weather there.
+// temperature, a breeze's name, which kind of cloud is overhead, and why it's hot or cold here. Also
+// Hoot's weather missions: find somewhere on Earth where it's snowing, say, right now, checked
+// against the real weather there; and what his sky lessons need: the jet stream's pull on a
+// plane, and the places a raindrop's journey passes through.
 //
-//   const w = await weatherAt(64.1, -21.9);   // {temperature, feelsLike, wind, from, rain, snow, clouds, code, day, high, low, elevation, time}
+//   const w = await weatherAt(64.1, -21.9);   // {temperature, feelsLike, wind, from, jet, jetFrom, rain, snow, clouds, low, mid, high, code, day, …}
 //   sky(w)                                   // {icon: '🌧️', words: 'Light rain'}
-//   const g = await weatherGrid();            // the whole world every 10°, for painting it
+//   const g = await weatherGrid();            // the whole world every 15°, for painting it
+//   const up = await weatherGrid('jet');      // the wind 10 km up, the same way
 //   g.at(51.5, 0).temperature
 //
 // Open-Meteo asks that its free API be used non-commercially, and credited.
 
 export const CREDIT = 'Weather: Open-Meteo.com, CC BY 4.0';
 const API = 'https://api.open-meteo.com/v1/forecast';
-const NOW = 'temperature_2m,apparent_temperature,precipitation,rain,snowfall,cloud_cover,wind_speed_10m,wind_direction_10m,is_day,weather_code';
-
-const json = url => fetch(url).then(r => r.ok ? r.json() : Promise.reject(new Error(`weather: ${r.status}`)));
+// The free API counts every place asked about as a call, and more than ten things about each as more
+// than one, with a limit of 600 calls a minute. So the whole world's maps ask only what painting them
+// needs, every 15 degrees, and the wind up high is its own map, asked for only when it's wanted; one
+// spot asks everything. The jet stream blows about 10 km up, where the air pressure is a quarter of
+// the ground's: 250 hPa.
+const MAPS = {surface: 'temperature_2m,precipitation,snowfall,cloud_cover,wind_speed_10m,wind_direction_10m,is_day,weather_code', jet: 'wind_speed_250hPa,wind_direction_250hPa'};
+const NOW = `${MAPS.surface},${MAPS.jet},apparent_temperature,cloud_cover_low,cloud_cover_mid,cloud_cover_high`;
+// the service can be slow when busy; better to say so than to wait for ever
+const json = url => fetch(url, {signal: AbortSignal.timeout(45000)}).then(r => r.ok ? r.json() : Promise.reject(new Error(`weather: ${r.status}`)));
 const read = d => ({temperature: d.current.temperature_2m, feelsLike: d.current.apparent_temperature, rain: d.current.precipitation, snow: d.current.snowfall,
-  clouds: d.current.cloud_cover, wind: d.current.wind_speed_10m, from: d.current.wind_direction_10m, day: !!d.current.is_day, code: d.current.weather_code,
-  elevation: d.elevation, time: d.current.time, offset: d.utc_offset_seconds,
+  clouds: d.current.cloud_cover, layers: {low: d.current.cloud_cover_low, mid: d.current.cloud_cover_mid, high: d.current.cloud_cover_high},
+  wind: d.current.wind_speed_10m, from: d.current.wind_direction_10m, jet: d.current.wind_speed_250hPa, jetFrom: d.current.wind_direction_250hPa,
+  day: !!d.current.is_day, code: d.current.weather_code, elevation: d.elevation, time: d.current.time, offset: d.utc_offset_seconds,
   high: d.daily?.temperature_2m_max?.[0], low: d.daily?.temperature_2m_min?.[0]});
 
 // the weather a short while ago at one spot, which is as "now" as a forecast gets
@@ -25,35 +35,39 @@ export async function weatherAt(lat, lon){
   return read(await json(`${API}?latitude=${lat.toFixed(2)}&longitude=${lon.toFixed(2)}&current=${NOW}&daily=temperature_2m_max,temperature_2m_min&forecast_days=1&timezone=auto`));
 }
 
-// The whole world's weather every 10 degrees, asked for in one go, and kept for the hour: plenty to
+// The whole world's weather every 15 degrees, asked for in one go, and kept for the hour: enough to
 // paint the globe with, smoothed in between. `at` blends the four nearest points, wrapping round the
 // date line; the sky's code isn't a number to blend, so it's the nearest point's.
-const STEP = 10, LATS = 17, LONS = 36;   // -80…80, -180…170
-let grid = null;
-export function weatherGrid(){
-  const hour = new Date().toISOString().slice(0, 13);
-  if (grid && grid.hour === hour) return grid.p;
+export const GRID = {step: 15, south: -75, lats: 11, lons: 24};   // -75…75, -180…165
+const {step: STEP, south: SOUTH, lats: LATS, lons: LONS} = GRID;
+const grids = {};
+export function weatherGrid(kind = 'surface'){
+  const hour = new Date().toISOString().slice(0, 13), was = grids[kind];
+  if (was && was.hour === hour) return was.p;
   const lats = [], lons = [];
-  for (let j = 0; j < LATS; j++) for (let i = 0; i < LONS; i++) { lats.push(-80 + j*STEP); lons.push(-180 + i*STEP); }
-  const p = json(`${API}?latitude=${lats.join(',')}&longitude=${lons.join(',')}&current=${NOW}&timezone=GMT`).then(list => makeGrid(list.map(read)));
-  grid = {hour, p}; p.catch(() => { if (grid && grid.p === p) grid = null; });
+  for (let j = 0; j < LATS; j++) for (let i = 0; i < LONS; i++) { lats.push(SOUTH + j*STEP); lons.push(-180 + i*STEP); }
+  const p = json(`${API}?latitude=${lats.join(',')}&longitude=${lons.join(',')}&current=${MAPS[kind]}&timezone=GMT`).then(list => makeGrid(list.map(read)));
+  grids[kind] = {hour, p}; p.catch(() => { if (grids[kind]?.p === p) delete grids[kind]; });
   return p;
 }
 export function makeGrid(points){
   const cell = (j, i) => points[Math.max(0, Math.min(LATS - 1, j))*LONS + ((i % LONS) + LONS) % LONS];
   function at(lat, lon){
-    const y = (lat + 80)/STEP, x = (lon + 180)/STEP, j = Math.floor(y), i = Math.floor(x), fy = Math.max(0, Math.min(1, y - j)), fx = x - i;
+    const y = (lat - SOUTH)/STEP, x = (lon + 180)/STEP, j = Math.floor(y), i = Math.floor(x), fy = Math.max(0, Math.min(1, y - j)), fx = x - i;
     const a = cell(j, i), b = cell(j, i + 1), c = cell(j + 1, i), d = cell(j + 1, i + 1);
     const mix = k => (a[k]*(1 - fx) + b[k]*fx)*(1 - fy) + (c[k]*(1 - fx) + d[k]*fx)*fy;
     // wind blends as a pair of arrows, not as angles, or north-west and north-east would average to south
-    const toward = p => { const r = (p.from + 180)*Math.PI/180; return [Math.sin(r)*p.wind, Math.cos(r)*p.wind]; };
-    const [ae, an] = toward(a), [be, bn] = toward(b), [ce, cn] = toward(c), [de, dn] = toward(d);
-    const east = (ae*(1 - fx) + be*fx)*(1 - fy) + (ce*(1 - fx) + de*fx)*fy, north = (an*(1 - fx) + bn*fx)*(1 - fy) + (cn*(1 - fx) + dn*fx)*fy;
+    const blow = (speed, from) => {
+      const arrow = p => { const r = (p[from] + 180)*Math.PI/180; return [Math.sin(r)*p[speed], Math.cos(r)*p[speed]]; };
+      const [ae, an] = arrow(a), [be, bn] = arrow(b), [ce, cn] = arrow(c), [de, dn] = arrow(d);
+      return [(ae*(1 - fx) + be*fx)*(1 - fy) + (ce*(1 - fx) + de*fx)*fy, (an*(1 - fx) + bn*fx)*(1 - fy) + (cn*(1 - fx) + dn*fx)*fy];
+    };
+    const [east, north] = blow('wind', 'from'), [jetEast, jetNorth] = blow('jet', 'jetFrom');
     const near = cell(Math.round(y), Math.round(x));
-    return {temperature: mix('temperature'), rain: mix('rain'), snow: mix('snow'), clouds: mix('clouds'), east, north, code: near.code, day: near.day};
+    return {temperature: mix('temperature'), rain: mix('rain'), snow: mix('snow'), clouds: mix('clouds'), east, north, jetEast, jetNorth, code: near.code, day: near.day};
   }
   // the points themselves, for finding one where something's true
-  const spots = points.map((p, k) => ({...p, lat: -80 + Math.floor(k/LONS)*STEP, lon: -180 + (k % LONS)*STEP}));
+  const spots = points.map((p, k) => ({...p, lat: SOUTH + Math.floor(k/LONS)*STEP, lon: -180 + (k % LONS)*STEP}));
   return {at, spots};
 }
 
@@ -144,3 +158,90 @@ export const MISSIONS = [
     learn: 'Deserts have clear skies because the air there is dry, with too little water in it to make clouds. That is why it hardly ever rains there.'},
 ];
 export const missionBy = id => MISSIONS.find(m => m.id === id);
+
+// ---------- clouds ----------
+// The five kinds a child can learn to spot, from the top of the sky down. `level` is how high they
+// float; `wiki` is the article their photo comes from.
+export const CLOUDS = [
+  {id: 'cirrus', name: 'Cirrus', icon: '🪶', level: 'high', wiki: 'Cirrus cloud', looks: 'Thin, wispy streaks, like feathers or horses\' tails.',
+    about: 'Cirrus clouds float so high, 6 to 12 kilometres up, that they are made of tiny ice crystals, not water. They often come a day before a change in the weather.',
+    where: 'Cirrus float high above other clouds, so look where the sky is clear down low. They often stream ahead of a storm.'},
+  {id: 'altostratus', name: 'Middle clouds', icon: '🌥️', level: 'mid', wiki: 'Altostratus cloud', looks: 'A grey-blue sheet, with the sun shining through it like a blurry torch.',
+    about: 'Middle clouds float 2 to 6 kilometres up. Their names start with "alto", which means high. A sheet of them often means rain is on its way.',
+    where: 'Middle clouds come before a storm arrives. Look next to places where it is raining.'},
+  {id: 'cumulus', name: 'Cumulus', icon: '☁️', level: 'low', wiki: 'Cumulus cloud', looks: 'Puffy white heaps with flat bottoms, like cotton wool.',
+    about: 'Cumulus clouds grow when the sun warms the ground and bubbles of warm air rise up. Cumulus means "heap". Small ones mean fair weather.',
+    where: 'Cumulus grow on sunny days, when warm air bubbles up from the ground. Look where it is daytime.'},
+  {id: 'stratus', name: 'Stratus', icon: '🌫️', level: 'low', wiki: 'Stratus cloud', looks: 'A flat grey blanket covering the whole sky. Fog is stratus touching the ground!',
+    about: 'Stratus means "layer". These low, flat clouds cover everything in grey and can bring drizzle. When stratus sinks all the way down, we call it fog.',
+    where: 'Stratus like cool, damp places: look along cold coasts, and where it is drizzly or foggy.'},
+  {id: 'cumulonimbus', name: 'Cumulonimbus', icon: '⛈️', level: 'all', wiki: 'Cumulonimbus cloud', looks: 'A gigantic tower, dark at the bottom, often with a flat top like an anvil.',
+    about: 'Cumulonimbus are the biggest clouds of all, as tall as 15 kilometres, taller than Mount Everest! They are thunderstorm clouds: lightning, thunder, heavy rain and sometimes hail.',
+    where: 'Thunderstorm clouds need lots of warm, wet air. Look in the tropics, near the equator, especially in the afternoon.'},
+];
+export const cloudBy = id => CLOUDS.find(c => c.id === id);
+// The kind of cloud most likely overhead, from how much of the sky each layer covers. Weather
+// reports don't name the cloud, so this is a good guess, the way a forecaster would make one.
+export function cloudKind(w){
+  const {low = 0, mid = 0, high = 0} = w.layers || {};
+  if ([95, 96, 99].includes(w.code)) return cloudBy('cumulonimbus');
+  if (Math.max(low, mid, high) < 15) return null;
+  if (low >= mid && low >= high) return cloudBy(low >= 80 || [45, 48, 51, 53, 55, 56, 57].includes(w.code) || (isRaining(w) && low >= 60) ? 'stratus' : 'cumulus');
+  return cloudBy(mid >= high ? 'altostratus' : 'cirrus');
+}
+
+// ---------- the world's winds ----------
+// how hard the wind blows from the west, on average, in a band of latitude: positive is west to
+// east. `up` is the jet stream's height instead of the ground's.
+export function westerly(grid, from, to, up = false){
+  let sum = 0, n = 0;
+  for (const s of grid.spots) if (s.lat >= from && s.lat <= to) { const v = grid.at(s.lat, s.lon); sum += up ? v.jetEast : v.east; n++; }
+  return n ? sum/n : 0;
+}
+// the fastest wind up high anywhere, and where
+export function fastestJet(grid){
+  return grid.spots.reduce((b, s) => s.jet > (b ? b.jet : -1) ? s : b, null);
+}
+
+// The great-circle path between two places, as `n` steps of [lat, lon]
+const RAD = Math.PI/180;
+export function route(a, b, n = 48){
+  const v = ([lat, lon]) => [Math.cos(lat*RAD)*Math.cos(lon*RAD), Math.cos(lat*RAD)*Math.sin(lon*RAD), Math.sin(lat*RAD)];
+  const p = v(a), q = v(b), w = Math.acos(Math.max(-1, Math.min(1, p[0]*q[0] + p[1]*q[1] + p[2]*q[2])));
+  return Array.from({length: n + 1}, (_, i) => {
+    const t = i/n, s = Math.sin(w), ka = Math.sin((1 - t)*w)/s, kb = Math.sin(t*w)/s;
+    const x = ka*p[0] + kb*q[0], y = ka*p[1] + kb*q[1], z = ka*p[2] + kb*q[2];
+    return [Math.atan2(z, Math.hypot(x, y))/RAD, Math.atan2(y, x)/RAD];
+  });
+}
+// How long a jet takes to fly a route, in hours, with the wind up high pushing it along or holding it
+// back: the plane's own speed through the air, plus the part of the wind blowing its way.
+export const CRUISE = 900;
+export function flightHours(grid, a, b){
+  const path = route(a, b), km = (p, q) => 6371*Math.acos(Math.min(1, Math.sin(p[0]*RAD)*Math.sin(q[0]*RAD) + Math.cos(p[0]*RAD)*Math.cos(q[0]*RAD)*Math.cos((q[1] - p[1])*RAD)));
+  let hours = 0;
+  for (let i = 0; i + 1 < path.length; i++) {
+    const p = path[i], q = path[i + 1], d = km(p, q); if (!d) continue;
+    const mid = [(p[0] + q[0])/2, (p[1] + q[1])/2], v = grid.at(...mid);
+    // which way the plane is heading, as east and north
+    const north = (q[0] - p[0]), east = ((q[1] - p[1] + 540) % 360 - 180)*Math.cos(mid[0]*RAD), len = Math.hypot(north, east) || 1;
+    hours += d/Math.max(300, CRUISE + (v.jetEast*east + v.jetNorth*north)/len);
+  }
+  return hours;
+}
+// the races Hoot can set: of these, the one today's jet stream makes the most of
+export const RACES = [
+  {a: {name: 'New York', at: [40.64, -73.78]}, b: {name: 'London', at: [51.47, -0.45]}},
+  {a: {name: 'Tokyo', at: [35.55, 139.78]}, b: {name: 'San Francisco', at: [37.62, -122.38]}},
+  {a: {name: 'Buenos Aires', at: [-34.82, -58.54]}, b: {name: 'Cape Town', at: [-33.97, 18.6]}},
+];
+
+// ---------- a raindrop's journey ----------
+// From the warm Bay of Bengal, up into a cloud, north on the summer monsoon to the Khasi Hills, where
+// Cherrapunji is one of the rainiest places on Earth, then down the Surma and Meghna rivers home.
+export const RAINDROP = {
+  sea: {name: 'the Bay of Bengal', at: [15, 88.5]},
+  sky: [[15, 88.5], [18.5, 89.4], [21.8, 90.6], [24.2, 91.4], [25.27, 91.73]],
+  rain: {name: 'Cherrapunji', at: [25.27, 91.73]},
+  river: {name: 'the Meghna River', path: [[25.27, 91.73], [24.9, 91.87], [24.55, 91.4], [24.0, 91.0], [23.55, 90.75], [23.2, 90.62], [22.6, 90.65], [22.1, 90.75], [21.4, 90.6], [20.2, 90.0], [17.5, 89.2], [15, 88.5]]},
+};

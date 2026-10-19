@@ -140,11 +140,11 @@ let met = !!stored.met;
 // what the real-Earth globes keep: what's been found and visited, each one's lens, which have said
 // hello, and which globe was picked last
 const set = k => new Set(list(stored[k]));
-const store = {wonders: set('wonders'), landforms: set('landforms'), countries: set('countries'), flags: set('flags'), capitals: set('capitals'), weather: set('weather'),
+const store = {wonders: set('wonders'), landforms: set('landforms'), countries: set('countries'), flags: set('flags'), capitals: set('capitals'), weather: set('weather'), clouds: set('clouds'), lessons: set('lessons'),
   lenses: stored.lenses && typeof stored.lenses === 'object' ? stored.lenses : {}, met: new Set([...list(stored.metGlobes), ...(stored.metGeo ? ['geo'] : [])]),
   mode: KINDS.some(k => k.id === stored.mode) ? stored.mode : 'biomes'};
 const keep = () => save('globe', {found: [...found], webs: [...learned], met, mode: store.mode, lenses: store.lenses, metGlobes: [...store.met],
-  ...Object.fromEntries(['wonders', 'landforms', 'countries', 'flags', 'capitals', 'weather'].map(k => [k, [...store[k]]]))});
+  ...Object.fromEntries(['wonders', 'landforms', 'countries', 'flags', 'capitals', 'weather', 'clouds', 'lessons'].map(k => [k, [...store[k]]]))});
 const ALL = Object.keys(BIOMES);
 const H = text => ['hoot', text];
 const tune = (notes, o = {}) => notes.forEach((f, i) => Sound.tone(f, {type: 'triangle', t: i*(o.gap || .08), dur: o.dur || .2, vol: o.vol || .06}));
@@ -307,9 +307,12 @@ function draw(){
     <div class="gbtns"><button class="gb" id="gWebBtn">Who eats whom?</button></div>`;
   on('gWebBtn', openWeb);
 }
-// a web from far off says so, and says it's the same biome, so nobody thinks those animals live here
+// a web drawn far off says where it's from, and whether its animals live here too; where none of
+// the webs fits, it says it's only the same biome, so nobody thinks those animals live here
 const isFar = p => arc(p.lat, p.lon, p.web.at[0], p.web.at[1]) > 1500;
-const farNote = p => isFar(p) ? `No food web from right here yet. Here's one from another ${p.biome.name.toLowerCase()}: ${p.web.place}.` : `A food web from ${p.web.place}.`;
+const farNote = p => !isFar(p) ? `A food web from ${p.web.place}.`
+  : p.webFits ? `A food web from ${p.web.place}. The same animals live here too.`
+  : `No food web from right here yet. Here's one from another ${p.biome.name.toLowerCase()}: ${p.web.place}.`;
 const btn = (id, text, cls = 'gb') => `<button class="${cls}" id="${id}">${text}</button>`;
 const on = (id, f) => { const b = $g(id); if (b) b.addEventListener('click', f); };
 

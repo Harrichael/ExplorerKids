@@ -8,7 +8,7 @@ export const MUSIC = {
   trip: ['Fiddles McGinty', 'Monkeys Spinning Monkeys', 'Carpe Diem'].map(track),
 };
 // the songs are loudness-matched at -16 LUFS; this sits them under the sound effects
-const MUSIC_VOL = {songs:.3, box:.14};
+const MUSIC_VOL = {songs:.075, box:.14};
 
 export const Sound = (() => {
   let ctx = null, master, sfx, music, echo, air, noise, on = true, mode = load('musicBox') ? 'box' : 'songs';
@@ -31,7 +31,7 @@ export const Sound = (() => {
     noise = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
     const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     music.gain.setValueAtTime(0, ctx.currentTime);
-    music.gain.linearRampToValueAtTime(MUSIC_VOL[mode], ctx.currentTime + 4);
+    music.gain.linearRampToValueAtTime(awake ? MUSIC_VOL[mode] : 0, ctx.currentTime + 4);
     startMusic();
   }
   // `pan` from -1 (left) to 1 (right) places a sound in the stereo field
@@ -91,10 +91,11 @@ export const Sound = (() => {
   let theme = 'home', order = [], el = null, fade = null, fadeT = 0;
   function play(){
     if (!order.length) order = MUSIC[theme].slice().sort(() => Math.random() - .5);
-    // a touch lets a page start audio only once the finger lifts, so the first song may have to wait for it
-    el.src = order.shift().src; el.play().catch(() => addEventListener('pointerup', () => el.play().catch(() => {}), {once:true}));
+    el.src = order.shift().src; if (awake) resume();
     clearTimeout(fadeT); fade.gain.cancelScheduledValues(ctx.currentTime); fade.gain.setTargetAtTime(1, ctx.currentTime, .4);
   }
+  // a touch lets a page start audio only once the finger lifts, so a song may have to wait for it
+  function resume(){ el.play().catch(() => addEventListener('pointerup', () => awake && el.play().catch(() => {}), {once:true})); }
   function fadeOut(then){
     clearTimeout(fadeT); fade.gain.cancelScheduledValues(ctx.currentTime); fade.gain.setTargetAtTime(0, ctx.currentTime, .25);
     fadeT = setTimeout(then, 1000);
@@ -122,7 +123,7 @@ export const Sound = (() => {
   // the music box changes tune only on a bar line
   let boxTheme = theme, step = 0, next = 0;
   function tickBox(){
-    if (mode !== 'box') { next = 0; return; }
+    if (mode !== 'box' || !awake) { next = 0; return; }
     if (!next) next = ctx.currentTime + .2;
     while (next < ctx.currentTime + .35) {
       if (boxTheme !== theme && step % 8 === 0) { boxTheme = theme; step = 0; }
@@ -146,9 +147,28 @@ export const Sound = (() => {
     mode = mode === 'songs' ? 'box' : 'songs'; save('musicBox', mode === 'box');
     if (!ctx) return;
     echo.gain.setTargetAtTime(mode === 'box' ? 1 : 0, ctx.currentTime, .3);
-    music.gain.setTargetAtTime(MUSIC_VOL[mode], ctx.currentTime, .3);
+    level();
     if (mode === 'songs') play(); else fadeOut(() => el.pause());
   }
+  // The music rests while nobody is there to hear it: the tab is in the background or its window
+  // isn't focused, or no one has touched it for five minutes. It comes back with the next tap or key
+  // in the focused tab. Input alone doesn't count: an AI agent can drive a tab nobody is looking at.
+  const IDLE = 5*60e3;
+  let awake = true, ducked = false, lastActive = performance.now(), restT = 0;
+  function level(){ if (ctx) music.gain.setTargetAtTime(awake ? MUSIC_VOL[mode] * (ducked ? .35 : 1) : 0, ctx.currentTime, awake ? .3 : .8); }
+  function setAwake(a){
+    if (a === awake) return;
+    awake = a; level(); clearTimeout(restT);
+    if (!el || mode !== 'songs') return;
+    // a resting song pauses rather than playing on silently, so it picks up where it left off
+    if (awake) { if (el.paused && el.src) resume(); } else restT = setTimeout(() => el.pause(), 3000);
+  }
+  const present = () => !document.hidden && document.hasFocus();
+  function active(){ lastActive = performance.now(); if (present()) setAwake(true); }
+  for (const ev of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'focus']) addEventListener(ev, active, {capture:true, passive:true});
+  const away = () => { if (!present()) setAwake(false); };
+  addEventListener('blur', away); document.addEventListener('visibilitychange', () => document.hidden ? away() : active());
+  setInterval(() => { if (performance.now() - lastActive > IDLE) setAwake(false); }, 5000);
   const bufCache = new Map(); let seqId = 0, seqSrc = [], seqTimers = [];
   function clipBuffer(url){
     if (bufCache.has(url)) return bufCache.get(url);
@@ -183,7 +203,7 @@ export const Sound = (() => {
     setTheme(name){ if (MUSIC[name] && name !== theme) switchTo(name); },
     isOn(){ return on; },
     toggle(){ on = !on; if (ctx) master.gain.setTargetAtTime(on ? .9 : 0, ctx.currentTime, .05); return on; },
-    duck(d){ if (ctx) music.gain.setTargetAtTime(MUSIC_VOL[mode] * (d ? .35 : 1), ctx.currentTime, .3); },
+    duck(d){ ducked = d; level(); },
     open(){ tone(784, {type:'triangle', dur:.14, vol:.13}); tone(1175, {type:'triangle', t:.08, dur:.22, vol:.12}); },
     next(){ tone(1046, {type:'square', dur:.05, vol:.035, cut:2500}); },
     close(){ tone(988, {type:'triangle', dur:.12, vol:.11}); tone(659, {type:'triangle', t:.08, dur:.2, vol:.1}); },

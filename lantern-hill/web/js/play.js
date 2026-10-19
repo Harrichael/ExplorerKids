@@ -14,6 +14,8 @@ import { dress, dressing } from './ui/wardrobe.js';
 
 export function enterWorld(w, spawn){
   game.world = w; w.scene.add(hero.root); w.scene.add(blob);
+  // most worlds are small enough to cull at 120; one with a far horizon asks for more
+  camera.far = w.far || 120; camera.updateProjectionMatrix();
   player.x = spawn[0]; player.z = spawn[1]; player.angle = spawn[2] === undefined ? Math.PI : spawn[2];
   player.y = w.ground(player.x, player.z); player.vy = 0; player.walk = 0;
   hero.root.position.set(player.x, player.y, player.z); hero.root.rotation.y = player.angle;
@@ -21,10 +23,22 @@ export function enterWorld(w, spawn){
   camPos.set(player.x, player.y + (portrait ? (co.oyP || 7.4) : (co.oy || 5.6)), player.z + (portrait ? (co.ozP || 8.2) : (co.oz || 7)));
   camLook.set(player.x, player.y + 1.1 + (co.lookY || 0), player.z - .4);
   game.nearest = lastNearest = null; game.reach.length = 0; game.cutCam = null;
-  w.npcs.forEach(n => { if (n.follow === undefined) return;
-    n.x = player.x + (n.follow - 1)*1.3; n.z = player.z + 1.4 + (n.follow === 1 ? .7 : 0);
-    if (w.bounds && !w.bounds(n.x, n.z)) n.z = player.z - 1.3 - (n.follow === 1 ? .7 : 0);
-    n.y = n.gy = w.ground(n.x, n.z); n.model.root.position.set(n.x, n.y, n.z); });
+}
+
+// a held pose, laid over the idle animation: sat on the bus, crouched over a find, pointing at one,
+// or dropped, covered and holding on while the ground shakes. Walking drops it until they arrive.
+// The hero takes one too, from player.pose, while a trip's scene holds them still.
+function posed(n, m, t = n.t){
+  const p = n.goal ? null : n.pose, wob = Math.sin(t*3);
+  // arms holding a book or clipboard rest raised, so a pose remembers where they were to give them back
+  if (!n.rest) n.rest = {l:[m.armL.rotation.x, m.armL.rotation.z], r:[m.armR.rotation.x, m.armR.rotation.z]};
+  if (n.posedAs !== p) { n.posedAs = p; m.armL.rotation.set(n.rest.l[0], 0, n.rest.l[1]); m.armR.rotation.set(n.rest.r[0], 0, n.rest.r[1]); m.head.rotation.x = 0; }
+  if (p === 'sit') { m.legL.rotation.x = m.legR.rotation.x = -1.45; m.body.position.y = -.32; m.armL.rotation.x = -.35; if (!m.holdsRight) m.armR.rotation.x = -.35; }
+  if (p === 'crouch') { m.legL.rotation.x = -1.25; m.legR.rotation.x = -.5; m.body.position.y = -.36; m.head.rotation.x = .35; }
+  if (p === 'point') { m.armR.rotation.x = -2.3 + wob*.05; m.armR.rotation.z = .25; }
+  if (p === 'peer') { m.armL.rotation.x = m.armR.rotation.x = -2.1; m.armL.rotation.z = -.5; m.armR.rotation.z = .5; m.head.rotation.x = .1; }
+  if (p === 'cover') { m.legL.rotation.x = m.legR.rotation.x = -1.5; m.body.position.y = -.46; m.armL.rotation.x = m.armR.rotation.x = -2.5; m.armL.rotation.z = .95; m.armR.rotation.z = -.95; m.head.rotation.x = .6; }
+  if (p === 'cheer') { const b = Math.abs(Math.sin(t*7)); m.armL.rotation.x = m.armR.rotation.x = -2.8; m.armL.rotation.z = -.3 - b*.2; m.armR.rotation.z = .3 + b*.2; m.body.position.y = b*.1; }
 }
 
 export const clock = new THREE.Clock();
@@ -83,6 +97,7 @@ function update(dt){
   if (dressing) { hero.armR.rotation.x = dress.hop > 0 ? -2.2 : 0; hero.armR.rotation.z = dress.hop > 0 ? .3 : .12; }
   hero.head.rotation.z = Math.sin(player.walk * .5) * .04 * mag;
   hero.eyes.scale.y = (game.elapsed % 4.2) < .1 ? .1 : 1;
+  if (player.pose || player.posedAs) posed(player, hero, game.elapsed);
   blob.position.set(player.x, gnd + .05, player.z);
 
   game.nearest = null; let best = Infinity;
@@ -109,18 +124,15 @@ function update(dt){
       m.head.rotation.z = active === n ? .25 + Math.sin(n.t * 3) * .05 : Math.sin(n.t * .5) * .05;
     } else {
       let lookA = look;
-      if (n.follow !== undefined) {
-        let moving = false;
-        if (!convo && !game.cutscene) {
-          const fx = Math.sin(player.angle), fz = Math.cos(player.angle), back = 1.6 + (n.follow === 1 ? .9 : 0), side = (n.follow - 1)*1.1, sd = side || 1.2;
-          const cands = [[player.x - fx*back + fz*side, player.z - fz*back - fx*side], [player.x + fz*sd*1.2, player.z - fx*sd*1.2], [player.x - fz*sd*1.2, player.z + fx*sd*1.2]];
-          const tgt = cands.find(c => !game.world.bounds || game.world.bounds(c[0], c[1])) || [n.x, n.z];
-          const ddx = tgt[0] - n.x, ddz = tgt[1] - n.z, dd = Math.hypot(ddx, ddz);
-          if (dd > .45) { const st = Math.min(dd - .3, (dd > 3 ? 6 : 3.6)*dt), nx2 = n.x + ddx/dd*st, nz2 = n.z + ddz/dd*st; if (!game.world.bounds || game.world.bounds(nx2, nz2)) { n.x = nx2; n.z = nz2; } moving = true; lookA = Math.atan2(ddx, ddz); n.walk += dt*9.5; }
-        }
+      // someone with somewhere to be walks there, even while a cutscene watches them go
+      if (n.goal) {
+        const ddx = n.goal.x - n.x, ddz = n.goal.z - n.z, dd = Math.hypot(ddx, ddz), st = Math.min(dd, (n.goal.run ? 4.6 : 2.6)*dt);
+        if (dd > .03) { n.x += ddx/dd*st; n.z += ddz/dd*st; lookA = Math.atan2(ddx, ddz); n.walk += dt*(n.goal.run ? 13 : 9.5); }
+        else { const g = n.goal; n.goal = null; if (g.angle !== undefined) n.baseAngle = g.angle; if (g.then) g.then(); }
         n.y = n.gy = game.world.ground(n.x, n.z); m.root.position.set(n.x, n.y, n.z);
-        n.moving = moving; const swing = moving ? Math.sin(n.walk)*.6 : 0; m.legL.rotation.x = swing; m.legR.rotation.x = -swing;
       }
+      const swing = n.goal ? Math.sin(n.walk)*.6 : 0; m.legL.rotation.x = swing; m.legR.rotation.x = -swing;
+      if (n.pose && !n.goal) lookA = n.baseAngle;
       let d2 = lookA - m.root.rotation.y; d2 = Math.atan2(Math.sin(d2), Math.cos(d2));
       m.root.rotation.y += d2 * Math.min(1, dt * 4);
       m.body.position.y = Math.sin(n.t * 2.2) * .018;
@@ -132,9 +144,10 @@ function update(dt){
       m.mouthOpen.scale.y = .5 + Math.abs(Math.sin(n.t * 17)) * .5;
       if (n.t > n.blinkAt) { m.eyes.scale.y = .1; if (n.t > n.blinkAt + .1) { m.eyes.scale.y = 1; n.blinkAt = n.t + rr(2, 5); } }
       if ((n.pid || (n.persona && n.persona.id)) === 'sparks') zany(n, m, talking, dt);
+      if (n.pose || n.posedAs) posed(n, m);
     }
     n.label.position.set(n.x, n.y + n.labelY + Math.sin(n.t * 2) * .03, n.z);
-    const lo = d < 4.5 && dy < 2 && n.follow === undefined ? 1 : 0;
+    const lo = d < 4.5 && dy < 2 ? 1 : 0;
     n.label.material.opacity += (lo - n.label.material.opacity) * Math.min(1, dt * 6);
   }
   if (game.nearest && game.nearest !== lastNearest && !active) Sound.near();
@@ -153,11 +166,13 @@ function update(dt){
     if (game.nearest) parts.push(`<b>Space</b> Talk to ${game.nearest.name}`);
     if (canUse) reach.forEach((u, i) => { if (u) parts.push(`<b>${USE_KEYS[i].toUpperCase()}</b> ${u.verb}`); });
     promptEl.hidden = !parts.length || coarse || !startEl.hidden || dressing || game.cutscene;
+    promptEl.classList.toggle('big', canUse && reach.some(u => u && u.big));
     if (parts.length) promptEl.innerHTML = parts.join('<br>');
   }
   talkBtn.classList.toggle('ready', !!game.nearest);
   useBtns.forEach((b, i) => { const u = canUse && reach[i];
     if (b.hidden === !!u) b.hidden = !u;
+    b.classList.toggle('big', !!(u && u.big));
     if (u && b.textContent !== u.short) { b.textContent = u.short; b.setAttribute('aria-label', u.verb); } });
   for (const u of game.world.usables) { const sm = u.sparkle.material; sm.opacity += ((canUse && reach.includes(u) ? 1 : 0) - sm.opacity) * Math.min(1, dt * 7);
     u.sparkle.position.y = u.glow[1] + Math.sin(game.elapsed * 3) * .08; sm.rotation = game.elapsed * .8; }
@@ -176,7 +191,8 @@ function update(dt){
     tmpV2.set(player.x + side, player.y + (sheet ? .25 : .95), player.z);
     camPos.lerp(tmpV, Math.min(1, dt * 4));
   } else if (game.cutCam) {
-    game.cutCam(tmpV, tmpV2); camPos.lerp(tmpV, Math.min(1, dt * 2.2));
+    const exact = game.cutCam(tmpV, tmpV2);
+    if (exact || game.camSnap) { camPos.copy(tmpV); camLook.copy(tmpV2); game.camSnap = false; } else camPos.lerp(tmpV, Math.min(1, dt * 2.2));
   } else {
     const co = game.world.cam || {};
     const oy = portrait ? (co.oyP || 7.4) : (co.oy || 5.6), oz = portrait ? (co.ozP || 8.2) : (co.oz || 7.0);

@@ -58,9 +58,6 @@ css.textContent = `
 #garden .packet.on{transform:translateY(-6px);box-shadow:0 0 0 3px var(--gold),0 6px 0 var(--ink)}
 #garden .packet.new::after{content:'NEW';position:absolute;top:-8px;right:-6px;font-weight:900;font-size:10px;background:var(--rust);color:var(--parch);border:2px solid var(--ink);border-radius:8px;padding:1px 5px}
 @media (max-height:500px){#garden .packet{width:68px;padding:4px 4px 5px}#garden .packet img{width:42px;height:42px}#garden .packet b{font-size:11px}#garden .packet em{font-size:9px}#garden .gtray{padding-top:6px;padding-bottom:6px}#garden header{padding-bottom:6px}#garden .basket{min-width:120px;padding:3px 10px}#garden .gnote{font-size:13px;margin-bottom:4px}}
-#garden .packet.locked{background:#5a5068;color:var(--parch);cursor:default;opacity:.85}
-#garden .packet.locked img{filter:brightness(0) opacity(.45);background:none}
-#garden .packet.locked em{color:var(--gold)}
 #garden .ginfo{position:absolute;width:230px;background:#f6ecd6;color:var(--ink);border:2.5px solid var(--gold);border-radius:14px;box-shadow:0 0 0 3px var(--ink),0 8px 20px rgba(0,0,0,.35);padding:9px 12px 10px;font-size:13px;font-weight:800;line-height:1.35;cursor:default}
 #garden .ginfo h3{margin:0 0 3px;font-family:var(--display);font-weight:400;font-size:18px;color:var(--plum)}
 #garden .ginfo p{margin:2px 0}
@@ -79,13 +76,11 @@ css.textContent = `
 #gjournal .jgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
 #gjournal .jcrop{display:flex;gap:8px;background:#fff8e8;border:2px solid rgba(109,59,94,.25);border-radius:12px;padding:8px;font-size:12px;font-weight:800;line-height:1.3}
 #gjournal .jcrop img{width:56px;height:56px;flex:none;border-radius:8px;background:#efe3c6}
-#gjournal .jcrop.locked img{filter:brightness(0) opacity(.35);background:none}
 #gjournal .jcrop b{display:block;font-size:14px;font-weight:900}
 #gjournal .jcrop p{margin:3px 0 0;font-weight:700;color:#4a3a4e}
 #gjournal .jcrop .seas{color:#6d3b5e}
 #gjournal .jsecret{display:flex;gap:10px;align-items:flex-start;margin:6px 0;font-size:13px;font-weight:800;line-height:1.35}
 #gjournal .jsecret span{font-size:22px;line-height:1}
-#gjournal .jsecret.hidden{opacity:.55}
 #gjournal .gb{font-family:var(--display);font-size:16px;color:var(--parch);background:var(--plum);border:2.5px solid var(--gold);border-radius:14px;padding:6px 14px;box-shadow:0 0 0 3px var(--ink);cursor:pointer}`;
 document.head.appendChild(css);
 
@@ -128,7 +123,7 @@ function thumb(crop){
 // ----- the HUD -----
 let chosen = null, fresh = new Set();
 function drawTray(){
-  const have = unlocked(garden), next = nextUnlock(garden);
+  const have = unlocked(garden);
   if (!chosen || !have.some(c => c.id === chosen)) chosen = (have.find(c => inSeason(c, garden.season)) || have[0]).id;
   const order = [...have].sort((a, b) => inSeason(b, garden.season) - inSeason(a, garden.season));
   trayEl.innerHTML = '';
@@ -140,11 +135,6 @@ function drawTray(){
     b.setAttribute('aria-pressed', c.id === chosen);
     b.addEventListener('click', e => { e.stopPropagation(); Sound.init(); chosen = c.id; fresh.delete(c.id); Sound.tone(880, {type:'triangle', dur:.08, vol:.06}); drawTray();
       note(good ? `${c.name} seeds ready. Tap bare soil to plant!` : `${c.name} grows slowly in ${garden.season}. It likes ${c.seasons.join(' and ')}.`); });
-    trayEl.appendChild(b);
-  }
-  if (next) {
-    const b = document.createElement('div'); b.className = 'packet locked';
-    b.innerHTML = `<img alt="" src="${thumb(next)}"><b>???</b><em>${next.unlock - picked(garden)} more picks</em>`;
     trayEl.appendChild(b);
   }
 }
@@ -401,19 +391,17 @@ addEventListener('keydown', e => {
 // ----- the journal: every plant met so far, what was learned, and the garden's secrets -----
 let journal = null;
 function openJournal(){
-  const have = new Set(unlocked(garden).map(c => c.id));
   journal = document.createElement('div'); journal.id = 'gjournal';
-  const crops = CROPS.map(c => {
-    const told = garden.told[c.id] || 0, n = garden.picked[c.id] || 0, on = have.has(c.id);
-    const facts = on ? c.facts.slice(0, told).map(f => `<p>${f}</p>`).join('') || '<p>Plant one to learn about it.</p>' : `<p>Pick ${c.unlock} in all to get these seeds.</p>`;
-    return `<div class="jcrop${on ? '' : ' locked'}"><img alt="" src="${thumb(c)}"><div><b>${on ? c.name : '???'}</b>
-      ${on ? `<span class="seas">${c.seasons.map(cap).join(', ')}${inSeason(c, garden.season) ? ' · good now' : ''}</span> · grows in ${hours(c.hours)} of play<br>Picked: ${n}` : ''}${facts}</div></div>`;
+  const crops = unlocked(garden).map(c => {
+    const told = garden.told[c.id] || 0, n = garden.picked[c.id] || 0;
+    const facts = c.facts.slice(0, told).map(f => `<p>${f}</p>`).join('') || '<p>Plant one to learn about it.</p>';
+    return `<div class="jcrop"><img alt="" src="${thumb(c)}"><div><b>${c.name}</b>
+      <span class="seas">${c.seasons.map(cap).join(', ')}${inSeason(c, garden.season) ? ' · good now' : ''}</span> · grows in ${hours(c.hours)} of play<br>Picked: ${n}${facts}</div></div>`;
   }).join('');
-  const secrets = Object.entries(SECRETS).map(([k, s]) => garden.secrets[k]
-    ? `<div class="jsecret"><span>${s.icon}</span><div><b>${s.name}</b><br>${s.text}</div></div>`
-    : `<div class="jsecret hidden"><span>❔</span><div><b>A secret not yet found</b><br>Keep gardening to discover it.</div></div>`).join('');
+  const secrets = Object.entries(SECRETS).filter(([k]) => garden.secrets[k])
+    .map(([, s]) => `<div class="jsecret"><span>${s.icon}</span><div><b>${s.name}</b><br>${s.text}</div></div>`).join('');
   journal.innerHTML = `<div class="jwrap"><header><h2>Garden Journal</h2><button class="gb">Close</button></header>
-    <h3>Garden secrets</h3>${secrets}<h3>My plants</h3><div class="jgrid">${crops}</div></div>`;
+    ${secrets ? `<h3>Garden secrets</h3>${secrets}` : ''}<h3>My plants</h3><div class="jgrid">${crops}</div></div>`;
   journal.querySelector('button').addEventListener('click', closeJournal);
   journal.addEventListener('pointerdown', e => { e.stopPropagation(); if (e.target === journal) closeJournal(); });
   document.body.appendChild(journal);
