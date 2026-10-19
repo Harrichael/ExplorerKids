@@ -22,7 +22,7 @@ const steady = (ra, dec, w0, rate) => (d, T) => [ra, dec, w0 + rate*d];
 // A world's lenses are the maps it can be seen through up close, the first the one it ships with;
 // a lens without its own map glows where the first one's pictures were taken from close by
 const CLOSE = {name:'Close-ups', glow:'#ffcf73',
-  tip:'Galileo flew close over only a few places. They glow: find one and zoom in!'};
+  tip:'The few places Galileo flew close over, where its pictures are sharpest.'};
 
 export const BODIES = {
   moon: {id:'moon', name:'The Moon', km:1737.4, spin:moonSpin, map:'moon', lenses:[{name:'LRO', hips:{path:'Planets/CDS_P_Moon_LROC-WAC-100m', order:6, ext:'jpg'}}],
