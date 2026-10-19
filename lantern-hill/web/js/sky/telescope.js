@@ -72,7 +72,7 @@ const FLY = {star:.8, galaxy:1, globular:.25, cluster:1.2, nebula:1, pn:.08, snr
 
 // where it was left pointing is kept as a direction in the sky (looking south, a third of the way up),
 // not at a star, which may have set by the next time; `seconds` is how long it has been looked through
-const saved = load('telescope'), view = Object.assign({az:180, alt:35, fov:70, lens:'sky', names:true, seconds:0, pictures:[]}, saved && typeof saved === 'object' ? saved : {});
+const saved = load('telescope'), view = Object.assign({az:180, alt:35, fov:70, lens:'sky', names:false, seconds:0, pictures:[]}, saved && typeof saved === 'object' ? saved : {});
 // a save that left the telescope looking through the Hubble or Webb lens of an older telescope
 // opens on the night sky with that telescope's pictures switched on
 if (view.lens === 'hubble' || view.lens === 'webb') { view.pictures = [view.lens]; view.lens = 'sky'; }
@@ -135,7 +135,7 @@ document.head.appendChild(css);
 const el = document.createElement('div'); el.id = 'scope'; el.hidden = true; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Pip’s telescope');
 el.innerHTML = `<div id="scopeSky"></div><canvas id="scopeNames"></canvas><div class="rim"></div><div id="scopeGlass"></div>
   <header><div><div class="sub" id="sWhere">Pip’s Telescope</div><h2 id="sLens"></h2><p class="tip" id="sTip"></p><p class="note" id="sNote" hidden></p></div>
-    <div class="tools"><button class="sb" id="sBack" hidden>Back to the sky</button><button class="sb ghost" id="sNames" aria-pressed="true">Names</button><button class="sb ghost" id="sClose">Close</button></div></header>
+    <div class="tools"><button class="sb" id="sBack" hidden>Back to the sky</button><button class="sb ghost" id="sNames" aria-pressed="false">Names</button><button class="sb ghost" id="sClose">Close</button></div></header>
   <div class="zoom"><button class="sb" id="sIn" aria-label="Zoom in">+</button><div class="like" id="sLike"></div><button class="sb" id="sOut" aria-label="Zoom out">−</button></div>
   <div class="info" id="sCard" hidden></div>
   <footer>
@@ -405,12 +405,12 @@ function drawOverlay(lst, sunAlt, ms){
   const shown = drawBodies(g, w, h, lst, ms);
   drawGround(g, w, h, lst);
   drawOverhead(g, w, h, lst);
+  // the Moon and planets can be tapped with names off too; named, they go first, and whatever they cover goes unnamed
+  const up = shown.filter(m => m.alt >= hill(m.az));
+  for (const m of up) placed.push({box:[m.x - m.r, m.y - m.r, m.x + m.r, m.y + m.r], o:m.b, body:true, x:m.x, y:m.y});
   if (!view.names) return;
   const f = view.fov, starLimit = Math.min(6.5, 1.2 + 2.6*Math.log10(100/f)) - glow*2;
-  // the Moon and planets are named first, and whatever they cover goes unnamed
-  for (const m of shown) {
-    if (m.alt < hill(m.az)) continue;
-    placed.push({box:[m.x - m.r, m.y - m.r, m.x + m.r, m.y + m.r], o:m.b, body:true, x:m.x, y:m.y});
+  for (const m of up) {
     const tx = m.x + Math.max(m.r, 4) + 6, tw = g.measureText(m.b.name).width, box = [tx - 4, m.y - 10, tx + tw + 4, m.y + 10];
     if (m.r > w/3 || placed.some(q => q.o !== m.b && box[0] < q.box[2] && box[2] > q.box[0] && box[1] < q.box[3] && box[3] > q.box[1])) continue;
     placed.push({box, o:m.b, body:true, x:m.x, y:m.y});
@@ -508,9 +508,11 @@ function tap(x, y){
   }
   const hit = placed.find(q => x >= q.box[0] - 6 && x <= q.box[2] + 6 && y >= q.box[1] - 6 && y <= q.box[3] + 6);
   if (!hit) {
-    // where pictures overlap, each tap on the same spot steps out to the next, wider one
-    const here = pictures.under(x, y), i = here.indexOf(pictures.picked());
-    if (here.length) pictureCard(here[(i + 1)%here.length], (i + 1)%here.length, here.length); else card.hidden = true;
+    // a tap shows the picture under it, or hides it again; where pictures overlap, each tap on the
+    // same spot steps out to the next, wider one, and after the widest, to none
+    card.hidden = true;
+    const here = pictures.under(x, y), next = here[here.indexOf(pictures.picked()) + 1] || null;
+    if (here.length) { pictures.choose(next); Sound.tone(next ? 988 : 660, {type:'triangle', dur:.08, vol:.05}); }
     return;
   }
   if (hit.body) { bodyCard(hit.o, true); return; }
@@ -532,32 +534,32 @@ function tap(x, y){
   card.querySelector('[data-x]').addEventListener('click', () => { card.hidden = true; });
   card.hidden = false; Sound.tone(1046, {type:'sine', dur:.12, vol:.05});
 }
-function pictureCard(p, i, n){
-  pictures.choose(p);
-  card.innerHTML = `<em></em><h3></h3>
-    <div class="row"><button class="sb" data-go>Fill the view</button><button class="sb ghost" data-hide>Hide picture</button><button class="sb ghost" data-x>OK</button></div>`;
-  card.querySelector('em').textContent = `${p.set.name} picture${n > 1 ? ` · ${i + 1} of ${n} here` : ''}`;
-  card.querySelector('h3').textContent = p.t;
-  card.querySelector('[data-go]').addEventListener('click', () => {
-    card.hidden = true;
-    const c = p.c, ra = (c[0] + c[4])/2 + (Math.abs(c[0] - c[4]) > 180 ? 180 : 0), dec = (c[1] + c[5])/2;
-    flyTo(ra % 360, dec, Math.max(.003, Math.hypot((c[0] - c[4])*Math.cos(dec*R), c[1] - c[5])*1.1));
-  });
-  card.querySelector('[data-hide]').addEventListener('click', () => { card.hidden = true; pictures.choose(null); });
-  card.querySelector('[data-x]').addEventListener('click', () => { card.hidden = true; });
-  card.hidden = false; Sound.tone(1046, {type:'sine', dur:.12, vol:.05});
-}
-
 // ---------- steering: drag to turn, pinch or scroll to zoom, tap to ask what something is ----------
-let wantFov = view.fov, fly = null;
-const zoom = k => { if (bodyShown()) { upClose.zoom(k); return; } fly = null; wantFov = Math.min(150, Math.max(.002, wantFov*k)); };
+// A zoom from the wheel or a pinch keeps what's under the pointer or the fingers where it is; the
+// buttons and keys zoom on the middle. `hold` is that bit of sky and where on screen it stays.
+let wantFov = view.fov, fly = null, hold = null;
+const fovOf = f => Math.min(150, Math.max(.002, f));
+function zoom(k, at){
+  if (bodyShown()) { upClose.zoom(k, at && {x:at.x - el.clientWidth/2, y:at.y - el.clientHeight/2}); return; }
+  fly = null; wantFov = fovOf(wantFov*k);
+  // the wheel clicks again before the last click has eased in; the sky held is still the first one
+  const same = hold && at && Math.hypot(hold.x - at.x, hold.y - at.y) < 2;
+  hold = !at ? null : same ? hold : under(at);
+}
+function under({x, y}){
+  const s = aladin?.pix2world(x, y);
+  return s && isFinite(s[0]) && isFinite(s[1]) ? {ra:s[0], dec:s[1], x, y, left:20} : null;
+}
 // A drag across the screen turns the telescope by about the width of what it sees. Looking high, a
 // sideways turn swings round the point overhead, and following the finger exactly would whirl it,
 // so up there it turns slower than the finger.
 function turn(dx, dy){
-  const k = view.fov/el.clientWidth;
   if (dy > 0 && aim.alt >= ceiling() - .01) overhead();
   if (Math.abs(dx) > Math.abs(dy)) cueUntil = 0;
+  nudge(dx, dy);
+}
+function nudge(dx, dy){
+  const k = view.fov/el.clientWidth;
   look(aim.alt + dy*k, aim.az - dx*k/Math.max(.5, Math.cos(aim.alt*R)));
 }
 // Held or pushed again up against the top of the sky, arrows slide out sideways from the mark
@@ -611,17 +613,23 @@ function flying(dt){
 const pointers = new Map();
 let drag = null;
 const span = () => { const [a, b] = [...pointers.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; };
+const middle = () => { const [a, b] = [...pointers.values()]; return {x:(a.x + b.x)/2, y:(a.y + b.y)/2}; };
 glass.addEventListener('pointerdown', e => {
   glass.setPointerCapture(e.pointerId); pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
-  drag = {moved:0, span:pointers.size > 1 ? span() : 0, fov:wantFov}; fly = null; glass.classList.add('dragging'); Sound.init();
+  const two = pointers.size > 1;
+  drag = {moved:0, span:two ? span() : 0, fov:wantFov}; fly = null; hold = two ? under(middle()) : null;
+  glass.classList.add('dragging'); Sound.init();
 });
 glass.addEventListener('pointermove', e => {
   const p = pointers.get(e.pointerId); if (!p || !drag) return;
   const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY; drag.moved += Math.hypot(dx, dy);
   if (pointers.size > 1) {
     if (!drag.span) return;
-    if (bodyShown()) { const now = span(); upClose.zoom(drag.span/now); drag.span = now; }
-    else wantFov = view.fov = Math.min(150, Math.max(.002, drag.fov*drag.span/span()));
+    const now = span(), mid = middle();
+    if (bodyShown()) { zoom(drag.span/now, mid); drag.span = now; return; }
+    // the sky under the fingers follows them, so a pinch can zoom and slide at once
+    wantFov = fovOf(drag.fov*drag.span/now);
+    if (hold) { hold.x = mid.x; hold.y = mid.y; }
     return;
   }
   if (bodyShown()) upClose.pan(dx, dy); else if (aladin) turn(dx, dy);
@@ -629,29 +637,34 @@ glass.addEventListener('pointermove', e => {
 const lift = e => {
   if (!pointers.delete(e.pointerId)) return;
   if (drag && drag.moved < 8 && pointers.size === 0) tap(e.clientX, e.clientY);
+  hold = null;
   if (pointers.size === 0) { drag = null; glass.classList.remove('dragging'); }
-  else drag = {moved:99, span:span(), fov:wantFov};
+  else drag = {moved:99, span:pointers.size > 1 ? span() : 0, fov:wantFov};
 };
 glass.addEventListener('pointerup', lift); glass.addEventListener('pointercancel', lift);
 // A mouse wheel zooms. A trackpad speaks in wheel events too: two fingers sliding turn the telescope
 // the way a drag does, and a pinch, which browsers send as a wheel with Ctrl held, zooms with the
 // fingers. A wheel clicks in big even steps straight up and down; a trackpad glides in small ones.
+// Listened for over the whole telescope, buttons and all: a pinch that got past it would zoom the page.
 let pad = -1e9, pinched = -1e9;
-glass.addEventListener('wheel', e => {
+el.addEventListener('wheel', e => {
+  // the row of lenses scrolls sideways under two sliding fingers
+  if (!e.ctrlKey && e.target.closest('.lenses')) return;
   e.preventDefault(); fly = null;
+  const at = {x:e.clientX, y:e.clientY};
   const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? el.clientHeight : 1, dx = e.deltaX*unit, dy = e.deltaY*unit;
-  if (e.ctrlKey) { pinched = e.timeStamp; zoom(Math.exp(dy*.01)); return; }
+  if (e.ctrlKey) { pinched = e.timeStamp; zoom(Math.exp(dy*.01), at); return; }
   if (e.deltaMode === 0 && (dx || !Number.isInteger(dy) || Math.abs(dy) < 50)) pad = e.timeStamp;
   if (e.timeStamp - pad < 400) { if (bodyShown()) upClose.pan(-dx, -dy); else if (aladin) turn(-dx, -dy); return; }
-  zoom(dy > 0 ? 1.15 : 1/1.15);
+  zoom(dy > 0 ? 1.15 : 1/1.15, at);
 }, {passive:false});
 // Safari tells of a trackpad pinch with its own gesture events instead; a touch screen's pinch is
 // already handled by the pointers above
 let gesture = 1;
-glass.addEventListener('gesturestart', e => { e.preventDefault(); gesture = 1; });
-glass.addEventListener('gesturechange', e => {
+el.addEventListener('gesturestart', e => { e.preventDefault(); gesture = 1; });
+el.addEventListener('gesturechange', e => {
   e.preventDefault();
-  if (pointers.size < 2 && e.timeStamp - pinched > 300) zoom(gesture/e.scale);
+  if (pointers.size < 2 && e.timeStamp - pinched > 300) zoom(gesture/e.scale, isFinite(e.clientX) ? {x:e.clientX, y:e.clientY} : null);
   gesture = e.scale;
 });
 
@@ -701,7 +714,16 @@ function steer(b, dt){
 }
 function starsUp(ms, dt){
   if (fly) flying(dt);
-  if (Math.abs(Math.log(wantFov/view.fov)) > .001) { view.fov *= Math.pow(wantFov/view.fov, Math.min(1, dt*8)); aladin.setFoV(view.fov); zoomed(); }
+  const easing = Math.abs(Math.log(wantFov/view.fov)) > .001;
+  if (easing) { view.fov *= Math.pow(wantFov/view.fov, Math.min(1, dt*8)); aladin.setFoV(view.fov); zoomed(); }
+  if (hold) {
+    // Aladin still shows last frame's middle, so this is how far the held sky has slipped. A turn
+    // is a straight guess at a curved sky, so out near the edge it takes a few frames to settle.
+    const p = aladin.world2pix(hold.ra, hold.dec), dx = p ? hold.x - p[0] : 0, dy = p ? hold.y - p[1] : 0;
+    if (Math.hypot(dx, dy) > .3) nudge(dx, dy);
+    hold.left = easing || pointers.size > 1 ? 20 : hold.left - 1;
+    if (hold.left < 0) hold = null;
+  }
   // zooming out raises the floor, and the view rises with it
   look(aim.alt, aim.az);
   const c = centre(), to = `${c.ra},${c.dec}`;
@@ -733,8 +755,9 @@ export async function openTelescope(){
   closeDialog(); game.activity = 'telescope'; for (const k in keys) keys[k] = false; joy.x = joy.y = 0;
   document.documentElement.classList.add('stargazing'); el.hidden = false; card.hidden = true;
   el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
-  $s('sNames').setAttribute('aria-pressed', view.names);
-  place = where(); since = Date.now(); t0 = tonight(place, since); lst = siderealTime(t0, place.lon); fly = null; wantFov = view.fov;
+  // names start off each time: the sky comes first, and its names are a tap away
+  view.names = false; $s('sNames').setAttribute('aria-pressed', false);
+  place = where(); since = Date.now(); t0 = tonight(place, since); lst = siderealTime(t0, place.lon); fly = hold = null; wantFov = view.fov;
   look(view.alt, view.az); nightNote(); clockShown = '';
   Sound.duck(true); [392, 523, 659].forEach((f, i) => Sound.tone(f, {type:'sine', t:i*.12, dur:.5, vol:.05}));
   lenses(); closeTo(null);
