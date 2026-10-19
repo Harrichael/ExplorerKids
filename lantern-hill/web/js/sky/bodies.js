@@ -19,9 +19,13 @@ function moonSpin(d, T){
     38.3213 + 13.17635815*d + 3.561*Math.sin(E1) + .1208*Math.sin(E2) - .0642*Math.sin(E3) + .0158*Math.sin(E4)];
 }
 const steady = (ra, dec, w0, rate) => (d, T) => [ra, dec, w0 + rate*d];
+// A world's lenses are the maps it can be seen through up close, the first the one it ships with;
+// a lens without its own map glows where the first one's pictures were taken from close by
+const CLOSE = {name:'Close-ups', glow:'#ffcf73',
+  tip:'Galileo flew close over only a few places. They glow: find one and zoom in!'};
 
 export const BODIES = {
-  moon: {id:'moon', name:'The Moon', km:1737.4, spin:moonSpin, map:'moon',
+  moon: {id:'moon', name:'The Moon', km:1737.4, spin:moonSpin, map:'moon', lenses:[{name:'LRO', hips:{path:'Planets/CDS_P_Moon_LROC-WAC-100m', order:6, ext:'jpg'}}],
     credit:'Moon: NASA Lunar Reconnaissance Orbiter (LROC, Arizona State University), via CDS',
     facts:['Our nearest neighbour in space. It always keeps the same face toward us, so this is the face every person who ever lived has looked up at.',
       'Twelve astronauts have walked on it.'],
@@ -41,14 +45,17 @@ export const BODIES = {
       ['Plato', 51.6, -9.4, 'A crater with a smooth, dark floor, like a pond.'],
       ['South Pole–Aitken Basin', -53, 169, 'One of the biggest craters anywhere in the solar system, on the side we never see from Earth.'],
       ['Chang’e 4', -45.44, 177.6, 'China’s Chang’e 4 landed here in 2019, the first visit to the Moon’s far side.']]},
-  mercury: {id:'mercury', name:'Mercury', km:2439.4, spin:steady(281.0103, 61.4155, 329.5988, 6.1385108), map:'mercury',
+  mercury: {id:'mercury', name:'Mercury', km:2439.4, spin:steady(281.0103, 61.4155, 329.5988, 6.1385108), map:'mercury', lenses:[{name:'MESSENGER', hips:{path:'Planets/CDS_P_Mercury_MESSENGER-MDIS-LOI-166m', order:5, ext:'jpg'}}],
     credit:'Mercury: NASA MESSENGER (MDIS), via CDS',
     facts:['The smallest planet and the closest to the Sun. A year there is only 88 days long.']},
   venus: {id:'venus', name:'Venus', km:6051.8, spin:steady(272.76, 67.16, 160.2, -1.4813688), map:'venus',
     credit:'Venus: NASA Magellan radar (colour shows height), via CDS',
     facts:['The hottest planet, wrapped in thick clouds. This map comes from Magellan’s radar, which saw right through them.',
       'Red is high ground and blue is low.']},
-  mars: {id:'mars', name:'Mars', km:3389.5, spin:steady(317.269, 54.433, 176.049863, 350.891982443), map:'mars',
+  mars: {id:'mars', name:'Mars', km:3389.5, spin:steady(317.269, 54.433, 176.049863, 350.891982443), map:'mars', lenses:[{name:'Viking', hips:{path:'Planets/Mars_Viking_MDIM21', order:5, ext:'jpg'}},
+      {name:'MRO', hips:{path:'CDS_P_Mars_MRO-CTX', order:11, ext:'png', own:true},
+        tip:'NASA’s Mars Reconnaissance Orbiter sees in black and white, sharp enough to spot sand dunes and tiny craters.',
+        credit:'Mars: NASA Mars Reconnaissance Orbiter Context Camera (NASA/JPL/MSSS/The Murray Lab), via CDS'}],
     credit:'Mars: NASA Viking (USGS MDIM 2.1), via CDS',
     facts:['The red planet. The red is rust in its dust!'],
     places:[
@@ -76,13 +83,13 @@ export const BODIES = {
     credit:'Neptune: NASA Voyager 2, via CDS',
     facts:['The windiest planet, with winds faster than a jet plane.', 'The dark spot is a storm Voyager 2 flew past in 1989.']},
   // Jupiter's moons keep one face to Jupiter, so their spin comes from where they are, not from a rate
-  io: {id:'io', name:'Io', km:1821.6, around:'jupiter', map:'io', credit:'Io: NASA Galileo (SSI), via CDS',
+  io: {id:'io', name:'Io', km:1821.6, around:'jupiter', map:'io', lenses:[{name:'Galileo', hips:{path:'Planets/CDS_P_Io_Galileo-SSI-1km', order:3, ext:'jpg'}}], credit:'Io: NASA Galileo (SSI), via CDS',
     facts:['The most volcanic world we know. Its volcanoes throw sulfur fountains hundreds of kilometres high.']},
-  europa: {id:'europa', name:'Europa', km:1560.8, around:'jupiter', map:'europa', credit:'Europa: NASA Voyager and Galileo (SSI), via CDS',
+  europa: {id:'europa', name:'Europa', km:1560.8, around:'jupiter', map:'europa', lenses:[{name:'Galileo', hips:{path:'Planets/CDS_P_Europa_Voyager-GalileoSSI-500m', order:3, ext:'jpg'}}, CLOSE], credit:'Europa: NASA Voyager and Galileo (SSI), via CDS',
     facts:['Under its cracked shell of ice is a deep, salty ocean, with more water than all of Earth’s oceans.']},
-  ganymede: {id:'ganymede', name:'Ganymede', km:2634.1, around:'jupiter', map:'ganymede', credit:'Ganymede: NASA Voyager and Galileo (SSI), via CDS',
+  ganymede: {id:'ganymede', name:'Ganymede', km:2634.1, around:'jupiter', map:'ganymede', lenses:[{name:'Galileo', hips:{path:'Planets/CDS_P_Ganymede_VoyagerGalileo-SSI-1km', order:3, ext:'jpg'}}, CLOSE], credit:'Ganymede: NASA Voyager and Galileo (SSI), via CDS',
     facts:['The biggest moon in the solar system, bigger than the planet Mercury.']},
-  callisto: {id:'callisto', name:'Callisto', km:2410.3, around:'jupiter', map:'callisto', credit:'Callisto: NASA Voyager and Galileo (SSI), via CDS',
+  callisto: {id:'callisto', name:'Callisto', km:2410.3, around:'jupiter', map:'callisto', lenses:[{name:'Galileo', hips:{path:'Planets/CDS_P_Callisto_Voyager-Galileo-simp-1km', order:3, ext:'jpg'}}, CLOSE], credit:'Callisto: NASA Voyager and Galileo (SSI), via CDS',
     facts:['One of the most cratered places anywhere. Its face has hardly changed in four billion years.']}
 };
 export const PLANETS = ['mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune'].map(id => BODIES[id]);

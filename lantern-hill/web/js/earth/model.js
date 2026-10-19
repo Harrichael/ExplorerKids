@@ -46,18 +46,19 @@ export function makeEarth(d){
 
   function placeAt(lat, lon){
     const lake = lakes.find(l => inRing(l.ring, lon, lat));
-    if (lake) return place(lat, lon, lake.name, 'lake', null);
+    if (lake) return place(lat, lon, lake.name, 'lake', null, null, lake.name);
     if (onLand(lat, lon)) {
       const e = ecoregion(lat, lon), kind = landKind(e, lat, lon);
       const name = e && e.id !== ROCK_AND_ICE ? e.name : kind === 'mountains' ? 'Mountain glaciers' : lat < 0 ? 'Antarctica' : 'Greenland';
       return place(lat, lon, name, kind, e && e.id !== ROCK_AND_ICE ? e.realm : null);
     }
     const s = sea(lat, lon), reef = reefs.find(r => inRing(r.ring, lon, lat));
-    if (reef) return place(lat, lon, reef.name, 'reef', null, s.name);
-    return place(lat, lon, s.name, seaKind(s), null);
+    if (reef) return place(lat, lon, reef.name, 'reef', null, s.name, reef.name);
+    return place(lat, lon, s.name, seaKind(s), null, null, s.name);
   }
-  function place(lat, lon, name, biomeId, realm, within){
-    return {lat, lon, name, within: within || null, biomeId, biome: BIOMES[biomeId], realm, web: webFor(biomeId, realm, lat, lon)};
+  function place(lat, lon, name, biomeId, realm, within, water){
+    const web = webFor(biomeId, realm, lat, lon, water);
+    return {lat, lon, name, within: within || null, biomeId, biome: BIOMES[biomeId], realm, web, webFits: fits(web, realm, lat, lon, water)};
   }
 
   return {land, lakes, reefs, credits: d.credits, landBiome, seaBiome, placeAt};
@@ -65,15 +66,23 @@ export function makeEarth(d){
 
 // The web for a biome from the same realm if there is one, else the nearest; animals differ more
 // between realms than within one, so a web from across the realm beats a closer one over the border.
-export function webFor(biomeId, realm, lat, lon){
+// A web can keep to its own island, coast or band of sea (bounds), or to the waters it names, where
+// being nearest isn't enough: Madagascar's lemurs are closer to Tanzania than the Congo's gorillas are.
+export function webFor(biomeId, realm, lat, lon, water){
   let best = null, bestScore = Infinity;
   for (const w of WEBS) {
     if (!w.biomes.includes(biomeId)) continue;
-    const score = (realm && w.realm !== realm ? 1e5 : 0) + arc(lat, lon, w.at[0], w.at[1]);
+    const score = (sameRealm(w, realm) ? 0 : 2e5) + (inLimits(w, lat, lon, water) ? 0 : 1e5) + arc(lat, lon, w.at[0], w.at[1]);
     if (score < bestScore) { best = w; bestScore = score; }
   }
   return best;
 }
+// whether a web's animals are the ones that live at a spot, rather than the nearest stand-ins
+export const fits = (w, realm, lat, lon, water) => sameRealm(w, realm) && inLimits(w, lat, lon, water);
+const sameRealm = (w, realm) => !realm || w.realms.includes(realm);
+const inLimits = (w, lat, lon, water) => (!w.bounds || w.bounds.some(b => inBox(b, lat, lon))) && (!w.waters || w.waters.includes(water));
+// [south, west, north, east], wrapping past 180° when west is greater than east
+const inBox = ([s, w, n, e], lat, lon) => lat >= s && lat <= n && (w <= e ? lon >= w && lon <= e : lon >= w || lon <= e);
 
 // kilometres along the surface
 export function arc(lat1, lon1, lat2, lon2){
