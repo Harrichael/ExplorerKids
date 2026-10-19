@@ -12,7 +12,7 @@ import { LANDFORMS, LANDMARKS, landformBy, landformOf } from '../../web/js/earth
 import { arc, makeEarth } from '../../web/js/earth/model.js';
 import { foundedSaying, governmentOf } from '../../web/js/earth/nations.js';
 import { WONDERS } from '../../web/js/earth/wonders.js';
-import { eatenBy, hunter, whatIf } from '../../web/js/globe/food-web.js';
+import { arrivals, asked, eatenBy, makers, whatIf } from '../../web/js/globe/food-web.js';
 import { choices } from '../../web/js/globe/landform-quiz.js';
 import { oddOneOut } from '../../web/js/globe/photos.js';
 import { judge } from '../../web/js/globe/wonder-hunt.js';
@@ -117,8 +117,14 @@ test("Hoot's riddles point the right way: most of each biome lies in the band of
 
 test("every food web can carry Hoot's lessons", () => {
   for (const w of WEBS) {
-    const h = hunter(w);
-    assert.ok(h && h.eats.length > 1, `${w.id} has no hunter that eats more than one thing`);
+    // built a piece at a time: the makers, then every animal once, each after everything it eats
+    const order = [...makers(w), ...arrivals(w).map(s => s.name)];
+    assert.deepEqual([...order].sort(), w.species.map(s => s.name).sort(), `${w.id}: someone never arrives`);
+    for (const s of arrivals(w)) for (const f of s.eats) assert.ok(order.indexOf(f) < order.indexOf(s.name), `${w.id}: ${s.name} arrives before ${f}`);
+    // Hoot asks about a handful of them, mostly hunters; plant eaters that only eat plants are easy and samey
+    const ask = [...asked(w)].map(n => w.species.find(s => s.name === n)), grazers = ask.filter(s => s.eats.every(f => makers(w).includes(f)));
+    assert.ok(ask.length >= 5 && ask.length <= 6, `${w.id} asks about ${ask.length}`);
+    assert.ok(grazers.length <= 2, `${w.id} asks about ${grazers.length} plant eaters`);
     const q = whatIf(w);
     assert.ok(q, `${w.id} has nothing to make disappear`);
     assert.ok(q.gone.eats.includes(q.food.name), `${w.id}: ${q.gone.name} doesn't eat ${q.food.name}`);

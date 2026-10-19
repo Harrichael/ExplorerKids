@@ -19,9 +19,9 @@ import { hero, player } from '../player.js';
 import { HOME, localTime } from '../sky/observer.js';
 import { game } from '../state.js';
 import { closeDialog, convo, endConvo, talk, think } from '../ui/dialogue.js';
-import { BED, garden, plotAt, plots, tend } from './bed.js';
+import { BED, clock, garden, plotAt, plots, tend } from './bed.js';
 import { CROP, CROPS, SECRETS } from './crops.js';
-import { digUp, growth, harvest, helps, hoursLeft, inSeason, nextUnlock, picked, plant, ripe, season, thirsty, unlocked, water, damp, WET_HOURS } from './grow.js';
+import { digUp, growth, harvest, helps, hoursLeft, inSeason, nextUnlock, picked, plant, ripe, thirsty, unlocked, water, damp, WET_HOURS } from './grow.js';
 import { buildPlant, buildProduce } from './plants.js';
 
 const css = document.createElement('style');
@@ -128,18 +128,18 @@ function thumb(crop){
 // ----- the HUD -----
 let chosen = null, fresh = new Set();
 function drawTray(){
-  const now = Date.now(), have = unlocked(garden), next = nextUnlock(garden);
-  if (!chosen || !have.some(c => c.id === chosen)) chosen = (have.find(c => inSeason(c, now)) || have[0]).id;
-  const order = [...have].sort((a, b) => inSeason(b, now) - inSeason(a, now));
+  const have = unlocked(garden), next = nextUnlock(garden);
+  if (!chosen || !have.some(c => c.id === chosen)) chosen = (have.find(c => inSeason(c, garden.season)) || have[0]).id;
+  const order = [...have].sort((a, b) => inSeason(b, garden.season) - inSeason(a, garden.season));
   trayEl.innerHTML = '';
   for (const c of order) {
-    const b = document.createElement('button'), good = inSeason(c, now);
+    const b = document.createElement('button'), good = inSeason(c, garden.season);
     b.className = 'packet' + (c.id === chosen ? ' on' : '') + (fresh.has(c.id) ? ' new' : '');
     b.style.setProperty('--pk', PACKET[c.seasons[0]]);
     b.innerHTML = `<img alt="" src="${thumb(c)}"><b>${c.name}</b><em class="${good ? '' : 'slow'}">${good ? 'Good now!' : 'Slow now'}</em>`;
     b.setAttribute('aria-pressed', c.id === chosen);
     b.addEventListener('click', e => { e.stopPropagation(); Sound.init(); chosen = c.id; fresh.delete(c.id); Sound.tone(880, {type:'triangle', dur:.08, vol:.06}); drawTray();
-      note(good ? `${c.name} seeds ready. Tap bare soil to plant!` : `${c.name} grows slowly in ${season(now)}. It likes ${c.seasons.join(' and ')}.`); });
+      note(good ? `${c.name} seeds ready. Tap bare soil to plant!` : `${c.name} grows slowly in ${garden.season}. It likes ${c.seasons.join(' and ')}.`); });
     trayEl.appendChild(b);
   }
   if (next) {
@@ -152,7 +152,7 @@ function drawBasket(){
   const n = picked(garden), next = nextUnlock(garden), prev = [...CROPS].reverse().find(c => c.unlock <= n), from = prev ? prev.unlock : 0;
   basketEl.innerHTML = `🧺 Picked <b>${n}</b>` + (next ? `<div class="bar"><i style="width:${Math.round((n - from)/(next.unlock - from)*100)}%"></i></div><small>New seeds at ${next.unlock}</small>` : `<small>Every seed found!</small>`);
 }
-function drawWhen(){ whenEl.textContent = `${cap(season(Date.now()))} · ${localTime(HOME, Date.now())} at Lantern Hill`; }
+function drawWhen(){ whenEl.textContent = `${cap(garden.season)} · ${localTime(HOME, Date.now())} at Lantern Hill`; }
 let noteT = 0;
 function note(text, secs = 3.2){ noteEl.textContent = text; noteEl.classList.add('on'); noteT = secs; }
 let msgT = 0;
@@ -161,11 +161,11 @@ function shout(html, secs = 2.6){ msgEl.innerHTML = html; msgEl.classList.add('o
 const hours = h => h < 1 ? `${Math.max(1, Math.round(h*60))} minutes` : h < 1.25 ? 'about an hour' : h < 1.75 ? 'about an hour and a half' : `about ${Math.round(h)} hours`;
 let infoFor = -1, infoT = 0;
 function showInfo(i, keep){
-  const p = garden.plots[i], crop = CROP[p.crop], now = Date.now();
+  const p = garden.plots[i], crop = CROP[p.crop], now = clock();
   if (!crop) { infoEl.hidden = true; infoFor = -1; return; }
-  const h = helps(garden, i, now), g = growth(p);
+  const h = helps(garden, i), g = growth(p);
   const stage = g < .06 ? 'A seed, waking up' : g < .3 ? 'A little sprout' : g < .6 ? 'Growing leaves' : !ripe(p) ? (crop.fruit || crop.flower || crop.look === 'sunflower' ? 'Flowering' : 'Nearly grown') : 'Ready to pick!';
-  const wait = ripe(p) ? '' : thirsty(p, now) ? '<p>💧 Thirsty! Tap to water it.</p>' : `<p>Ready in ${hours(hoursLeft(garden, i, now))}.</p><p>💧 Soil damp for ${hours((p.wet - now)/3600000)}.</p>`;
+  const wait = ripe(p) ? '' : thirsty(p, now) ? '<p>💧 Thirsty! Tap to water it.</p>' : `<p>Ready after ${hours(hoursLeft(garden, i))} of play.</p><p>💧 Soil damp for ${hours((p.wet - now)/3600000)} more.</p>`;
   const chips = [h.offSeason && `<span class="help bad">❄ Out of season</span>`, h.shade && `<span class="help bad">⛅ In the shade</span>`,
     h.beans && `<span class="help">🫘 Fed by beans</span>`, h.bees && `<span class="help">🐝 Bees visiting</span>`].filter(Boolean).join('');
   infoEl.innerHTML = `<h3>${crop.name}</h3><p>${stage}</p>${wait}${chips}${ripe(p) ? '' : '<br><button>Dig it up</button>'}`;
@@ -225,20 +225,20 @@ function begin(j){
   work = Object.assign(j, {phase:'walk', t:0, done:false}); return true;
 }
 function act(j){
-  const now = Date.now(), v = plots[j.i], lines = [];
+  const now = clock(), v = plots[j.i], lines = [];
   if (j.kind === 'plant') {
     if (!tend(g => plant(g, j.i, j.crop, now))) return;
-    const crop = CROP[j.crop], h = helps(garden, j.i, now);
+    const crop = CROP[j.crop], h = helps(garden, j.i);
     v.pop = 1; Sound.tone(190, {dur:.12, vol:.12, f2:110}); Sound.hiss({dur:.14, vol:.06, freq:500});
     const f = factFor(crop, 0); if (f) lines.push(f);
-    if (h.offSeason) { const s = secret('season'); if (s) lines.push(s); else note(`${crop.name} grows slowly in ${season(now)}.`); }
+    if (h.offSeason) { const s = secret('season'); if (s) lines.push(s); else note(`${crop.name} grows slowly in ${garden.season}.`); }
     if (h.shade) { const s = secret('shade'); if (s) lines.push(s); else note('That spot is in the shade of a tall plant.'); }
     if (!damp(garden.plots[j.i], now)) { if (!garden.secrets.water) { garden.secrets.water = true; lines.push('Seeds need water to wake up! Tap the new seed again to water it.'); } else note('Tap it again to give it a drink!'); }
     tend(() => {});
   } else if (j.kind === 'water') {
     tend(g => water(g, j.i, now)); Sound.hiss({dur:1, vol:.06, type:'bandpass', freq:3000, q:.7, attack:.15});
-    note(`Ahh! The ${CROP[garden.plots[j.i].crop].name.toLowerCase()} has a drink. Damp soil lasts about ${WET_HOURS} hours.`);
-    const h = helps(garden, j.i, now);
+    note(`Ahh! The ${CROP[garden.plots[j.i].crop].name.toLowerCase()} has a drink. Damp soil lasts ${hours(WET_HOURS)} of play. A dry plant stops growing until its next drink.`);
+    const h = helps(garden, j.i);
     if (h.beans) { const s = secret('beans'); if (s) lines.push(s); }
   } else if (j.kind === 'pick') {
     const r = tend(g => harvest(g, j.i, now)); if (!r) return;
@@ -372,7 +372,7 @@ function plotUnder(cx, cy){
   return -1;
 }
 function tap(i){
-  const p = garden.plots[i], now = Date.now();
+  const p = garden.plots[i], now = clock();
   if (!p.crop) {
     if (!chosen) { note('Pick a seed packet first!'); return; }
     queue(i, 'plant'); return;
@@ -401,13 +401,13 @@ addEventListener('keydown', e => {
 // ----- the journal: every plant met so far, what was learned, and the garden's secrets -----
 let journal = null;
 function openJournal(){
-  const now = Date.now(), have = new Set(unlocked(garden).map(c => c.id));
+  const have = new Set(unlocked(garden).map(c => c.id));
   journal = document.createElement('div'); journal.id = 'gjournal';
   const crops = CROPS.map(c => {
     const told = garden.told[c.id] || 0, n = garden.picked[c.id] || 0, on = have.has(c.id);
     const facts = on ? c.facts.slice(0, told).map(f => `<p>${f}</p>`).join('') || '<p>Plant one to learn about it.</p>' : `<p>Pick ${c.unlock} in all to get these seeds.</p>`;
     return `<div class="jcrop${on ? '' : ' locked'}"><img alt="" src="${thumb(c)}"><div><b>${on ? c.name : '???'}</b>
-      ${on ? `<span class="seas">${c.seasons.map(cap).join(', ')}${inSeason(c, now) ? ' · good now' : ''}</span> · grows in ${hours(c.hours)}<br>Picked: ${n}` : ''}${facts}</div></div>`;
+      ${on ? `<span class="seas">${c.seasons.map(cap).join(', ')}${inSeason(c, garden.season) ? ' · good now' : ''}</span> · grows in ${hours(c.hours)} of play<br>Picked: ${n}` : ''}${facts}</div></div>`;
   }).join('');
   const secrets = Object.entries(SECRETS).map(([k, s]) => garden.secrets[k]
     ? `<div class="jsecret"><span>${s.icon}</span><div><b>${s.name}</b><br>${s.text}</div></div>`
@@ -428,12 +428,12 @@ export function openGarden(){
   document.documentElement.classList.add('gardening'); el.hidden = false;
   Sound.duck(true); [523, 659, 784, 1047].forEach((f, k) => Sound.tone(f, {type:'triangle', t:k*.07, dur:.2, vol:.07}));
   drawTray(); drawBasket(); drawWhen(); measure();
-  const now = Date.now(), lines = [];
+  const now = clock(), lines = [];
   if (!garden.secrets.hello) {
     garden.secrets.hello = true; tend(() => {});
     lines.push('My very own vegetable garden! Plants need three things to grow: sunshine, water, and good soil.',
       'First I pick a seed packet down below. Then I tap a square of soil to plant it.',
-      `It's ${season(now)} at Lantern Hill. Seeds marked "Good now!" grow best this time of year.`);
+      `It's ${garden.season} at Lantern Hill. Seeds marked "Good now!" grow best this time of year.`);
   } else {
     const dry = garden.plots.filter(p => thirsty(p, now)).length, ready = garden.plots.filter(ripe).length;
     note(ready ? `${ready} ${ready === 1 ? 'plant is' : 'plants are'} ready to pick!` : dry ? `${dry} thirsty ${dry === 1 ? 'plant' : 'plants'}. Tap to water.` : daylight.night > .5 ? 'The garden is sleeping under the stars.' : 'Everything is growing nicely.', 4);

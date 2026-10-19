@@ -1,6 +1,9 @@
-// The vegetable bed in the garden yard and the garden growing in it: the save brought up to the
-// present as real time passes, and each plot drawn as it stands, its soil damp or dry and its plant
-// as grown as it is. The plants grow in front of whoever walks by, gardening or not.
+// The vegetable bed in the garden yard and the garden growing in it: the garden's clock, and each plot
+// drawn as it stands, its soil damp or dry and its plant as grown as it is. The plants grow in front of
+// whoever walks by, gardening or not, and on field trips too.
+//
+// The clock runs only while the game is open and in view, so the garden waits for its gardener. It is
+// saved with the garden and carries on from there.
 //
 // Tending (tend.js) changes the garden only through tend(), so every change is saved and seen.
 
@@ -10,7 +13,7 @@ import { daylight } from '../hq/daylight.js';
 import { hqAnims, scene } from '../hq/scene.js';
 import { load, save } from '../save.js';
 import { CROP } from './crops.js';
-import { COLS, ROWS, advance, damp, growth, newGarden, ripe, thirsty } from './grow.js';
+import { COLS, ROWS, advance, damp, growth, newGarden, ripe, season, thirsty } from './grow.js';
 import { buildPlant } from './plants.js';
 
 export const BED = {x:16.2, z:-8.53, pitch:.62};
@@ -20,10 +23,20 @@ export const plotAt = i => ({x:BED.x + (i % COLS - (COLS - 1)/2)*BED.pitch, z:BE
 export const garden = (() => {
   const g = newGarden(), s = load('garden');
   if (s && Array.isArray(s.plots) && s.plots.length === g.plots.length) Object.assign(g, s);
-  return advance(g, Date.now());
+  g.season = season(Date.now());
+  return advance(g, g.at || 0);
 })();
+let played = garden.at, last = Date.now(), unsaved = 0;
+export const clock = () => played;
+// A long gap between ticks is a sleeping computer, not play, and the device's clock can be set back
+setInterval(() => {
+  const t = Date.now(), d = Math.max(0, Math.min(t - last, 5000)); last = t;
+  if (document.hidden) return;
+  played += d; garden.season = season(t);
+  if ((unsaved += d) > 15000) { unsaved = 0; save('garden', advance(garden, played)); }
+}, 1000);
 export function tend(fn){
-  const out = fn(garden, Date.now());
+  const out = fn(garden, played);
   save('garden', garden); refresh(); return out;
 }
 
@@ -62,7 +75,7 @@ function heightOf(m){
   return m.head ? Math.max(top, m.head.position.y + .25) : top;
 }
 function refresh(){
-  const now = Date.now(), night = daylight.day < .3;
+  const now = played, night = daylight.day < .3;
   garden.plots.forEach((p, i) => {
     const v = plots[i], g = growth(p), crop = CROP[p.crop];
     v.wet = damp(p, now) ? 1 : 0;
@@ -81,8 +94,8 @@ refresh();
 const EAST = new THREE.Vector3(1, 0, .6).normalize();
 let since = 0;
 hqAnims.push((dt, t) => {
-  if ((since += dt) > 1) { since = 0; advance(garden, Date.now()); refresh(); }
-  const now = Date.now();
+  if ((since += dt) > 1) { since = 0; advance(garden, played); refresh(); }
+  const now = played;
   for (const v of plots) {
     const p = garden.plots[v.i], m = v.model, dry = thirsty(p, now);
     v.wetShown += (v.wet - v.wetShown)*Math.min(1, dt*2); v.soil.material.color.copy(DRY).lerp(WET, v.wetShown);

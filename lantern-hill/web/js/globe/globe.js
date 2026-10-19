@@ -3,8 +3,8 @@
 // globes in one, and the explorer picks which as they step up.
 //
 // The biome globe: pick a biome and Hoot gives a riddle about its weather to find it by; open a food
-// web and it pops up out of the globe as a diorama with no arrows yet, for the explorer to guess who
-// eats whom; then ask what would happen if one animal disappeared. Tapping anywhere just visits it.
+// web and it pops up as a diorama on the floor beside the globe, built a guess at a time as the
+// explorer works out who eats whom; then ask what would happen if one animal disappeared. Tapping anywhere just visits it.
 // The geography, countries and weather globes are the real Earth from space, and live in
 // real-earth.js; this file keeps the room globe, the camera and the hands for all four.
 // Loaded the first time someone uses the globe; once the map is painted, the globe keeps it.
@@ -23,8 +23,8 @@ import { blob, hero } from '../player.js';
 import { load, save } from '../save.js';
 import { game } from '../state.js';
 import { closeDialog, convo, endConvo, story } from '../ui/dialogue.js';
-import { clearMarks, dioramaSize, growArrows, hideDiorama, markAnimal, pickAnimal, restore, selectAnimal, showDiorama, spotlight, updateDiorama, vanish } from './diorama.js';
-import { eatenBy, hunter, makers, whatIf } from './food-web.js';
+import { clearMarks, dioramaSize, enter, growArrows, hideDiorama, markAnimal, pickAnimal, restore, selectAnimal, showDiorama, spotlight, updateDiorama, vanish } from './diorama.js';
+import { arrivals, asked, eatenBy, makers, whatIf } from './food-web.js';
 import { earthMap, paintGlow } from './paint.js';
 import { makeRealEarth } from './real-earth.js';
 
@@ -65,16 +65,18 @@ css.textContent = `
 #gCard .gb{font-family:var(--display);font-size:16px;color:var(--parch);background:var(--plum);border:2.5px solid var(--gold);border-radius:14px;padding:6px 14px;box-shadow:0 0 0 3px var(--ink)}
 #gCard .gb.ghost{background:#5a4a5e}
 #gCard .gb:disabled{opacity:.45;cursor:default}
-.gstrip{display:flex;flex-wrap:wrap;gap:5px}
-.gstrip button{width:40px;height:40px;border-radius:50%;border:2.5px solid var(--ink);background:#fbf4e2;font-size:21px;display:grid;place-items:center;padding:0}
+.gstrip{display:grid;grid-template-columns:repeat(auto-fill,minmax(68px,1fr));gap:6px}
+.gstrip button{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0;border-radius:14px;border:2.5px solid var(--ink);background:#fbf4e2;color:var(--ink);padding:4px 2px 5px}
+.gstrip i{font-style:normal;font-size:28px;line-height:1.15}
+.gstrip b{align-self:stretch;font-size:10px;font-weight:900;line-height:1.1;text-align:center;overflow-wrap:break-word;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .gstrip button.maker{background:#cfe6b8}
 .gstrip button.sel{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold)}
 .gstrip button.guess{box-shadow:0 0 0 3px #d9a441}
 .gstrip button.right{box-shadow:0 0 0 3px #3e9b54}.gstrip button.wrong{box-shadow:0 0 0 3px #c4473a}.gstrip button.missed{box-shadow:0 0 0 3px #e0802e}
 .gstrip button.gone{opacity:.25}
+.gstrip button.wait{opacity:.35}
 .gsay{font-weight:800;font-size:15px;line-height:1.45;min-height:2.9em}
 .gsay .eats{color:#2f7a3a}.gsay .by{color:#b5552f}
-.gwho{display:flow-root}
 .gphoto{margin:0 0 6px}
 .gphoto img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:12px;border:3px solid var(--ink);background:#d8c8a4}
 .gphoto figcaption{margin-top:2px;font-size:10px;font-weight:700;color:#7a6a7e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -95,16 +97,23 @@ css.textContent = `
 .gchip.found::after{content:"✓";color:var(--gold);font-weight:900}
 .gchip.hunting{background:var(--teal);border-style:solid}
 .gcredit{position:absolute;right:16px;bottom:calc(58px + env(safe-area-inset-bottom,0px));font-size:10px;font-weight:700;color:rgba(239,224,191,.55);text-align:right;max-width:50%}
+#gAnimal{pointer-events:auto;position:absolute;inset:0;z-index:3;display:grid;place-items:center;padding:16px;background:rgba(16,12,22,.55);animation:fadein .2s ease-out}
+#gAnimal[hidden]{display:none}
+#gAnimal article{position:relative;width:min(460px,100%);max-height:100%;overflow:auto;box-sizing:border-box;background:linear-gradient(180deg,#f6ecd6,#ecdcb8);color:var(--ink);border:3px solid var(--gold);border-radius:20px;box-shadow:0 0 0 4px var(--ink),0 18px 40px rgba(0,0,0,.5);padding:14px 16px 16px;display:flex;flex-direction:column;gap:9px}
+#gAnimal .gphoto{float:none;width:auto;margin:0}#gAnimal .gphoto img{aspect-ratio:4/3;border-width:3px;border-radius:12px}
+#gAnimal h3{margin:0 44px 0 0;font-family:var(--display);font-weight:400;font-size:26px;line-height:1.1}
+#gAnimal p{margin:0;font-weight:800;font-size:16px;line-height:1.45}
+#gAnimal .gsay{min-height:0}
+#gAnimal .gx{position:absolute;top:10px;right:10px;width:40px;height:40px;border-radius:50%;font-size:20px;font-weight:900;color:var(--parch);background:var(--plum);border:2.5px solid var(--gold);box-shadow:0 0 0 3px var(--ink);padding:0}
 #gtoast{position:absolute;left:50%;top:44%;transform:translateX(-50%);background:#efe0bf;color:var(--ink);border:3px solid var(--gold);border-radius:14px;box-shadow:0 0 0 4px var(--ink);padding:6px 18px 8px;text-align:center;white-space:nowrap;pointer-events:none;animation:bannerIn 3s ease both;z-index:2}
 #gtoast b{display:block;font-family:var(--display);font-weight:400;font-size:clamp(17px,4.5vw,22px)}
 #gtoast small{font-weight:900;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#6d3b5e}
 @media (max-aspect-ratio:1/1){#gCard{left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));width:auto;top:calc(96px + env(safe-area-inset-top,0px));max-height:36%}
   .talking #gCard{max-height:38%}#gCard{padding:9px 12px 11px;gap:6px}#gCard .gicon{width:36px;height:36px;font-size:19px}#gCard h3{font-size:18px}
-  #gCard p{font-size:14px}#gCard .gask{font-size:15px}.gstrip button{width:34px;height:34px;font-size:18px}.gcredit{display:none}
-  #gCard:has(.gphoto){max-height:50%}#gCard:has(.gpick){max-height:64%}
-  .gmode button{font-size:16px;padding:1px 8px}.gmode button span+span{display:none}#gCard .gpick span{font-size:12px}}
+  #gCard p{font-size:14px}#gCard .gask{font-size:15px}.gstrip{grid-template-columns:repeat(auto-fill,minmax(50px,1fr))}.gstrip i{font-size:24px}.gcredit{display:none}
+  #gCard:has(.gpick){max-height:64%}.gmode button{font-size:16px;padding:1px 8px}.gmode button span+span{display:none}#gCard .gpick span{font-size:12px}}
 @media (max-aspect-ratio:1/1),(max-height:500px){.gphoto{float:left;width:42%;margin:0 10px 2px 0}.gphoto img{border-width:2px;border-radius:9px}}
-@media (prefers-reduced-motion:reduce){#globeHud,#gtoast{animation:none}}`;
+@media (prefers-reduced-motion:reduce){#globeHud,#gtoast,#gAnimal{animation:none}}`;
 document.head.appendChild(css);
 
 const KINDS = [
@@ -119,9 +128,11 @@ hud.innerHTML = `<div class="gh-top"><div class="gh-title"><div class="sub">Libr
     <div class="gh-btns"><button class="gpill" id="gBack" hidden aria-label="Back to the globe">← Globe</button><button class="gpill" id="gLeave">Step away</button></div></div>
   <aside id="gCard" aria-live="polite"></aside>
   <div class="gcredit" id="gCredit"></div>
+  <div id="gAnimal" hidden></div>
   <div class="gbar"><span class="gfound" id="gFound"></span><div class="gchips" id="gChips" role="group" aria-label="Riddles"></div></div>`;
 document.body.appendChild(hud);
-const $g = id => hud.querySelector('#' + id), card = $g('gCard');
+const $g = id => hud.querySelector('#' + id), card = $g('gCard'), animalCard = $g('gAnimal');
+animalCard.addEventListener('click', e => { if (e.target === animalCard || e.target.closest('.gx')) closeAnimal(); });
 
 const stored = load('globe') || {}, list = v => Array.isArray(v) ? v : [];
 const found = new Set(list(stored.found)), learned = new Set(list(stored.webs));
@@ -143,6 +154,10 @@ const and = words => words.length < 2 ? words.join('') : words.slice(0, -1).join
 // ---------- the globe in the room, steered while the explorer is at it ----------
 const RAD = Math.PI/180, R = .4, PITCH = 1.35, wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 const center = new THREE.Vector3(GLOBE.x, GLOBE.y, GLOBE.z);
+// Food webs pop up on the floor at the globe's right, a little toward the explorer to clear the potted
+// plant beyond. The diorama and the camera both turn to face along the line from the globe, so the globe
+// stands beside the web on screen rather than behind it.
+const WEB_AT = new THREE.Vector3(GLOBE.x + 1.3, 0, GLOBE.z + .9), WEB_TURN = Math.atan2(-(WEB_AT.z - GLOBE.z), WEB_AT.x - GLOBE.x);
 const pin = new THREE.Group(); pin.visible = false; globeBall.add(pin);
 { const stick = new THREE.Mesh(new THREE.CylinderGeometry(.003, .003, .055, 6), T(C.ink)); stick.position.y = .027; pin.add(stick);
   const head = new THREE.Mesh(new THREE.SphereGeometry(.013, 14, 10), T(0xe0453a)); head.position.y = .055; outline(head, 1.25); pin.add(head); }
@@ -159,7 +174,7 @@ function facing(lat, lon, d){
 }
 // zoom moves the camera in on the biome globe; mag narrows its lens on the geography globe, which
 // leans in far closer than the camera could go without passing through the room's near plane
-const view = {yaw: -Math.PI/2, pitch: 20*RAD, zoom: 1, mag: 1, orbit: 0, vyaw: 0, vpitch: 0, fly: null, idle: true, shrink: 0};
+const view = {yaw: -Math.PI/2, pitch: 20*RAD, zoom: 1, mag: 1, orbit: 0, vyaw: 0, vpitch: 0, fly: null, idle: true};
 
 // ---------- the world model and the map ----------
 let earth = null, here = null, glowFor = null, biomeSkin = null;
@@ -230,7 +245,7 @@ function drawPick(){
 function leave(){
   if (!G) return;
   if (convo) endConvo(true);
-  G = null; held.clear(); hideDiorama(); pin.visible = false; glow.visible = false; real.leave(); view.mag = 1;
+  G = null; held.clear(); hideDiorama(); closeAnimal(); pin.visible = false; glow.visible = false; real.leave(); view.mag = 1;
   camera.zoom = 1; camera.updateProjectionMatrix();
   hud.hidden = true; document.documentElement.classList.remove('globing');
   hero.root.visible = true; blob.visible = true; globeRing.rotation.y = Math.PI/2; steer(false); standUp();
@@ -255,8 +270,10 @@ function openArea(){
 }
 function aimCamera(){
   const web = G.mode === 'web' && dioramaSize(), a = openArea(), geo = geoOn();
-  const el = web ? .62 : .1, turn = web ? view.orbit : 0;
-  if (web) camAt.set(GLOBE.x, .7 + web.top*.42, GLOBE.z); else camAt.copy(center);
+  // the diorama fills the open area, low enough that its animals stand up off the floor; the globe it
+  // came from peeks in at the edge on a wide screen
+  const el = web ? .95 : .1, turn = web ? WEB_TURN + view.orbit : 0;
+  if (web) camAt.set(web.at.x, web.top*.42, web.at.z); else camAt.copy(center);
   // the globe, a little more than its own size, so its stand's ring still shows round it
   const rho = web ? web.radius*1.02*view.zoom : geo ? .43 : .43*view.zoom;
   const mag = geo ? view.mag : 1;
@@ -266,7 +283,7 @@ function aimCamera(){
   // far enough back that it fits the open area, and shifted so it sits in the middle of it; seen
   // from above, the diorama is wider than it is tall on screen. Leaning in on the geography globe
   // narrows the lens and leaves the camera standing where the whole globe fits.
-  const tan0 = Math.tan(camera.fov*RAD/2), tanH = tan0/mag, dist = rho*innerHeight/(Math.min(a.r - a.l, (a.b - a.t)/(web ? .78 : 1))*.94*tan0);
+  const tan0 = Math.tan(camera.fov*RAD/2), tanH = tan0/mag, dist = rho*innerHeight/(Math.min(a.r - a.l, (a.b - a.t)/(web ? .9 : 1))*.94*tan0);
   const nx = (a.l + a.r)/innerWidth - 1, ny = 1 - (a.t + a.b)/innerHeight, halfH = dist*tanH, halfW = halfH*camera.aspect;
   camLook.copy(camAt).addScaledVector(right, -nx*halfW).addScaledVector(up, -ny*halfH);
   camPos.copy(camLook).addScaledVector(back, dist);
@@ -394,36 +411,40 @@ function openWeb(){
   stopHunt(); if (convo) endConvo(false);
   G.mode = 'web'; view.zoom = 1; view.orbit = 0; pin.visible = false; loadPhotos();
   const web = here.web;
-  showDiorama(scene, new THREE.Vector3(GLOBE.x, .7, GLOBE.z), web, here.biomeId);
+  showDiorama(scene, WEB_AT, web, here.biomeId, .9, WEB_TURN);
   tune([523, 784], {dur: .14}); [880, 1175, 1568].forEach((f, i) => Sound.tone(f, {type: 'sine', t: .25 + i*.06, dur: .3, vol: .035}));
-  if (learned.has(web.id)) { G.lesson = {step: 'explore'}; growArrows(); }
+  if (learned.has(web.id)) { G.lesson = {step: 'explore'}; enter(web.species.map(s => s.name)); growArrows(); }
   else {
-    G.lesson = {step: 'makers', guesses: new Set()};
-    story([H(`Welcome to ${web.place}! Every step up this little hill is one more step away from the sunlight.`),
-      H('First guess: which of these make their own food from sunlight? Tap them, then press Check.')]);
+    // the web is built a piece at a time: first the makers, then the animals, each one arriving after
+    // everything it eats is already there. The ones Hoot asks about are guessed before they're shown;
+    // the rest walk on by themselves alongside them.
+    G.lesson = {step: 'makers', guesses: new Set(), placed: new Set(), queue: arrivals(web), ask: asked(web), first: true};
+    story([H(`Welcome to ${web.place}! Let's build its food web together, one living thing at a time.`),
+      H('Everything here starts with sunlight. First guess: which of these make their own food from it? Tap them on the card, then press Check.')]);
   }
   draw();
 }
 function backToGlobe(){
   if (!G || G.mode !== 'web') return;
   if (convo) endConvo(false);
-  G.mode = 'globe'; G.lesson = null; view.zoom = 1; hideDiorama(); if (here) { dropPin(here.lat, here.lon); pin.t = 1; }
+  G.mode = 'globe'; G.lesson = null; view.zoom = 1; hideDiorama(); closeAnimal(); if (here) { dropPin(here.lat, here.lon); pin.t = 1; }
   tune([659, 523], {gap: .07, dur: .12, vol: .05});
   draw();
 }
 
 function drawWeb(){
-  const L = G.lesson, web = here.web, b = here.biome, quiz = L.step === 'makers' || L.step === 'hunter', what = L.step === 'whatif' || L.step === 'whatif-done';
+  const L = G.lesson, web = here.web, b = here.biome, quiz = L.step === 'makers' || L.step === 'eats', what = L.step === 'whatif' || L.step === 'whatif-done';
   card.style.setProperty('--c', b.color);
   let ask;
-  if (L.step === 'makers') ask = 'Which ones make their own food from sunlight? Tap your guesses.';
-  else if (L.step === 'hunter') ask = `What do you think the ${L.hunter.name.toLowerCase()} ${L.hunter.icon} eats? Tap your guesses.`;
+  if (L.step === 'makers') ask = 'Which ones make their own food from sunlight? Tap your guesses, then press Check.';
+  else if (L.step === 'eats') { const w = L.who, n = L.ask.size, k = n - L.queue.filter(s => L.ask.has(s.name)).length;
+    ask = `<span class="gfrom">Guess ${k} of ${n}${L.joined.length ? ` · the ${and(lower(L.joined))} joined in too` : ''}</span><br>Here ${w.many ? 'come' : 'comes'} the ${w.name.toLowerCase()} ${w.icon}! What ${w.many ? 'do they' : 'does it'} eat? Tap ${w.many ? 'their' : 'its'} food.`; }
   else if (L.step === 'checked') ask = L.said;
   else if (what) ask = `What if there were no more ${L.q.gone.name.toLowerCase()} ${L.q.gone.icon}? Predict first!`;
   else ask = 'Arrows point from food to the one that eats it, carrying energy up from the sun. Tap anyone to follow their arrows.';
   const row = (k, s) => `<div class="gwhat"><span>${s.icon} ${s.name}</span>${['more', 'fewer'].map(v => `<button data-k="${k}" data-v="${v}" class="${L.answers[k] === v ? 'on' : ''}" aria-pressed="${L.answers[k] === v}" ${L.step === 'whatif-done' ? 'disabled' : ''}>${v === 'more' ? '⬆ More' : '⬇ Fewer'}</button>`).join('')}
     ${L.step === 'whatif-done' ? (L.answers[k] === L.truth[k] ? '<b class="ok">✓ You predicted it!</b>' : `<b class="no">✗ There would be ${L.truth[k]}.</b>`) : ''}</div>`;
-  const btns = quiz ? btn('gCheck', 'Check') + btn('gSkip', 'Just show me', 'gb ghost')
+  const btns = quiz ? btn('gCheck', 'Check') + btn('gSkip', L.step === 'eats' ? 'Show me the rest' : 'Just show me', 'gb ghost')
     : L.step === 'checked' ? btn('gNext', 'Next →')
     : L.step === 'whatif' ? btn('gRun', 'See what happens') + btn('gWhatBack', 'Never mind', 'gb ghost')
     : L.step === 'whatif-done' ? btn('gRestore', 'Bring them back')
@@ -431,25 +452,31 @@ function drawWeb(){
   card.innerHTML = `<div class="gtop"><span class="gicon" aria-hidden="true">${b.icon}</span><div><div class="gkind">${b.name} food web</div><h3>${cap(web.place)}</h3></div></div>
     ${isFar(here) ? `<div class="gfrom">${farNote(here)}</div>` : ''}
     <p class="gask">${ask}</p>${what ? row('food', L.q.food) + row('eater', L.q.eater) : ''}
-    ${what ? '' : `<div class="gstrip" role="group" aria-label="Who lives here">${web.species.map((s, i) => `<button data-i="${i}" class="${stripClass(s)}" aria-label="${s.name}" title="${s.name}" aria-pressed="${quiz ? L.guesses.has(s.name) : L.sel === s.name}">${s.icon}</button>`).join('')}</div>`}
-    ${L.step === 'explore' && L.sel ? `<div class="gwho">${photoFor(L.sel)}<div class="gsay">${sayFor(L.sel)}</div></div>` : ''}
+    ${what ? '' : `<div class="gstrip" role="group" aria-label="Who lives here">${web.species.map((s, i) => `<button data-i="${i}" class="${stripClass(s)}" aria-label="${s.name}" aria-pressed="${quiz ? L.guesses.has(s.name) : L.sel === s.name}"><i aria-hidden="true">${s.icon}</i><b>${s.name}</b></button>`).join('')}</div>`}
+    ${L.step === 'explore' && L.sel ? `<div class="gsay">${sayFor(L.sel)}</div>` : ''}
     <div class="gbtns">${btns}</div>`;
   card.querySelectorAll('.gstrip button').forEach(b => b.addEventListener('click', () => tapAnimal(web.species[+b.dataset.i].name)));
   card.querySelectorAll('.gwhat button').forEach(b => b.addEventListener('click', () => { L.answers[b.dataset.k] = b.dataset.v; Sound.tone(880, {type: 'triangle', dur: .06, vol: .05}); draw(); }));
-  if (quiz) { $g('gCheck').disabled = !L.guesses.size; on('gCheck', check); on('gSkip', () => reveal(true)); }
+  if (quiz) { $g('gCheck').disabled = !L.guesses.size; on('gCheck', check); on('gSkip', () => finish(true)); }
   if (L.step === 'whatif') { $g('gRun').disabled = !(L.answers.food && L.answers.eater); on('gRun', runWhatIf); }
   on('gNext', L.next); on('gWhat', startWhatIf); on('gWhatBack', endWhatIf); on('gRestore', endWhatIf);
 }
 const cap = s => s[0].toUpperCase() + s.slice(1);
 function stripClass(s){
-  const L = G.lesson, cls = [s.eats.length ? '' : 'maker'];
+  const L = G.lesson, cls = [];
+  // which are makers is the first guess, so the strip keeps it quiet until then
+  if (L.step !== 'makers') { if (!s.eats.length) cls.push('maker'); if (L.placed && !L.placed.has(s.name)) cls.push('wait'); }
   if (L.marks && L.marks[s.name]) cls.push(L.marks[s.name]); else if (L.guesses && L.guesses.has(s.name)) cls.push('guess');
-  if (L.sel === s.name) cls.push('sel'); if (L.gone === s.name) cls.push('gone');
+  if (L.sel === s.name || (L.who && L.who.name === s.name)) cls.push('sel'); if (L.gone === s.name) cls.push('gone');
   return cls.join(' ');
 }
 function sayFor(name){
+  const s = here.web.species.find(t => t.name === name);
+  return `<b>${s.icon} ${s.name}</b><br>` + placeFor(name);
+}
+function placeFor(name){
   const s = here.web.species.find(t => t.name === name), by = eatenBy(here.web, name);
-  return `<b>${s.icon} ${s.name}</b><br>` + (s.eats.length ? `<span class="eats">Eats:</span> ${lower(s.eats).join(', ')}` : '<span class="eats">Makes its food from sunlight</span>')
+  return (s.eats.length ? `<span class="eats">Eats:</span> ${lower(s.eats).join(', ')}` : '<span class="eats">Makes its food from sunlight</span>')
     + ` · <span class="by">Eaten by:</span> ${by.length ? lower(by).join(', ') : 'nothing here'}`;
 }
 
@@ -460,74 +487,91 @@ function loadPhotos(){
   photos = {};
   fetch('wildlife/photos.json').then(r => r.ok ? r.json() : {}).then(p => { photos = p; if (G && G.mode === 'web') draw(); }, () => {});
 }
+const esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+const photoOf = name => photos[`${here.web.id}/${name}`] || photos[name];
 function photoFor(name){
-  const ph = photos[`${here.web.id}/${name}`] || photos[name];
+  const ph = photoOf(name);
   if (!ph) return '';
-  const esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   return `<figure class="gphoto"><img src="wildlife/${ph.file}" alt="${esc(name)}"><figcaption title="${esc(ph.by)}">Photo: <a href="${ph.page}" target="_blank" rel="noopener">${esc(ph.by)}</a>, ${esc(ph.license)}</figcaption></figure>`;
 }
 
+// one living thing's card, big: its real photo, a little about it, and its place in the web
+function openAnimal(name){
+  const s = here.web.species.find(t => t.name === name), about = photoOf(name)?.about;
+  animalCard.innerHTML = `<article role="dialog" aria-modal="true" aria-label="${esc(name)}"><button class="gx" aria-label="Close">✕</button>
+    <h3>${s.icon} ${esc(name)}</h3>${photoFor(name)}${about ? `<p>${esc(about)}</p>` : ''}<div class="gsay">${placeFor(name)}</div></article>`;
+  animalCard.hidden = false; animalCard.querySelector('.gx').focus({preventScroll: true});
+}
+function closeAnimal(){ animalCard.hidden = true; animalCard.innerHTML = ''; }
+
 function tapAnimal(name){
   const L = G.lesson; if (!L) return;
-  if (L.step === 'makers' || L.step === 'hunter') {
-    if (L.step === 'hunter' && name === L.hunter.name) return;
+  if (L.step === 'makers' || L.step === 'eats') {
+    // an animal's food is already on the island; it can't eat itself, or anyone still to come
+    if (L.step === 'eats' && (name === L.who.name || !L.placed.has(name))) return;
     if (L.guesses.has(name)) { L.guesses.delete(name); markAnimal(name, null); } else { L.guesses.add(name); markAnimal(name, 'guess'); }
     Sound.tone(L.guesses.has(name) ? 880 : 660, {type: 'triangle', dur: .07, vol: .05});
   } else if (L.step === 'explore') {
-    L.sel = L.sel === name ? null : name; selectAnimal(L.sel);
-    if (L.sel) Sound.tone(880, {type: 'triangle', dur: .07, vol: .05});
-  } else return;
+    // their arrows light up behind the card, to follow once it's closed
+    L.sel = name; selectAnimal(name); openAnimal(name);
+    Sound.tone(880, {type: 'triangle', dur: .07, vol: .05});
+  } else if (L.step === 'checked') return openAnimal(name);
+  else return;
   draw();
-  // on a short screen the card scrolls, and who they tapped would land out of sight below the strip
-  const pick = card.querySelector('.gwho');
-  if (pick) card.scrollTop = Math.max(card.scrollTop, pick.offsetTop + pick.offsetHeight - card.clientHeight);
 }
 
 // predict, then check: right guesses get a tick, wrong ones a cross, and the ones missed a "!"
 function check(){
-  const L = G.lesson, web = here.web, truth = new Set(L.step === 'makers' ? makers(web) : L.hunter.eats);
+  const L = G.lesson, web = here.web, w = L.who, truth = new Set(L.step === 'makers' ? makers(web) : w.eats);
   L.marks = {};
+  if (L.step === 'makers') { enter(truth); truth.forEach(n => L.placed.add(n)); }
   for (const s of web.species) {
     const g = L.guesses.has(s.name), t = truth.has(s.name), mark = g && t ? 'right' : g ? 'wrong' : t ? 'missed' : null;
     if (mark) { L.marks[s.name] = mark; markAnimal(s.name, mark); }
   }
   const right = [...L.guesses].filter(n => truth.has(n)).length, all = right === truth.size && right === L.guesses.size;
   tune(all ? [659, 784, 1046] : [523, 659], {vol: .06});
-  let lines;
   if (L.step === 'makers') {
-    lines = [(all ? 'Exactly right! ' : right ? 'Good thinking! ' : 'Not quite! ') + `The ${and(lower([...truth]))} ${truth.size > 1 ? 'are' : 'is'} the makers here.`,
-      'Plants and algae turn sunlight into food. Every animal here eats them, or eats something that did.'];
+    const lines = [(all ? 'Exactly right! ' : right ? 'Good thinking! ' : 'Not quite! ') + `The ${and(lower([...truth]))} ${truth.size > 1 ? 'are' : 'is'} the makers here.`,
+      'They turn sunlight into food. Every animal here eats them, or eats something that did.'];
     growArrows(e => e.food === 'Sun');
-    L.next = askHunter;
+    L.said = lines.join(' '); story(lines.map(H));
   } else {
+    // Hoot keeps quiet for each animal, so the web builds at the pace of tapping; the card says how it went
     const wrong = [...L.guesses].filter(n => !truth.has(n));
-    lines = [(all ? 'Yes! ' : right ? 'Close! ' : 'Good guess, but no. ') + `The ${L.hunter.name.toLowerCase()} eats ${and(lower(L.hunter.eats))}.`];
-    if (wrong.length) lines.push(`It doesn't eat ${and(lower(wrong))} here.`);
-    growArrows(e => e.eater === L.hunter.name);
-    L.next = () => reveal(false);
+    L.said = (all ? 'Yes! ' : right ? 'Close! ' : 'Good guess, but no. ') + `The ${w.name.toLowerCase()} ${w.many ? 'eat' : 'eats'} ${and(lower(w.eats))}.`
+      + (wrong.length ? ` ${w.many ? "They don't" : "It doesn't"} eat ${and(lower(wrong))} here.` : '');
+    growArrows(e => e.eater === w.name); selectAnimal(w.name);
   }
-  L.said = lines.join(' '); L.step = 'checked';
-  story(lines.map(H)); draw();
+  L.next = L.queue.some(s => L.ask.has(s.name)) ? arrive : () => finish(false);
+  L.step = 'checked'; draw();
 }
-function askHunter(){
-  const L = G.lesson, h = hunter(here.web);
-  if (convo) endConvo(false);
-  clearMarks(); L.marks = null; L.guesses = new Set();
-  if (!h) return reveal(false);
-  L.step = 'hunter'; L.hunter = h; spotlight(h.name);
-  story([H(`Next: what do you think the ${h.name.toLowerCase()} eats? Tap your guesses, then press Check.`)]);
-  draw();
-}
-function reveal(skipped){
+function arrive(){
   const L = G.lesson;
   if (convo) endConvo(false);
-  clearMarks(); spotlight(null); selectAnimal(null); Object.assign(L, {step: 'explore', marks: null, guesses: null, sel: null});
+  clearMarks(); selectAnimal(null); L.marks = null; L.guesses = new Set();
+  const walkers = [];
+  while (!L.ask.has(L.queue[0].name)) walkers.push(L.queue.shift());
+  const w = L.who = L.queue.shift(); L.joined = walkers.map(s => s.name);
+  for (const s of [...walkers, w]) L.placed.add(s.name);
+  enter([...L.joined, w.name]); growArrows(e => L.joined.includes(e.eater)); spotlight(w.name); L.step = 'eats';
+  tune([784, 988], {gap: .06, dur: .1, vol: .05});
+  if (L.first) { L.first = false;
+    story([H(`Now the animals start to arrive. Here ${w.many ? 'come' : 'comes'} the ${w.name.toLowerCase()}! What do you think ${w.many ? 'they eat' : 'it eats'}? Tap ${w.many ? 'their' : 'its'} food, then press Check.`)]); }
+  draw();
+}
+function finish(skipped){
+  const L = G.lesson, all = here.web.species.map(s => s.name), started = L.placed && L.placed.size, rest = (L.queue || []).map(s => s.name);
+  if (convo) endConvo(false);
+  clearMarks(); spotlight(null); selectAnimal(null); enter(all);
+  Object.assign(L, {step: 'explore', placed: new Set(all), queue: [], who: null, marks: null, guesses: null, sel: null});
   learned.add(here.web.id); keep();
   growArrows();
   tune([523, 659, 784, 1046, 1319], {gap: .12, dur: .3, vol: .05});
-  story([H(skipped ? 'Here comes the whole web!' : 'Now watch the whole web grow in!'),
-    H('Every arrow points from food to the one that eats it. That is the way energy moves, starting with the sun.'),
-    H('See how the steps get smaller as they go up? Most of the energy gets used up at every step, so there is only room for a few hunters at the top.')]);
+  story([H(skipped ? (started ? 'Here comes everyone else!' : 'Here comes the whole web!')
+      : (rest.length ? `And here come the ${and(lower(rest))}. ` : '') + `That's the whole food web of ${here.web.place}!`),
+    H('See how many arrows there are? Most animals eat more than one thing, and more than one thing eats them. That is why it is called a web, not a chain.'),
+    H('Tap anyone to follow their arrows. Then press "What if…?" to see what happens when one of them disappears.')]);
   draw();
 }
 
@@ -605,7 +649,11 @@ const geoOn = () => G && G.kind !== 'biomes' && !G.picking;
 function tap(x, y){
   if (!earth) return;
   const r = canvas.getBoundingClientRect(); ndc.set((x - r.left)/r.width*2 - 1, -(y - r.top)/r.height*2 + 1); ray.setFromCamera(ndc, camera);
-  if (G.mode === 'web') { const name = pickAnimal(ray); if (name) tapAnimal(name); return; }
+  if (G.mode === 'web') {
+    const name = pickAnimal(ray), L = G.lesson;
+    if (name) tapAnimal(name); else if (L.step === 'explore' && L.sel) { L.sel = null; selectAnimal(null); draw(); }
+    return;
+  }
   if (geoOn() && real.tap(x, y)) return;
   const hit = ray.intersectObject(globeBall, false)[0];
   if (hit) pressOn(earth.placeAt(hit.uv.y*180 - 90, hit.uv.x*360 - 180));
@@ -621,8 +669,6 @@ function middle(){
 // ---------- every frame, in the room ----------
 const held = new Set();
 hqAnims.push(dt => {
-  view.shrink += ((G && G.mode === 'web' ? 1 : 0) - view.shrink)*Math.min(1, dt*6);
-  const s = Math.max(.001, 1 - view.shrink); globeBall.scale.setScalar(s); globeRing.scale.setScalar(s);
   updateDiorama(dt);
   if (!G || !G.seated) return;
   aimCamera();
@@ -657,6 +703,7 @@ addEventListener('keydown', e => {
   if (!live() || convo) return;
   e.stopPropagation();
   const k = e.key;
+  if (k === 'Escape' && !animalCard.hidden) { closeAnimal(); return; }
   if (k === 'Escape') { if (G.mode === 'web') { if (G.lesson.step.startsWith('whatif')) endWhatIf(); else backToGlobe(); } else if (G.hunt) stopHunt(); else if (!(geoOn() && real.back())) leave(); return; }
   if (geoOn() && (k === '+' || k === '=' || k === '-' || k === '_')) { real.zoomBy(k === '+' || k === '=' ? 2 : .5); return; }
   if ((k === 'm' || k === 'M') && !e.repeat) { setSound(!Sound.isOn()); return; }

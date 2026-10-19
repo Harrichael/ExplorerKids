@@ -118,7 +118,9 @@ export function makeFx(world){
   return {
     attach(root){ parent = root; root.add(solid, fizz); },
     update, clear, film, hasFilm: v => films.has(v), dropFilm(v){ const f = films.get(v); if (f) f.clear(); },
-    bubble(v){ const a = Math.random()*7, r = Math.random()*v.def.ri*.8; spawn({kind:'bubble', host:v, ox:Math.cos(a)*r, oy:v.def.floor + .004, oz:Math.sin(a)*r, s:rnd(.002, .005), ph:Math.random()*7}); },
+    // from anywhere on the bottom, or from the patch `at` {x, z, r} where the fizzing is
+    bubble(v, at){ const a = Math.random()*7, R = v.def.ri*.8, r = Math.random()*(at ? Math.min(at.r, R) : R), cx = at ? at.x : 0, cz = at ? at.z : 0;
+      spawn({kind:'bubble', host:v, ox:cx + Math.cos(a)*r, oy:v.def.floor + .004, oz:cz + Math.sin(a)*r, s:rnd(.002, .005), ph:Math.random()*7}); },
     blob(v, c){ const a = Math.random()*7, r = Math.random()*v.def.ri*.55; spawn({kind:'blob', host:v, up:true, ox:Math.cos(a)*r, oy:world.waterTop(v), oz:Math.sin(a)*r, s:rnd(.008, .014), ph:Math.random()*7, col:c}); },
     oildrop(v){ const a = Math.random()*7, r = Math.random()*v.def.ri*.7; spawn({kind:'oildrop', host:v, ox:Math.cos(a)*r, oy:v.def.floor + Math.random()*(world.waterTop(v) - v.def.floor)*.8, oz:Math.sin(a)*r, s:rnd(.004, .008), col:0xf2c84b}); },
     bead(v, ox, oz, c, payload){ spawn({kind:'bead', host:v, ox, oy:world.top(v) - .006, oz, s:.006, col:c, payload}); }

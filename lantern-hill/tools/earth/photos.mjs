@@ -1,5 +1,6 @@
 // Fetches a photo of everyone in the globe's food webs from Wikimedia Commons into web/wildlife/,
-// with web/wildlife/photos.json naming each one's file, photographer and licence.
+// with web/wildlife/photos.json naming each one's file, photographer and licence, and a sentence or
+// two about them from the opening of their Wikipedia article.
 //
 //   node tools/earth/photos.mjs           (from lantern-hill/; fetches only what's missing)
 //   node tools/earth/photos.mjs Jaguar    (fetches that one again, after changing its SOURCE)
@@ -8,7 +9,9 @@
 // in that web (a badger in Germany is not a badger on the Great Plains). SOURCE says where to look: a
 // Wikipedia article, whose lead image is used, or a Commons file by name; anything not listed tries
 // the article named after the species. Only files on Commons are taken, since everything there is free
-// to use; their licences ask for credit, which the globe shows under each photo.
+// to use; their licences ask for credit, which the globe shows under each photo. The words come from
+// the same article as the photo, so they describe what's pictured; a Commons file has no article, so
+// its words come from the one named after the species, if there is one.
 //
 // Needs macOS, for sips.
 
@@ -130,6 +133,16 @@ async function fetchPhoto(key, source){
   return {file: name, by: plain(m.Artist && m.Artist.value) || 'Unknown', license: plain(m.LicenseShortName && m.LicenseShortName.value), page: info.descriptionurl};
 }
 
+async function about(key, source){
+  const title = source.startsWith('File:') ? key.split('/').pop() : source;
+  const r = await get(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`).catch(e => { if (/^404 /.test(e.message)) return null; throw e; });
+  const s = r && await r.json();
+  if (!s || s.type !== 'standard') return '';
+  // scientific names and pronunciations, in brackets, are heavy going for a child
+  const text = s.extract.replace(/\s*\([^()]*\)/g, '').replace(/\s+([,.])/g, '$1');
+  return (text.match(/[^.!?]+[.!?]+(\s|$)/g) || []).slice(0, 2).join('').trim();
+}
+
 mkdirSync(OUT, {recursive: true});
 const manifest = existsSync(join(OUT, 'photos.json')) ? JSON.parse(readFileSync(join(OUT, 'photos.json'), 'utf8')) : {};
 const again = new Set(process.argv.slice(2));
@@ -138,9 +151,12 @@ for (const w of WEBS) for (const s of w.species) wanted.add(SOURCE[`${w.id}/${s.
 for (const key of Object.keys(manifest)) if (!wanted.has(key)) { unlinkSync(join(OUT, manifest[key].file)); delete manifest[key]; }
 const failed = [];
 for (const key of wanted) {
-  if (manifest[key] && !again.has(key)) continue;
-  try { manifest[key] = await fetchPhoto(key, SOURCE[key] || key); console.log('✓', key); }
-  catch (e) { failed.push(key); console.log('✗', key, e.message); }
+  const source = SOURCE[key] || key;
+  try {
+    if (!manifest[key] || again.has(key)) manifest[key] = await fetchPhoto(key, source);
+    else if (manifest[key].about !== undefined) continue;
+    manifest[key].about = await about(key, source); console.log('✓', key);
+  } catch (e) { failed.push(key); console.log('✗', key, e.message); }
 }
 const sorted = Object.fromEntries(Object.keys(manifest).sort().map(k => [k, manifest[k]]));
 writeFileSync(join(OUT, 'photos.json'), JSON.stringify(sorted, null, 1) + '\n');

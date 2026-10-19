@@ -3,7 +3,8 @@
 //
 //   sitDown({x, z, angle, pose, seated})   // pose(p) bends the hero from standing (0) to sat (1);
 //                                          // seated() runs once they are down
-//   standUp()                              // the reverse; control comes back once they are up
+//   standUp(to)                            // the reverse, stepping to {x, z} if given; control comes
+//                                          // back once they are up
 //
 // pose() is applied over the hero's resting pose every frame, so it only sets what it changes. An
 // activity can layer more on top (arms that hold something, say) from its own hqAnims callback.
@@ -22,9 +23,9 @@ export function sitDown(spot){
   s = Object.assign({phase:'walk', walk:0, p:0, rest:parts().map(l => l.quaternion.clone())}, spot);
   game.cutscene = true; return true;
 }
-export function standUp(){
+export function standUp(to){
   if (!s || s.phase === 'rise') return;
-  s.phase = 'rise'; s.from = {x:player.x, z:player.z}; s.to = clear(player.x, player.z);
+  s.phase = 'rise'; s.from = {x:player.x, z:player.z}; s.to = to || clear(player.x, player.z);
 }
 // A spot snug against a seat leaves the explorer overlapping the seat's collider, and from inside a
 // collider every step is blocked. They step to the nearest free spot as they rise.

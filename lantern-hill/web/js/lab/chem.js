@@ -55,8 +55,9 @@ export function take(c, n){
   tidy(c); return out;
 }
 
-// One tick of chemistry. `stir` is how fast a spoon is moving through it. Returns the gas made.
-export function step(c, dt, stir=0){
+// One tick of chemistry. `stir` is how fast a spoon is moving through it; `contact` is how much of
+// the acid and baking soda have reached each other yet (0 to 1). Returns the gas made.
+export function step(c, dt, stir=0, contact=1){
   const wv = waterVol(c);
   if (wv > 0) for (const k in c.p) {
     const s = SUB[k]; if (!s.dissolve) continue;
@@ -70,7 +71,7 @@ export function step(c, dt, stir=0){
   const soda = (c.l.soda || 0) + (wv > 0 ? c.p.soda || 0 : 0);
   let acid = 0; for (const k in c.l) acid += c.l[k]*(SUB[k].acid || 0);
   if (acid > .01 && soda > .01) {
-    const r = Math.min(acid, soda, Math.min(acid, soda)*(1 - Math.exp(-2.6*dt)) + .5*dt);
+    const r = Math.min(acid, soda, (Math.min(acid, soda)*(1 - Math.exp(-4*dt)) + .5*dt)*contact);
     for (const k in c.l) if (SUB[k].acid) { const used = c.l[k]*r/acid; c.l[k] -= used; c.l.water = (c.l.water || 0) + used; }
     const fromL = Math.min(c.l.soda || 0, r); if (fromL) c.l.soda -= fromL; if (r > fromL) c.p.soda -= r - fromL;
     gas += r*2;
