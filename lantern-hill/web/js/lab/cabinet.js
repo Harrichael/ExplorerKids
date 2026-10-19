@@ -13,13 +13,13 @@ import { ITEMS } from './stuff.js';
 // Rows from the bottom; a shelf's share of its row's width is its `w`. What's taken out comes as `o`.
 const ROWS = [
   {h:.25, shelves:[
-    {label:'Glassware', w:4, things:['cup', 'jar', 'dish', 'saucer', 'bottle', 'balloon', 'tub', 'volcano']},
+    {label:'Containers', w:4.4, things:['cup', 'jar', 'dish', 'saucer', 'bottle', 'balloon', 'tub', 'volcano', 'boat', 'wideboat']},
     {label:'Bottles', w:3.6, things:['pitcher', 'vinegar', 'lemon', 'milk', 'cabbage', 'oil', 'soap']},
     {label:'Powders', w:2.6, things:['soda', 'sugar', 'saltbox', 'salt', 'sand', 'pepper']}]},
   {h:.19, shelves:[
     {label:'Colors', w:1.6, things:['red', 'yellow', 'blue']},
     {label:'Treasures', w:5.6, things:['egg', 'apple', 'rock', 'cork', 'coin', 'duck', 'paperclip', 'nail', 'key', 'foil', 'crayon', 'button', 'tablet']},
-    {label:'Tools', w:3, things:['spoon', 'swab', 'strip', 'magnet', 'bar', 'chart']}]}];
+    {label:'Tools', w:3, things:['spoon', 'swab', 'strip', 'magnet', 'bar', 'chart', 'balance']}]}];
 // a penny from the cabinet is an old one, dull with tarnish
 const TAKE = {tub:{fill:{water:950}}, coin:{tarnish:1}};
 const MAX_ON_MAT = 30;
