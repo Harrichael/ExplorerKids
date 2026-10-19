@@ -19,13 +19,21 @@ Every map runs east from longitude -180 at the left edge, latitude +90 at the to
 two sizes: <name>.jpg as sharp as the source allows (up to 4096 wide), for flying close, and
 <name>-small.jpg, 512 wide, for the star view and while the sharp one is on its way.
 
+closeups.json: where Galileo and Voyager flew close over Jupiter's moons. Their maps are mostly
+pictures taken from far off, sharpened up to the few close passes; nobody publishes where those
+passes landed, so each HEALPix tile of the map (at its finest order) is tested for detail that
+holds at the 2-pixel scale as strongly as at the 8-pixel scale, in every direction, which a picture
+blown up from a distant one never has. Written as a MOC, as the Hubble and Webb maps are.
+
     python3 -m venv /tmp/v && /tmp/v/bin/pip install numpy pillow
     /tmp/v/bin/python tools/sky_maps.py        # from lantern-hill/
+    /tmp/v/bin/python tools/sky_maps.py closeups europa   # just the ones named
 """
 
-import io, os, urllib.parse, urllib.request
+import io, json, os, sys, urllib.parse, urllib.request
+from concurrent.futures import ThreadPoolExecutor
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'web', 'sky', 'maps')
 HIPS2FITS = 'https://alasky.cds.unistra.fr/hips-image-services/hips2fits?'
@@ -176,9 +184,32 @@ def rings():
     print(f'saturn-rings.png: {os.path.getsize(os.path.join(OUT, "saturn-rings.png")):,} bytes')
 
 
+def sharp(tile):
+    a = np.asarray(Image.open(io.BytesIO(tile)).convert('L').filter(ImageFilter.MedianFilter(3)), float)[8:-8, 8:-8]
+    step = lambda s: [abs(a[:, s:] - a[:, :-s]).mean(), abs(a[s:, :] - a[:-s, :]).mean(),
+                      abs(a[s:, s:] - a[:-s, :-s]).mean(), abs(a[s:, :-s] - a[:-s, s:]).mean()]
+    return min(f/(w + .5) for f, w in zip(step(2), step(8)))
+
+
+def closeups():
+    # 0.4 by eye: above it, craters and ridges stand crisp; below, the ground is a blur (Io's whole
+    # map falls below, as its close passes aren't in it)
+    order, out = 3, {}
+    for moon in ('io', 'europa', 'ganymede', 'callisto'):
+        url = 'https://alasky.cds.unistra.fr/Planets/' + HIPS[moon][0].replace('/', '_') + f'/Norder{order}/Dir0/Npix{{}}.jpg'
+        with ThreadPoolExecutor(8) as pool:
+            scores = list(pool.map(lambda n: sharp(get(url.format(n))), range(12*4**order)))
+        out[moon] = {str(order): [n for n, v in enumerate(scores) if v > .4]}
+        print(f'closeups {moon}: {len(out[moon][str(order)])} tiles')
+    with open(os.path.join(OUT, 'closeups.json'), 'w') as f:
+        json.dump(out, f, separators=(',', ':'))
+
+
 os.makedirs(OUT, exist_ok=True)
+want = set(sys.argv[1:]) or {*HIPS, 'saturn', 'uranus', 'rings', 'closeups'}
 for body in HIPS:
-    save(body, hips(body))
-save('saturn', saturn())
-save('uranus', uranus())
-rings()
+    if body in want: save(body, hips(body))
+if 'saturn' in want: save('saturn', saturn())
+if 'uranus' in want: save('uranus', uranus())
+if 'rings' in want: rings()
+if 'closeups' in want: closeups()
