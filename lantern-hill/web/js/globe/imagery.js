@@ -1,6 +1,8 @@
-// The pictures on the geography globe. Most are NASA's own photos of the Earth, streamed from GIBS
+// The pictures on the real-Earth globes. Most are NASA's own photos of the Earth, streamed from GIBS
 // (NASA's Global Imagery Browse Services) as plain images cut to any box of latitude and longitude,
 // far too big to ship. Like the telescope's lenses, each lens is another way of seeing the same Earth.
+// A lens can instead `paint` its own map, or lay one `over` NASA's photo, from `data` it waits for
+// first: the weather globe paints the live weather that way.
 //
 // The whole globe gets one picture, sharpened as more of it arrives; when the explorer leans in
 // close, a close-up of just what they're looking at is laid over it.
@@ -24,7 +26,7 @@ export const LENSES = [
     tip: 'The Earth at night. Every bright speck is a town or a city.', credit: 'NASA Black Marble, via NASA GIBS'},
   {id: 'relief', name: 'Mountains & sea floor', layers: 'BlueMarble_ShadedRelief_Bathymetry', sharpest: 220,
     tip: 'Mountains on land, and the hidden mountains and trenches under the sea. The darker the blue, the deeper.', credit: 'NASA Blue Marble shaded relief and bathymetry, via NASA GIBS'},
-  {id: 'countries', name: 'Countries', paint: true, sharpest: 1e9,
+  {id: 'countries', name: 'Countries', paint: (g, w, h, box, maps) => paintCountries(g, maps.geo, maps.earth, w, h, box), sharpest: 1e9,
     tip: 'Every country in its own colour. No two neighbours share one.', credit: 'Natural Earth'},
 ];
 export const lensBy = id => LENSES.find(l => l.id === id) || LENSES[0];
@@ -41,10 +43,10 @@ function texture(canvas){
 const WORLD = {w: -180, e: 180, s: -90, n: 90};
 // The open sea photographs nearly black, and on a globe in a lamplit room it reads as a hole. Screening
 // a deep blue over the picture lifts only its darkest parts, so the sea is blue and the land stays true.
-function put(g, lens, im, x, y, w, h){
+function put(g, lens, im, x, y, w, h, box, data){
   g.drawImage(im, x, y, w, h);
-  if (!lens.lift) return;
-  g.globalCompositeOperation = 'screen'; g.fillStyle = lens.lift; g.fillRect(x, y, w, h); g.globalCompositeOperation = 'source-over';
+  if (lens.lift) { g.globalCompositeOperation = 'screen'; g.fillStyle = lens.lift; g.fillRect(x, y, w, h); g.globalCompositeOperation = 'source-over'; }
+  if (lens.over) lens.over(g, x, y, w, h, box, data);
 }
 
 // A quick small picture of the whole Earth first, then eight sharper pieces as they come. The texture
@@ -52,12 +54,13 @@ function put(g, lens, im, x, y, w, h){
 export async function wholeEarth(lens, maps){
   const c = document.createElement('canvas'); c.width = 4096; c.height = 2048;
   const g = c.getContext('2d');
-  if (lens.paint) { paintCountries(g, maps.geo, maps.earth, c.width, c.height, WORLD); return texture(c); }
-  put(g, lens, await picture(lens, WORLD, 2048, 1024), 0, 0, c.width, c.height);
+  if (lens.paint) { lens.paint(g, c.width, c.height, WORLD, maps); return texture(c); }
+  const [im, data] = await Promise.all([picture(lens, WORLD, 2048, 1024), lens.data && lens.data()]);
+  put(g, lens, im, 0, 0, c.width, c.height, WORLD, data);
   const t = texture(c);
   for (let i = 0; i < 4; i++) for (let j = 0; j < 2; j++) {
     const box = {w: -180 + i*90, e: -90 + i*90, s: 0 - j*90, n: 90 - j*90};
-    picture(lens, box, 1024, 1024).then(im => { put(g, lens, im, i*1024, j*1024, 1024, 1024); t.needsUpdate = true; }, () => {});
+    picture(lens, box, 1024, 1024).then(im => { put(g, lens, im, i*1024, j*1024, 1024, 1024, box, data); t.needsUpdate = true; }, () => {});
   }
   return t;
 }
@@ -66,7 +69,7 @@ export async function wholeEarth(lens, maps){
 export async function closeUp(lens, box, w, h, maps){
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   const g = c.getContext('2d');
-  if (lens.paint) paintCountries(g, maps.geo, maps.earth, w, h, box);
-  else put(g, lens, await picture(lens, box, w, h), 0, 0, w, h);
+  if (lens.paint) lens.paint(g, w, h, box, maps);
+  else { const [im, data] = await Promise.all([picture(lens, box, w, h), lens.data && lens.data()]); put(g, lens, im, 0, 0, w, h, box, data); }
   return texture(c);
 }

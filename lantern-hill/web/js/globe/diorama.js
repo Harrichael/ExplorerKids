@@ -12,8 +12,8 @@ import { C, T, glowTex, outline, sparkTex, tex } from '../core/kit.js';
 import { BIOMES } from '../earth/biomes.js';
 import { eatenBy, layout } from './food-web.js';
 
-const TOKEN = .18, ASPECT = 320/256, DISC = .6125*TOKEN*ASPECT, RIM = TOKEN*.42;
-const SPACE = .21, DEPTH = .4, ISLAND = .07;
+const TOKEN = .24, ASPECT = 320/256, DISC = .6125*TOKEN*ASPECT, RIM = TOKEN*.42;
+const SPACE = .27, DEPTH = .42, ISLAND = .07;
 const COL = {edge: 0xefe0bf, food: 0x8fd694, eater: 0xf2a65a, sun: 0xffd25a};
 const EMOJI = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 

@@ -5,8 +5,8 @@
 // never offers mountain). `ask` is Hoot's challenge to go and find one, and `compare` sets it beside
 // its neighbours, where that teaches something.
 //
-// Natural Earth names no volcanoes (the build adds Wikidata's), buttes, mesas, fjords, glaciers or
-// many canyons, so LANDMARKS are famous ones picked by hand, each with its Wikipedia article.
+// Most names come from Natural Earth and Wikidata's catalogue (tools/earth/build.mjs). LANDMARKS are
+// famous ones picked by hand before that catalogue existed, each with its Wikipedia article.
 // `country` is where its spot falls on the map, or for a fjord, the coast it's beside, for the tests.
 //
 //   landformOf('gorge')   // the canyon
@@ -38,6 +38,26 @@ export const LANDFORMS = [
     means: 'A butte is a hill with steep sides and a small flat top, standing all on its own. It is taller than it is wide.',
     ask: 'Can you find a butte? Say it like the start of "beautiful"! They are small, so lean in very close.',
     compare: 'Plateau, mesa, butte: each one is a smaller piece than the last. A butte is what is left after rain and wind have worn away almost all of a mesa.'},
+  {id: 'hill', name: 'Hill', icon: '🌄', kinds: ['hill'], like: ['valley', 'plain', 'plateau'],
+    means: 'A hill is land that rises above the land around it, with a rounded top. It is smaller and gentler than a mountain.',
+    ask: 'Can you find a hill? Lean in close: hills are much smaller than mountains.',
+    compare: 'There is no exact line between a hill and a mountain. Mostly, a mountain is taller and steeper.'},
+  {id: 'dune', name: 'Sand dune', icon: '🌬️', kinds: ['dune'], like: ['beach', 'plateau', 'glacier'],
+    means: 'A sand dune is a hill of sand, piled up by the wind. The biggest seas of dunes are called ergs.',
+    ask: 'Can you find a sand dune, or a whole sea of them? Look in the deserts.',
+    compare: 'The wind blows sand up one side of a dune, and it slides down the other. So dunes slowly walk across the desert!'},
+  {id: 'cave', name: 'Cave', icon: '🦇', kinds: ['cave'], like: ['canyon', 'cliff', 'geyser'],
+    means: 'A cave is a hollow space under the ground, big enough for a person to go inside.',
+    ask: 'Can you find a cave? Caves hide underground, so lean in close and look for their names.',
+    compare: 'Most big caves were carved by water. Rain trickles through cracks in limestone rock and slowly dissolves it away.'},
+  {id: 'geyser', name: 'Geyser', icon: '⛲', kinds: ['geyser'], like: ['volcano', 'waterfall', 'cave'],
+    means: 'A geyser is a hot spring that shoots water and steam high into the air, again and again. Say it like "guy-zer"!',
+    ask: 'Can you find a geyser? They need hot rock underground, so look near volcanoes.',
+    compare: 'Water underground is heated by hot rock until it boils and bursts out of the ground. Then the geyser fills up and does it again.'},
+  {id: 'hotspring', name: 'Hot spring', icon: '♨️', kinds: ['hotspring'], water: true, like: ['geyser', 'lake', 'glacier'],
+    means: 'A hot spring is water that comes up from deep underground, warmed by the heat inside the Earth.',
+    ask: 'Can you find a hot spring, where warm water bubbles out of the ground?',
+    compare: 'A geyser is a hot spring that erupts. In Japan, people bathe in hot springs called onsen.'},
   // ---------- low and flat land ----------
   {id: 'valley', name: 'Valley', icon: '🏞️', kinds: ['valley'], like: ['plain', 'plateau', 'delta'],
     means: 'A valley is low land between hills or mountains. Often a river runs along the bottom.',
@@ -68,6 +88,22 @@ export const LANDFORMS = [
     means: 'An isthmus is a narrow strip of land with water on both sides, joining two bigger lands. Say it like "iss-muss"!',
     ask: 'Can you find an isthmus, a thin bridge of land between two big lands?',
     compare: 'An isthmus and a strait are opposites: a thin strip of land between two waters, and a thin strip of water between two lands.'},
+  {id: 'beach', name: 'Beach', icon: '🏖️', kinds: ['beach'], like: ['cliff', 'cape', 'dune'],
+    means: 'A beach is the edge of the land beside the sea or a lake, covered in sand or pebbles.',
+    ask: 'Can you find a beach? They are small, so lean in close along a coast.',
+    compare: 'Waves grind rocks and shells into sand and wash it up onto the beach. Where the coast is hard rock, there are cliffs instead.'},
+  {id: 'cliff', name: 'Cliff', icon: '🧗', kinds: ['cliff'], like: ['beach', 'canyon', 'mesa'],
+    means: 'A cliff is a tall, steep wall of rock.',
+    ask: 'Can you find a cliff? Look along rocky coasts and in the mountains.',
+    compare: 'Waves crash on the bottom of a sea cliff and wear it away, until the rock above falls in. So sea cliffs slowly move back from the sea.'},
+  {id: 'cape', name: 'Cape', icon: '🧭', kinds: ['cape'], like: ['bay', 'beach', 'isthmus'],
+    means: 'A cape is a point of land that sticks out into the sea.',
+    ask: 'Can you find a cape, where the land comes to a point in the sea?',
+    compare: 'A cape is a point of land; a bay is the curve of water beside it. Sailors watched for capes to know where they were.'},
+  {id: 'lagoon', name: 'Lagoon', icon: '🐠', kinds: ['lagoon'], water: true, like: ['lake', 'bay', 'reef'],
+    means: 'A lagoon is shallow water, almost cut off from the sea by a strip of sand or a coral reef.',
+    ask: 'Can you find a lagoon, calm water tucked in behind sand or coral?',
+    compare: 'A lagoon is almost cut off from the sea; a bay is wide open to it.'},
   {id: 'delta', name: 'River delta', icon: '🔱', kinds: ['delta'], like: ['bay', 'lake', 'valley'],
     means: 'A delta is where a river reaches the sea and spreads out into lots of little streams, dropping the mud and sand it carried.',
     ask: 'Can you find a delta, where a river fans out into the sea?',
@@ -113,6 +149,27 @@ export const LANDFORMS = [
     means: 'A strait is a narrow strip of sea between two lands, joining two bigger waters. Wide ones are often called channels.',
     ask: 'Can you find a strait, a narrow sea where ships squeeze between two lands?',
     compare: 'A strait and an isthmus are opposites: a thin strip of water between two lands, and a thin strip of land between two waters.'},
+  // ---------- under the sea ----------
+  {id: 'reef', name: 'Coral reef', icon: '🪸', kinds: ['reef'], water: true, like: ['seamount', 'cape', 'lagoon'],
+    means: 'A coral reef is built by tiny sea animals called corals. Over thousands of years their stony skeletons pile up into reefs, full of colourful fish.',
+    ask: 'Can you find a coral reef? Look in warm, shallow seas near the equator.',
+    compare: 'An atoll is a ring of coral reef around a lagoon. Often it grew around a volcano that slowly sank back into the sea.'},
+  {id: 'seamount', name: 'Seamount', icon: '🗻', kinds: ['seamount'], water: true, like: ['island', 'ridge', 'reef'],
+    means: 'A seamount is a mountain that rises from the sea floor but doesn\'t reach the surface. Most are old volcanoes.',
+    ask: 'Can you find a seamount, a mountain hidden under the waves?',
+    compare: 'If a seamount grows tall enough to poke out of the sea, it becomes an island. Hawaii started out as seamounts!'},
+  {id: 'ridge', name: 'Mid-ocean ridge', icon: '〰️', kinds: ['ridge'], water: true, like: ['trench', 'seamount', 'abyssal'],
+    means: 'A mid-ocean ridge is a long chain of mountains under the sea. Hot rock rises up along it and cools into brand new sea floor.',
+    ask: 'The longest mountain range on Earth is under the sea! Can you find a mid-ocean ridge? Try the Mountains & sea floor view.',
+    compare: 'At a ridge, new sea floor is made and spreads apart. At a trench, old sea floor sinks back down inside the Earth.'},
+  {id: 'trench', name: 'Ocean trench', icon: '🕳️', kinds: ['trench'], water: true, like: ['ridge', 'canyon', 'abyssal'],
+    means: 'An ocean trench is a long, deep valley in the sea floor, the deepest places on Earth. One piece of the Earth\'s crust slides down under another there.',
+    ask: 'The deepest places on Earth are hidden under the sea! Can you find an ocean trench? Look near the edges of the Pacific Ocean.',
+    compare: 'The Mariana Trench is so deep that if Mount Everest were dropped into it, its top would still be under more than a mile of water!'},
+  {id: 'abyssal', name: 'Abyssal plain', icon: '🌑', kinds: ['abyssal'], water: true, like: ['trench', 'ridge', 'seamount'],
+    means: 'An abyssal plain is a huge, flat floor deep under the ocean, dark and cold and covered in soft mud. Say it like "a-biss-al"!',
+    ask: 'Can you find an abyssal plain, deep under the sea? Lean in close: they are hard to spot.',
+    compare: 'Abyssal plains are the flattest places on Earth, flatter than any plain on land. Sunlight never reaches them.'},
 ];
 
 const BY_KIND = new Map(LANDFORMS.flatMap(l => l.kinds.map(k => [k, l])));

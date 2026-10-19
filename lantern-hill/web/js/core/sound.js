@@ -1,5 +1,17 @@
+import { load, save } from '../save.js';
+
+// The songs, all by Kevin MacLeod (incompetech.com) under CC BY 4.0, which asks that each be credited
+// by title where players can find it; the start screen lists them from here.
+const track = title => ({title, src:`audio/music/${title.toLowerCase().replace(/ /g, '-')}.mp3`});
+export const MUSIC = {
+  home: ['Carefree', 'Industrious Ferret', 'Life of Riley', 'Thatched Villagers', 'Daily Beetle'].map(track),
+  trip: ['Fiddles McGinty', 'Monkeys Spinning Monkeys', 'Carpe Diem'].map(track),
+};
+// the songs are loudness-matched at -16 LUFS; this sits them under the sound effects
+const MUSIC_VOL = {songs:.15, box:.14};
+
 export const Sound = (() => {
-  let ctx = null, master, sfx, music, air, noise, on = true;
+  let ctx = null, master, sfx, music, echo, air, noise, on = true, mode = load('musicBox') ? 'box' : 'songs';
   function init(){
     if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
@@ -10,14 +22,16 @@ export const Sound = (() => {
     const dly = ctx.createDelay(1); dly.delayTime.value = 0.39;
     const fb = ctx.createGain(); fb.gain.value = 0.33;
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1700;
-    music.connect(dly); dly.connect(lp); lp.connect(fb); fb.connect(dly); lp.connect(master);
-    // sfx with a tail: the music's echo, so magical cues ring in the same room as the tune
+    dly.connect(lp); lp.connect(fb); fb.connect(dly); lp.connect(master);
+    // the music box rings in the echo; recorded songs would only turn to mud in it
+    echo = ctx.createGain(); echo.gain.value = mode === 'box' ? 1 : 0; music.connect(echo); echo.connect(dly);
+    // sfx with a tail, so magical cues ring in the same room as the music box
     air = ctx.createGain(); air.connect(sfx);
     const send = ctx.createGain(); send.gain.value = .55; air.connect(send); send.connect(dly);
     noise = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
     const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     music.gain.setValueAtTime(0, ctx.currentTime);
-    music.gain.linearRampToValueAtTime(0.14, ctx.currentTime + 4);
+    music.gain.linearRampToValueAtTime(awake ? MUSIC_VOL[mode] : 0, ctx.currentTime + 4);
     startMusic();
   }
   function tone(f, {type='sine', t=0, dur=.2, vol=.2, bus, attack=.006, f2, cut, vib}={}){
@@ -66,8 +80,22 @@ export const Sound = (() => {
     tone(f * (v.glide || 1.06), {type:v.type, dur:v.len, vol:v.vol, f2:f, cut:v.cut, vib:v.vib});
     if (v.layer) tone(f * 2, {type:'sine', dur:v.len * .7, vol:v.vol * .25});
   }
-  let step = 0, next = 0;
   const midi = n => 440 * Math.pow(2, (n - 69) / 12);
+  // Each theme is a playlist of songs, played in a shuffled order that reshuffles when it runs out.
+  // Changing theme fades the song out and starts the new playlist rather than waiting for the song to end.
+  let theme = 'home', order = [], el = null, fade = null, fadeT = 0;
+  function play(){
+    if (!order.length) order = MUSIC[theme].slice().sort(() => Math.random() - .5);
+    el.src = order.shift().src; if (awake) resume();
+    clearTimeout(fadeT); fade.gain.cancelScheduledValues(ctx.currentTime); fade.gain.setTargetAtTime(1, ctx.currentTime, .4);
+  }
+  // a touch lets a page start audio only once the finger lifts, so a song may have to wait for it
+  function resume(){ el.play().catch(() => addEventListener('pointerup', () => awake && el.play().catch(() => {}), {once:true})); }
+  function fadeOut(then){
+    clearTimeout(fadeT); fade.gain.cancelScheduledValues(ctx.currentTime); fade.gain.setTargetAtTime(0, ctx.currentTime, .25);
+    fadeT = setTimeout(then, 1000);
+  }
+  // the music box: tunes played live on the synth, the game's music before it had songs
   const THEMES = {
     // cozy music box for the cottage
     home: {step:.4, chords:[[53,57,60,64],[50,53,57,60],[46,50,53,57],[48,52,55,58]], pattern:[0,2,1,3,2,1,3,2], play(ch, i, t, n){
@@ -87,18 +115,55 @@ export const Sound = (() => {
       if ((i === 2 || i === 5 || i === 7) && Math.random() < .55) { const mel = [0, 2, 4, 7, 9, 12][Math.floor(Math.random() * 6)]; tone(midi(ch[0] + 24 + mel), {type:'square', t:t + .02, dur:.22, vol:.032, cut:2400, bus:music, attack:.005}); }
     }}
   };
-  let theme = THEMES.home, pendingTheme = null;
-  function startMusic(){
-    next = ctx.currentTime + .2;
-    setInterval(() => {
-      while (next < ctx.currentTime + .35) {
-        if (pendingTheme && step % 8 === 0) { theme = pendingTheme; pendingTheme = null; step = 0; }
-        const bar = Math.floor(step / 8) % theme.chords.length, ch = theme.chords[bar], i = step % 8, t = next - ctx.currentTime;
-        theme.play(ch, i, t, ch[theme.pattern[i]] + 12);
-        next += theme.step; step++;
-      }
-    }, 90);
+  // the music box changes tune only on a bar line
+  let boxTheme = theme, step = 0, next = 0;
+  function tickBox(){
+    if (mode !== 'box' || !awake) { next = 0; return; }
+    if (!next) next = ctx.currentTime + .2;
+    while (next < ctx.currentTime + .35) {
+      if (boxTheme !== theme && step % 8 === 0) { boxTheme = theme; step = 0; }
+      const th = THEMES[boxTheme], bar = Math.floor(step / 8) % th.chords.length, ch = th.chords[bar], i = step % 8, t = next - ctx.currentTime;
+      th.play(ch, i, t, ch[th.pattern[i]] + 12);
+      next += th.step; step++;
+    }
   }
+  function startMusic(){
+    // streamed, not decoded: a whole song decoded is tens of megabytes, too much for a phone
+    el = new Audio(); el.preload = 'auto'; el.addEventListener('ended', play);
+    fade = ctx.createGain(); ctx.createMediaElementSource(el).connect(fade); fade.connect(music);
+    setInterval(tickBox, 90);
+    if (mode === 'songs') play();
+  }
+  function switchTo(name){
+    theme = name; order = [];
+    if (el && mode === 'songs') fadeOut(play);
+  }
+  function toggleMusic(){
+    mode = mode === 'songs' ? 'box' : 'songs'; save('musicBox', mode === 'box');
+    if (!ctx) return;
+    echo.gain.setTargetAtTime(mode === 'box' ? 1 : 0, ctx.currentTime, .3);
+    level();
+    if (mode === 'songs') play(); else fadeOut(() => el.pause());
+  }
+  // The music rests while nobody is there to hear it: the tab is in the background or its window
+  // isn't focused, or no one has touched it for five minutes. It comes back with the next tap or key
+  // in the focused tab. Input alone doesn't count: an AI agent can drive a tab nobody is looking at.
+  const IDLE = 5*60e3;
+  let awake = true, ducked = false, lastActive = performance.now(), restT = 0;
+  function level(){ if (ctx) music.gain.setTargetAtTime(awake ? MUSIC_VOL[mode] * (ducked ? .35 : 1) : 0, ctx.currentTime, awake ? .3 : .8); }
+  function setAwake(a){
+    if (a === awake) return;
+    awake = a; level(); clearTimeout(restT);
+    if (!el || mode !== 'songs') return;
+    // a resting song pauses rather than playing on silently, so it picks up where it left off
+    if (awake) { if (el.paused && el.src) resume(); } else restT = setTimeout(() => el.pause(), 3000);
+  }
+  const present = () => !document.hidden && document.hasFocus();
+  function active(){ lastActive = performance.now(); if (present()) setAwake(true); }
+  for (const ev of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'focus']) addEventListener(ev, active, {capture:true, passive:true});
+  const away = () => { if (!present()) setAwake(false); };
+  addEventListener('blur', away); document.addEventListener('visibilitychange', () => document.hidden ? away() : active());
+  setInterval(() => { if (performance.now() - lastActive > IDLE) setAwake(false); }, 5000);
   const bufCache = new Map(); let seqId = 0, seqSrc = [], seqTimers = [];
   function clipBuffer(url){
     if (bufCache.has(url)) return bufCache.get(url);
@@ -124,11 +189,11 @@ export const Sound = (() => {
     if (onEach) seqTimers.push(setTimeout(() => onEach(-1, 0), (t - ctx.currentTime) * 1000));
   }
   return {
-    init, blip, tone, hiss, playSeq, stopSeq,
-    setTheme(name){ const th = THEMES[name]; if (!th) return; if (!ctx) { theme = th; return; } if (th !== theme) pendingTheme = th; },
+    init, blip, tone, hiss, playSeq, stopSeq, toggleMusic,
+    setTheme(name){ if (MUSIC[name] && name !== theme) switchTo(name); },
     isOn(){ return on; },
     toggle(){ on = !on; if (ctx) master.gain.setTargetAtTime(on ? .9 : 0, ctx.currentTime, .05); return on; },
-    duck(d){ if (ctx) music.gain.setTargetAtTime(d ? .05 : .14, ctx.currentTime, .3); },
+    duck(d){ ducked = d; level(); },
     open(){ tone(784, {type:'triangle', dur:.14, vol:.13}); tone(1175, {type:'triangle', t:.08, dur:.22, vol:.12}); },
     next(){ tone(1046, {type:'square', dur:.05, vol:.035, cut:2500}); },
     close(){ tone(988, {type:'triangle', dur:.12, vol:.11}); tone(659, {type:'triangle', t:.08, dur:.2, vol:.1}); },
