@@ -1,12 +1,12 @@
 // The Explorer's Globe in the Library Nook. There's no separate screen: the explorer steps up to the
-// real globe, the camera leans in, and Professor Hoot asks them to guess before he tells. It's two
+// real globe, the camera leans in, and Professor Hoot asks them to guess before he tells. It's four
 // globes in one, and the explorer picks which as they step up.
 //
 // The biome globe: pick a biome and Hoot gives a riddle about its weather to find it by; open a food
 // web and it pops up out of the globe as a diorama with no arrows yet, for the explorer to guess who
 // eats whom; then ask what would happen if one animal disappeared. Tapping anywhere just visits it.
-// The geography globe is the real Earth from space, and lives in real-earth.js; this file keeps
-// the room globe, the camera and the hands for both.
+// The geography, countries and weather globes are the real Earth from space, and live in
+// real-earth.js; this file keeps the room globe, the camera and the hands for all four.
 // Loaded the first time someone uses the globe; once the map is painted, the globe keeps it.
 
 import * as THREE from 'three';
@@ -39,10 +39,10 @@ css.textContent = `
 .gh-title .sub{font-weight:900;font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--gold)}
 .gh-title h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(18px,4.4vw,23px);line-height:1.1;color:var(--parch);white-space:nowrap}
 .gh-btns{display:flex;justify-content:flex-end;gap:8px}
-.gmode{display:flex;gap:4px;margin-top:5px}
+.gmode{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;max-width:250px}
 .gmode button{font-weight:900;font-size:12px;color:var(--parch);background:rgba(26,19,32,.6);border:2px solid rgba(217,164,65,.5);border-radius:999px;padding:2px 9px}
 .gmode button[aria-pressed=true]{background:var(--gold);color:var(--ink);border-color:var(--gold)}
-#gCard .gpick{display:flex;flex-direction:column;gap:8px}
+#gCard .gpick{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 #gCard .gpick button{text-align:left;font-family:var(--body);color:var(--ink);background:#fbf4e2;border:3px solid var(--ink);border-radius:14px;padding:9px 12px;box-shadow:0 3px 0 var(--ink)}
 #gCard .gpick button.last{border-color:var(--plum);box-shadow:0 0 0 3px var(--gold),0 3px 0 var(--ink)}
 #gCard .gpick b{display:block;font-family:var(--display);font-weight:400;font-size:19px}
@@ -101,14 +101,21 @@ css.textContent = `
 @media (max-aspect-ratio:1/1){#gCard{left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));width:auto;top:calc(96px + env(safe-area-inset-top,0px));max-height:36%}
   .talking #gCard{max-height:38%}#gCard{padding:9px 12px 11px;gap:6px}#gCard .gicon{width:36px;height:36px;font-size:19px}#gCard h3{font-size:18px}
   #gCard p{font-size:14px}#gCard .gask{font-size:15px}.gstrip button{width:34px;height:34px;font-size:18px}.gcredit{display:none}
-  #gCard:has(.gphoto){max-height:50%}}
+  #gCard:has(.gphoto){max-height:50%}#gCard:has(.gpick){max-height:64%}
+  .gmode button{font-size:16px;padding:1px 8px}.gmode button span+span{display:none}#gCard .gpick span{font-size:12px}}
 @media (max-aspect-ratio:1/1),(max-height:500px){.gphoto{float:left;width:42%;margin:0 10px 2px 0}.gphoto img{border-width:2px;border-radius:9px}}
 @media (prefers-reduced-motion:reduce){#globeHud,#gtoast{animation:none}}`;
 document.head.appendChild(css);
 
+const KINDS = [
+  {id: 'biomes', icon: '🌿', name: 'Biomes', about: 'Who lives where, and who eats whom. Riddles and pop-up food webs.'},
+  {id: 'geo', icon: '⛰️', name: 'Geography', about: 'The real Earth from space: mountains, canyons, rivers, reefs and ocean trenches, and the wonders of nature.'},
+  {id: 'countries', icon: '🏳️', name: 'Countries', about: 'Every country: its flag, capital, money, people and culture, in real photos.'},
+  {id: 'weather', icon: '🌦️', name: 'Weather', about: 'The real weather right now, all round the world: clouds, rain, snow, wind, and night.'},
+];
 const hud = document.createElement('div'); hud.id = 'globeHud'; hud.hidden = true;
 hud.innerHTML = `<div class="gh-top"><div class="gh-title"><div class="sub">Library Nook</div><h2>Explorer's Globe</h2>
-    <div class="gmode" role="group" aria-label="Which globe"><button data-m="biomes">🌿 Biomes</button><button data-m="geo">🗺️ Geography</button></div></div>
+    <div class="gmode" role="group" aria-label="Which globe">${KINDS.map(k => `<button data-m="${k.id}" aria-label="${k.name}"><span aria-hidden="true">${k.icon}</span><span> ${k.name}</span></button>`).join('')}</div></div>
     <div class="gh-btns"><button class="gpill" id="gBack" hidden aria-label="Back to the globe">← Globe</button><button class="gpill" id="gLeave">Step away</button></div></div>
   <aside id="gCard" aria-live="polite"></aside>
   <div class="gcredit" id="gCredit"></div>
@@ -119,9 +126,14 @@ const $g = id => hud.querySelector('#' + id), card = $g('gCard');
 const stored = load('globe') || {}, list = v => Array.isArray(v) ? v : [];
 const found = new Set(list(stored.found)), learned = new Set(list(stored.webs));
 let met = !!stored.met;
-// what the geography globe keeps: the wonders and landforms found, its lens, and which globe was picked last
-const store = {wonders: new Set(list(stored.wonders)), landforms: new Set(list(stored.landforms)), lens: stored.lens, metGeo: !!stored.metGeo, mode: stored.mode === 'geo' ? 'geo' : 'biomes'};
-const keep = () => save('globe', {found: [...found], webs: [...learned], met, wonders: [...store.wonders], landforms: [...store.landforms], lens: store.lens, metGeo: store.metGeo, mode: store.mode});
+// what the real-Earth globes keep: what's been found and visited, each one's lens, which have said
+// hello, and which globe was picked last
+const set = k => new Set(list(stored[k]));
+const store = {wonders: set('wonders'), landforms: set('landforms'), countries: set('countries'), flags: set('flags'), capitals: set('capitals'), weather: set('weather'),
+  lenses: stored.lenses && typeof stored.lenses === 'object' ? stored.lenses : {}, met: new Set([...list(stored.metGlobes), ...(stored.metGeo ? ['geo'] : [])]),
+  mode: KINDS.some(k => k.id === stored.mode) ? stored.mode : 'biomes'};
+const keep = () => save('globe', {found: [...found], webs: [...learned], met, mode: store.mode, lenses: store.lenses, metGlobes: [...store.met],
+  ...Object.fromEntries(['wonders', 'landforms', 'countries', 'flags', 'capitals', 'weather'].map(k => [k, [...store[k]]]))});
 const ALL = Object.keys(BIOMES);
 const H = text => ['hoot', text];
 const tune = (notes, o = {}) => notes.forEach((f, i) => Sound.tone(f, {type: 'triangle', t: i*(o.gap || .08), dur: o.dur || .2, vol: o.vol || .06}));
@@ -192,10 +204,10 @@ function pick(kind){
   G.picking = false; G.kind = store.mode = kind; keep(); modeButtons();
   if (was === kind) return draw();
   if (convo) endConvo(false);
-  view.vyaw += 9; view.idle = false; view.fly = null; tune(kind === 'geo' ? [523, 659, 784] : [784, 659, 523], {gap: .07, dur: .14, vol: .05});
-  if (kind === 'geo') {
+  view.vyaw += 9; view.idle = false; view.fly = null; tune(kind === 'biomes' ? [784, 659, 523] : [523, 659, 784], {gap: .07, dur: .14, vol: .05});
+  if (kind !== 'biomes') {
     stopHunt(); backToGlobe(); glow.visible = false; pin.visible = false; view.zoom = 1;
-    real.enter();
+    real.enter(kind);
   } else {
     real.leave(); view.mag = 1; pin.visible = false; showBiomes();
     if (!met) { met = true; keep();
@@ -211,10 +223,8 @@ function modeButtons(){
 hud.querySelectorAll('.gmode button').forEach(b => b.addEventListener('click', () => pick(b.dataset.m)));
 function drawPick(){
   card.style.removeProperty('--c');
-  const tile = (m, title, words) => `<button data-m="${m}" class="${store.mode === m ? 'last' : ''}"><b>${title}</b><span>${words}</span></button>`;
   card.innerHTML = `<div class="gtop"><span class="gicon" aria-hidden="true">🦉</span><div><div class="gkind">Professor Hoot asks</div><h3>Which globe today?</h3></div></div>
-    <div class="gpick">${tile('biomes', '🌿 Biomes', 'Who lives where, and who eats whom. Riddles and pop-up food webs.')}
-      ${tile('geo', '🗺️ Geography', 'The real Earth from space: mountains, rivers and volcanoes for Hoot\'s notebook, wonders of the world, and real photos of the animals that live there.')}</div>`;
+    <div class="gpick">${KINDS.map(k => `<button data-m="${k.id}" class="${store.mode === k.id ? 'last' : ''}"><b>${k.icon} ${k.name}</b><span>${k.about}</span></button>`).join('')}</div>`;
   card.querySelectorAll('.gpick button').forEach(b => b.addEventListener('click', () => pick(b.dataset.m)));
 }
 function leave(){
@@ -232,19 +242,23 @@ $g('gBack').addEventListener('click', () => backToGlobe());
 // ---------- the camera: leaning in on the globe, or looking down on the diorama ----------
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), camAt = new THREE.Vector3(), back = new THREE.Vector3(), right = new THREE.Vector3(), up = new THREE.Vector3();
 function steer(on){ game.cutCam = on ? (pos, look) => { pos.copy(camPos); look.copy(camLook); } : null; }
-// the part of the screen the HUD leaves open, so the globe sits in the middle of it
+// The part of the screen the HUD leaves open, so the globe sits in the middle of it, as big as it
+// fits. Beside a card, the globe can rise past the title, which sits in a corner the round globe
+// leaves empty; on a tall screen the card is above it, and it starts below that.
 function openArea(){
-  const top = hud.querySelector('.gh-top').getBoundingClientRect(), c = card.getBoundingClientRect(), W = innerWidth, Hh = innerHeight;
-  const a = {l: 0, t: top.bottom + 6, r: W, b: Hh - Math.min(175, Hh*.3)};
-  if (c.width && c.height) { if (c.left > W*.4) a.r = c.left - 10; else a.t = Math.max(a.t, c.bottom + 6); }
+  const c = card.getBoundingClientRect(), W = innerWidth, Hh = innerHeight;
+  const below = [...hud.querySelectorAll('.gbar, .glenses')].filter(el => el.offsetParent).map(el => el.getBoundingClientRect().top);
+  const a = {l: 0, t: 8, r: W, b: Math.min(Hh, ...below) - 4};
+  if (c.width && c.height) { if (c.left > W*.4) a.r = c.left - 10; else a.t = c.bottom + 6; }
   if (a.b - a.t < 120) a.b = Hh;
   return a;
 }
 function aimCamera(){
-  const web = G.mode === 'web' && dioramaSize(), a = openArea(), geo = G.kind === 'geo' && !G.picking;
+  const web = G.mode === 'web' && dioramaSize(), a = openArea(), geo = geoOn();
   const el = web ? .62 : .1, turn = web ? view.orbit : 0;
   if (web) camAt.set(GLOBE.x, .7 + web.top*.42, GLOBE.z); else camAt.copy(center);
-  const rho = web ? web.radius*1.02*view.zoom : geo ? .5 : .5*view.zoom;
+  // the globe, a little more than its own size, so its stand's ring still shows round it
+  const rho = web ? web.radius*1.02*view.zoom : geo ? .43 : .43*view.zoom;
   const mag = geo ? view.mag : 1;
   if (camera.zoom !== mag) { camera.zoom = mag; camera.updateProjectionMatrix(); }
   back.set(Math.sin(turn)*Math.cos(el), Math.sin(el), Math.cos(turn)*Math.cos(el));
@@ -263,7 +277,7 @@ function draw(){
   if (!G) return;
   $g('gBack').hidden = G.mode !== 'web';
   if (G.picking) return drawPick();
-  if (G.kind === 'geo') return real.draw();
+  if (G.kind !== 'biomes') return real.draw();
   if (!earth) { card.style.removeProperty('--c'); card.innerHTML = '<div class="ghint">Unrolling the map…</div>'; return; }
   if (G.mode === 'web') return drawWeb();
   if (G.hunt) return drawHunt();
@@ -283,7 +297,8 @@ const btn = (id, text, cls = 'gb') => `<button class="${cls}" id="${id}">${text}
 const on = (id, f) => { const b = $g(id); if (b) b.addEventListener('click', f); };
 
 function chips(){
-  if (G && G.kind === 'geo') return real.chips();
+  if (G && G.picking) return;
+  if (G && G.kind !== 'biomes') return real.chips();
   $g('gFound').textContent = `${found.size} of ${ALL.length} found`;
   showChips(ALL.map(id => {
     const b = BIOMES[id];
@@ -586,7 +601,7 @@ canvas.addEventListener('wheel', e => {
 function pinchSpan(){ const [a, b] = [...pointers.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; }
 const clampZoom = z => Math.max(.4, Math.min(1, z));
 const clampMag = m => Math.max(1, Math.min(real.MAX_MAG, m));
-const geoOn = () => G && G.kind === 'geo' && !G.picking;
+const geoOn = () => G && G.kind !== 'biomes' && !G.picking;
 function tap(x, y){
   if (!earth) return;
   const r = canvas.getBoundingClientRect(); ndc.set((x - r.left)/r.width*2 - 1, -(y - r.top)/r.height*2 + 1); ray.setFromCamera(ndc, camera);
