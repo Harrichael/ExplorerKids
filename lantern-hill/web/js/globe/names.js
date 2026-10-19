@@ -18,8 +18,16 @@ const STYLE = {
   river: {font: 'italic 800 11px', color: '#a8dcff'},
   island: {font: 'italic 700 11px', color: '#f4f4f4'},
   waterfall: {font: '800 12px', color: '#c4ecff', mark: '💧'},
+  city: {font: '700 11px', color: '#efe6d6', dot: true},
+  deep: {font: 'italic 800 11px', color: '#8fc8ff'},
+  reef: {font: 'italic 800 11px', color: '#8ff0dc'},
+  beach: {font: '800 11px', color: '#ffe6a3', mark: '🏖'},
+  cave: {font: '800 11px', color: '#e0cdb8', mark: '🕳'},
+  geyser: {font: '800 11px', color: '#d4f4ff', mark: '♨'},
+  glacier: {font: 'italic 800 11px', color: '#e8f8ff'},
 };
-const LOOK = {gulf: 'sea', bay: 'sea', strait: 'sea', channel: 'sea', sound: 'sea', lake: 'sea', fjord: 'sea', lowest: 'peak', islands: 'island', glacier: 'island',
+const LOOK = {gulf: 'sea', bay: 'sea', strait: 'sea', channel: 'sea', sound: 'sea', lake: 'sea', fjord: 'sea', lagoon: 'sea', lowest: 'peak', islands: 'island',
+  forest: 'land', trench: 'deep', ridge: 'deep', seamount: 'deep', abyssal: 'deep', hotspring: 'geyser', hill: 'mountains', mesa: 'peak', butte: 'peak', dune: 'land', erg: 'land', cliff: 'land', canyon: 'land',
   desert: 'land', plateau: 'land', basin: 'land', plain: 'land', tundra: 'land', delta: 'land', peninsula: 'land', valley: 'land', gorge: 'land', wetland: 'land', region: 'land', isthmus: 'land'};
 const look = kind => STYLE[kind] || STYLE[LOOK[kind]] || STYLE.land;
 
@@ -36,7 +44,9 @@ export function makeNames(){
     g.textBaseline = 'middle'; g.lineJoin = 'round';
     for (const it of items) {
       const p = project(it.lat, it.lon); if (!p) continue;
-      const s = look(it.kind), text = (s.mark ? s.mark + ' ' : '') + (s.caps ? it.text.toUpperCase() : it.text);
+      // a few names are longer than a sentence; the card says them in full
+      const short = it.text.length > 30 ? it.text.slice(0, 28) + '…' : it.text;
+      const s = look(it.kind), text = (s.mark ? s.mark + ' ' : '') + (s.caps ? short.toUpperCase() : short);
       g.font = `${s.font} Nunito, system-ui, sans-serif`;
       const tw = g.measureText(text).width + (s.caps ? text.length*.8 : 0), x = s.dot ? p[0] + 7 : p[0] - tw/2, y = p[1];
       const box = [x - 4, y - 9, x + tw + 4, y + 9];

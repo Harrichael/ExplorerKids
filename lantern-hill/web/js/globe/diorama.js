@@ -1,9 +1,9 @@
-// The pop-up diorama: a place's food web as a little island that rises out of the globe. It is
+// The pop-up diorama: a place's food web as a little island that springs up out of the floor. It is
 // drawn as a web, not a pyramid: everyone stands on the flat island, plants and algae nearest the
 // sun and each animal a row behind the farthest thing it eats, so arrows mostly run one way. Arrows
 // run from food to eater with glowing specks riding them, the way energy moves, starting from the sun.
 //
-// One diorama at a time. It rises empty but for the sun; the globe calls in its living things as
+// One diorama at a time, shrunk to fit the room if its web is wide. It rises empty but for the sun; the globe calls in its living things as
 // Hoot's lesson builds the web, and dresses it for each part: marks on guesses, arrows that grow
 // in, animals that vanish or multiply.
 
@@ -12,8 +12,8 @@ import { C, T, glowTex, outline, sparkTex, tex } from '../core/kit.js';
 import { BIOMES } from '../earth/biomes.js';
 import { eatenBy, layout } from './food-web.js';
 
-const TOKEN = .18, ASPECT = 320/256, DISC = .6125*TOKEN*ASPECT, RIM = TOKEN*.42;
-const SPACE = .21, DEPTH = .4, ISLAND = .07;
+const TOKEN = .24, ASPECT = 320/256, DISC = .6125*TOKEN*ASPECT, RIM = TOKEN*.42;
+const SPACE = .27, DEPTH = .42, ISLAND = .07;
 const COL = {edge: 0xefe0bf, food: 0x8fd694, eater: 0xf2a65a, sun: 0xffd25a};
 const EMOJI = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 
@@ -105,10 +105,10 @@ const cone = (g, r, h, c, y) => mesh(g, new THREE.ConeGeometry(r, h, 8), T(c), 0
 const stem = (g, h, y = h/2) => mesh(g, new THREE.CylinderGeometry(.009, .013, h, 6), WOOD, 0, y, 0);
 
 // ---------- building one ----------
-export function showDiorama(parent, at, web, biomeId){
+export function showDiorama(parent, at, web, biomeId, fit, facing){
   if (D) hideDiorama();
   const biome = BIOMES[biomeId], ground = new THREE.Color(biome.color).getHex();
-  const root = new THREE.Group(); root.position.copy(at); root.scale.setScalar(.001); parent.add(root);
+  const root = new THREE.Group(); root.position.copy(at); root.rotation.y = facing; root.scale.setScalar(.001); parent.add(root);
   const {rows, x} = layout(web.species), n = rows.length;
   const wide = Math.max(...rows.map(r => r.length*SPACE + .06));
   const front = ((n - 1)*DEPTH + .24)/2, back = front - (n - 1)*DEPTH - .2;
@@ -142,7 +142,8 @@ export function showDiorama(parent, at, web, biomeId){
     for (const f of s.eats) edges.push(arrow(root, tokens.get(f).disc, to, f, s.name, disposables, RIM));
   }
   // the camera frames the animals and their steps; the island's rim can fall off the edge
-  D = {root, web, tokens, edges, sun, disposables, grow: 0, t: 0, sparks: [], sel: null, radius: Math.max(wide/2 + .14, (front - back)/2 + .12), top: ISLAND + .3};
+  const scale = Math.min(1, fit/R);
+  D = {root, web, tokens, edges, sun, disposables, grow: 0, t: 0, sparks: [], sel: null, scale, at: at.clone(), radius: Math.max(wide/2 + .14, (front - back)/2 + .12)*scale, top: (ISLAND + .3)*scale};
 }
 
 function scenery(g, biomeId, R, w, front, back, r){
@@ -189,7 +190,7 @@ function dispose(d){
 }
 
 // ---------- what the globe asks of it ----------
-export const dioramaSize = () => D && {radius: D.radius, top: D.top};
+export const dioramaSize = () => D && {radius: D.radius, top: D.top, at: D.at};
 
 export function pickAnimal(ray){
   if (!D || D.grow < .9) return null;
@@ -258,13 +259,13 @@ function burst(at, count){
 }
 
 export function updateDiorama(dt){
-  if (leaving) { leaving.grow = Math.max(0, leaving.grow - dt*3.2); leaving.root.scale.setScalar(Math.max(.001, leaving.grow)); if (!leaving.grow) { dispose(leaving); leaving = null; } }
+  if (leaving) { leaving.grow = Math.max(0, leaving.grow - dt*3.2); leaving.root.scale.setScalar(Math.max(.001, leaving.grow*leaving.scale)); if (!leaving.grow) { dispose(leaving); leaving = null; } }
   if (!D) return;
   D.t += dt;
   D.grow = Math.min(1, D.grow + dt*1.6);
   // a pop-up book's spring: overshoot, then settle
   const g = D.grow, s = g >= 1 ? 1 : 1 - Math.cos(g*Math.PI*1.5)*Math.exp(-g*4.2)*(1 - g);
-  D.root.scale.setScalar(Math.max(.001, s));
+  D.root.scale.setScalar(Math.max(.001, s*D.scale));
   for (const t of D.tokens.values()) {
     t.size += (t.want - t.size)*Math.min(1, dt*8); t.fade += (t.wantFade - t.fade)*Math.min(1, dt*6); t.shake = Math.max(0, t.shake - dt);
     const bob = t.want > 1 ? Math.abs(Math.sin(D.t*6 + t.ph))*.02 : Math.sin(D.t*2 + t.ph)*.003;
