@@ -8,7 +8,7 @@ export const MUSIC = {
   trip: ['Fiddles McGinty', 'Monkeys Spinning Monkeys', 'Carpe Diem'].map(track),
 };
 // the songs are loudness-matched at -16 LUFS; this sits them under the sound effects
-const MUSIC_VOL = {songs:.3, box:.14};
+const MUSIC_VOL = {songs:.15, box:.14};
 
 export const Sound = (() => {
   let ctx = null, master, sfx, music, echo, air, noise, on = true, mode = load('musicBox') ? 'box' : 'songs';
