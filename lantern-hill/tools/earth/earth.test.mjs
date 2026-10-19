@@ -48,9 +48,11 @@ test('a web from the same realm beats a closer one across the border', () => {
   assert.equal(earth.placeAt(22.3, 80.6).web.id, 'kanha');
   // Gabon is Afrotropic, so it gets the Congo, not whichever rainforest is nearest by distance
   assert.equal(earth.placeAt(-1, 12).web.id, 'congo');
-  // the Gobi has no web of its own, and borrows the Sahara's: same realm, and labelled with where it's from
+  // Tanzania's coast is nearer Madagascar than the Congo, but lemurs keep to their island
+  assert.equal(earth.placeAt(-7, 39).web.id, 'mount-kenya');
+  // the Gobi is the Sahara's realm, but too far to share its fennec foxes and cheetahs
   const gobi = earth.placeAt(43, 105);
-  assert.equal(gobi.biomeId, 'desert'); assert.equal(gobi.web.place, 'the Sahara');
+  assert.equal(gobi.biomeId, 'desert'); assert.equal(gobi.web.id, 'gobi');
 });
 
 test('water knows which sea it is', () => {
@@ -82,6 +84,20 @@ test('every spot on Earth gets a biome and a food web', () => {
     const p = earth.placeAt(lat, lon);
     assert.ok(p.biome && p.web, `${lat},${lon} (${p.name}, ${p.biomeId})`);
   }
+});
+
+test("almost everywhere, the web shown is one whose animals really live there", () => {
+  // the rest are slivers at the edges of regions and islands too small for a web of their own,
+  // where the card says the web is only from the same biome
+  let misfits = 0, all = 0;
+  for (let lat = -89.5; lat < 90; lat += 1) for (let lon = -179.5; lon < 180; lon += 1) {
+    all++; if (!earth.placeAt(lat, lon).webFits) misfits++;
+  }
+  assert.ok(misfits/all < .003, `${misfits} of ${all} spots have no web of their own`);
+  // every lake, reef and sea the map names has a web of its own, but for a lagoon and the polar seas, whose webs are their biome's
+  const named = new Set(WEBS.flatMap(w => w.waters || []));
+  const d = data('earth'), waters = [...d.lakes, ...d.reefs].map(l => l.name).concat(d.seas.map(s => s[0]));
+  assert.deepEqual([...new Set(waters.filter(n => !named.has(n)))].sort(), ['Arctic Ocean', 'Lago Madre', 'Southern Ocean']);
 });
 
 test('every food web is a web: it starts from plants or algae and has no loops', () => {
