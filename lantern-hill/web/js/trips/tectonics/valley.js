@@ -27,7 +27,7 @@ const ROCK = [1.6, -3.4];
 const CUT = [0, 0, 48];
 
 export function buildValley(t){
-  const w = tripWorld({title:'Where Plates Meet', bg:0xc8bce0, sky:0xfff0dc, groundCol:0x4a5a3a, hemi:.8, sunCol:0xffd6a4, sunI:.9, fogNear:90, fogFar:300,
+  const w = tripWorld({title:'Where Plates Meet', bg:0xd2e2e8, sky:0xfff0dc, groundCol:0x4a5a3a, hemi:.8, sunCol:0xffd6a4, sunI:.9, fogNear:90, fogFar:300,
     cam:{oy:7.4, oz:9.2, oyP:9.4, ozP:10.6}});
   w.far = 400;
   const hillAt = (x, z) => { const s = Math.hypot(x - HILL[0], z - HILL[1])/HILL_R; return s < 1 ? HILL_H*(1 - s*s)*(1 - s*s) : 0; };
@@ -48,7 +48,7 @@ export function buildValley(t){
     add(new THREE.LatheGeometry(prof, 28), T(0x5a8a4a), HILL[0], 0, HILL[1], null, false);
     // snowy peaks all round the north, tallest behind the folded cliff
     for (let i = 0; i < 9; i++) { const a = Math.PI*.05 + i/8*Math.PI*.9, r = 36 + (i % 3)*8, x = -Math.cos(a)*r*1.3, z = -Math.sin(a)*r - 6, h = (x < 0 ? 26 : 17) + (i % 3)*5, n = 5 + i % 2, g = grp(x, 0, z, i);
-      outline(add(new THREE.ConeGeometry(h*.85, h, n), T([0x3e2440, 0x4a2a4c, 0x35203a][i % 3]), 0, h/2, 0, g), 1.02);
+      outline(add(new THREE.ConeGeometry(h*.85, h, n), T([0x2a5674, 0x346680, 0x22496a][i % 3]), 0, h/2, 0, g), 1.02);
       outline(add(new THREE.ConeGeometry(h*.85*.42*1.05, h*.42, n), T(0xf6f2ec), 0, h*.79, 0, g, false), 1.03); }
     // the cliff: rock layers bent into waves, the way a pushed rug bunches up
     const strata = tex(1024, 256, (c, cw, ch) => { const cols = ['#8a5a3a', '#c89a6a', '#6b4a3a', '#d8b888', '#7a5a4a', '#a87a52'];

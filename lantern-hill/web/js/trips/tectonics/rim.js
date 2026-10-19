@@ -81,9 +81,9 @@ export function buildRim(t){
     // the sea far below, and the coast's other volcanoes standing in a line across it
     const sea = add(new THREE.PlaneGeometry(1400, 1400), T(0x3a6a9a, {emissive:0x10304a, emissiveIntensity:.4}), 0, SEA, 0, null, false); sea.rotation.x = -Math.PI/2;
     for (const [x, z] of CHAIN) { const h = 30 + Math.abs(x)*.03, g = grp(x, SEA, z);
-      outline(add(new THREE.CylinderGeometry(h*.12, h*.95, h, 10), T(0x6a5068), 0, h/2, 0, g), 1.02);
-      add(new THREE.CylinderGeometry(h*.1, h*.14, h*.04, 10), T(0x2c2228), 0, h + .2, 0, g, false);
-      add(new THREE.CylinderGeometry(h*1.8, h*2.1, 4, 14), T(0x4e7a4e), 0, 0, 0, g, false); }
+      outline(add(new THREE.CylinderGeometry(h*.12, h*.95, h, 10), T(0x3a1c16), 0, h/2, 0, g), 1.02);
+      add(new THREE.CylinderGeometry(h*.1, h*.14, h*.04, 10), T(0xff8a3a, {emissive:0xff6a1a, emissiveIntensity:.8}), 0, h + .2, 0, g, false);
+      add(new THREE.CylinderGeometry(h*1.8, h*2.1, 4, 14), T(0x24461e), 0, 0, 0, g, false); }
     // the warm pool, with pale floating pumice round its edge
     const poolTex = tex(256, 256, (c, cw, ch) => { const g = c.createRadialGradient(cw/2, ch/2, cw*.1, cw/2, ch/2, cw*.5); g.addColorStop(0, '#16566a'); g.addColorStop(.75, '#237a80'); g.addColorStop(1, '#4fa89c'); c.fillStyle = g; c.fillRect(0, 0, cw, ch);
       c.strokeStyle = 'rgba(200,240,230,.3)'; c.lineWidth = 3; for (let i = 0; i < 7; i++) { const x = 60 + Math.random()*136, y = 60 + Math.random()*136, r = 8 + Math.random()*16; c.beginPath(); c.ellipse(x, y, r, r*.55, 0, 0, 7); c.stroke(); } });
@@ -128,12 +128,13 @@ export function buildRim(t){
       await say([['pip', "That's melted rock, way down there. Hot enough to glow!"],
                  ['pip', "Now borrow my binoculars. Look way out along the coast…"]]);
       binoc.hidden = false; Sound.tone(880, {type:'triangle', dur:.12, vol:.06});
-      // binoculars see far: from out over the sea, the row stands side by side
+      // binoculars see far: from out over the sea, the row stands side by side, clear of the haze
+      const fog = w.scene.fog, haze = [fog.near, fog.far]; fog.near = 300; fog.far = 1400;
       t.cut((pos, look) => far(pos.set(80, 8, 70), look.set(200, -20, -50)));
       await t.wait(1.2);
       await say([['pip', "More volcanoes! One, two, three… and they're all lined up in a row."]]);
       const pick = await t.ask('pip', "Why would volcanoes stand in a row like that?", ["Something under the ground", "Somebody built them", "I don't know yet"]);
-      binoc.hidden = true;
+      binoc.hidden = true; [fog.near, fog.far] = haze;
       t.cut(null);
       await say([[ 'pip', ["Ooh, something under the ground. That's my guess too!", "Ha! Giant volcano builders? I don't think so…", "Me neither. But I want to find out!"][pick]],
                  ['juniper', "I'm writing that question down. Why are the volcanoes in a row?"]]);

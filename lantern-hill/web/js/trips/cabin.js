@@ -114,7 +114,7 @@ export function cabin(){
   const kids = {};
   for (const [id, [x, z]] of Object.entries(SEATS)) { const n = kids[id] = spawnNPC(w, id, x + .05, z, FACE); n.pose = 'sit'; n.range = 0; n.label.visible = false; }
   // by the door, out of the class shot's frame but facing the class for her own
-  const sparks = spawnNPC(w, 'sparks', 3.0, -1.05, -Math.PI/2 - .5); sparks.range = 0; sparks.label.visible = false;
+  const sparks = spawnNPC(w, 'sparks', 3.0, -1.35, -Math.PI/2 - .5); sparks.range = 0; sparks.label.visible = false;
   let cur = null, scroll = 0, sway = 0;
   w.anims.push((dt, t) => {
     if (cur) { scroll += dt; for (const {pane, dir} of panes) { pane.material.map.offset.set(dir*cur.flow[0]*scroll, cur.flow[1]*scroll*.35); } }
@@ -129,7 +129,7 @@ export function cabin(){
     // from just out past the windshield frame: inside the cab the front row is too close to see their faces
     class:   (pos, look) => { pos.set(4.4, 1.6 + sway, .3); look.set(-3, .6, .7); },
     // over the class's heads, so nothing stands between the explorer and Dr. Sparks
-    teacher: (pos, look) => { pos.set(-.5, 1.9 + sway, 0); look.set(3.0, 1.5, -.95); },
+    teacher: (pos, look) => { pos.set(-.5, 2.2 + sway, 0); look.set(3.0, 1.5, -1.25); },
     window:  (pos, look) => { pos.set(-1.1, 1.7 + sway, 0); look.set(-1.5, 1.35, -1.4); },
   };
   return {world:w, kids, sparks,
