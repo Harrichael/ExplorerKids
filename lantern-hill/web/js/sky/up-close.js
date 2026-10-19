@@ -1,6 +1,7 @@
 // The Moon or a planet up close: its real map on a ball, lit by the real Sun from where the Sun
-// really is, turned the way it faces the treehouse tonight with the sky's "up" (the zenith) up. A
-// kid drags to fly round it, out of Earth's view and onto the far side, and zooms in to the surface.
+// really is, turned the way it faces the treehouse tonight with the sky's "up" (the zenith) up. It is
+// a telescope's view, so a kid sees only the side facing Earth: a drag aims across the face and a
+// zoom goes down to the surface, but nothing flies round to the far side.
 // The same picture, drawn small, is how the telescope's star view shows each body in place.
 //
 // World units are the body's radius, on the stars' own axes (RA 0, RA 90°, the celestial pole), with
@@ -111,17 +112,24 @@ function place(body, ms, where){
 let shown = null;
 
 // ---------- the close-up ----------
-let body = null, eye = null, zoomTo = 1, zoomAt = 1, labelled = [], last = '';
-export function show(b){ body = b; eye = null; zoomTo = zoomAt = 1; last = ''; world(b); sharpen(b); }
+let body = null, aim = {x:0, y:0}, tilt = {x:0, y:0}, steered = 0, zoomTo = 1, zoomAt = 1, labelled = [], last = '';
+export function show(b){ body = b; aim = {x:0, y:0}; tilt = {x:0, y:0}; zoomTo = zoomAt = 1; last = ''; world(b); sharpen(b); }
 export function refresh(){ last = ''; }
-// a drag of the screen's height swings round a third of the way about the body when far off, less
-// as the surface nears, so the ground doesn't race by
-export function orbit(dx, dy){
-  if (!eye) return;
-  const k = 2*(1 - 1/dist())/(canvas.clientHeight || 1), right = new THREE.Vector3().crossVectors(eye.up, eye.dir);
-  eye.dir.addScaledVector(right, -dx*k).addScaledVector(eye.up, dy*k).normalize();
-  eye.up.addScaledVector(eye.dir, -eye.up.dot(eye.dir)).normalize();
-  eye.mine = true;
+// The Moon rocks a little as it goes round, nodding and turning about 7° each way, so over a month
+// Earth sees 59% of it rather than half. A drag rocks it that far and lets go; the planets hold still.
+const ROCK = 7*Math.PI/180;
+// a drag moves the view across the face as far as the finger goes, and no further off than there is
+// something to see
+export function pan(dx, dy){
+  const k = 2*dist()*Math.tan(15*Math.PI/180)/(canvas.clientHeight || 1);
+  aim.x -= dx*k; aim.y += dy*k;
+  const off = Math.hypot(aim.x, aim.y), most = system();
+  if (off > most) { aim.x *= most/off; aim.y *= most/off; }
+  if (body.id === 'moon') {
+    tilt.x -= dx*ROCK*2/(canvas.clientHeight || 1); tilt.y += dy*ROCK*2/(canvas.clientHeight || 1);
+    const t = Math.hypot(tilt.x, tilt.y); if (t > ROCK) { tilt.x *= ROCK/t; tilt.y *= ROCK/t; }
+  }
+  steered = performance.now();
 }
 // Jupiter lets you back off far enough to take in Callisto's orbit, 26 Jupiters out
 export function zoom(k){ zoomTo = Math.min(body.moons ? 28 : 4, Math.max(nearest(), zoomTo*k)); }
@@ -133,21 +141,23 @@ const dist = () => fit()*zoomAt;
 // no closer than a fifth of the body's radius above it, where even the sharpest map runs out of detail
 const nearest = () => 1.2/fit();
 
-// Draws only when something shows a change: a drag, a zoom, a map arriving, or every couple of
-// seconds as the world spins and the night goes on. Says whether it drew.
+// Draws only when something shows a change: a drag, a zoom, a map arriving, or the Moon rocking
+// back. Says whether it drew.
 export function draw(ms, where, w, h, dt){
   if (!body) return false;
   const dpr = Math.min(devicePixelRatio, 2);
   if (canvas.width !== Math.round(w*dpr) || canvas.height !== Math.round(h*dpr)) { renderer.setPixelRatio(dpr); renderer.setSize(w, h, false); last = ''; }
   camera.aspect = w/h;
   zoomAt *= Math.pow(zoomTo/zoomAt, Math.min(1, dt*8));
+  if (performance.now() - steered > 150) { const k = Math.exp(-dt*4); tilt.x *= k; tilt.y *= k; }
   const at = place(body, ms, where);
-  // until the kid flies off, the camera rides along with the Earth's view as the night goes on
-  if (!eye || !eye.mine) eye = {dir:at.toUs.clone(), up:at.up.clone(), mine:false};
-  const key = [...eye.dir.toArray(), ...eye.up.toArray()].map(v => v.toFixed(4)).concat([zoomAt.toFixed(4), w, h, Math.floor(ms/2000), maps]).join();
+  const key = [aim.x, aim.y, tilt.x, tilt.y, zoomAt].map(v => v.toFixed(5)).concat([w, h, Math.floor(ms/2000), maps]).join();
   if (key === last) return false;
   last = key;
-  camera.position.copy(eye.dir).multiplyScalar(dist()); camera.up.copy(eye.up); camera.lookAt(0, 0, 0);
+  // looking straight down Earth's line of sight, moved across the face, and tipped by the Moon's rock
+  const right = new THREE.Vector3().crossVectors(at.up, at.toUs), centre = right.clone().multiplyScalar(aim.x).addScaledVector(at.up, aim.y);
+  const dir = at.toUs.clone().addScaledVector(right, Math.sin(tilt.x)).addScaledVector(at.up, Math.sin(tilt.y)).normalize();
+  camera.position.copy(centre).addScaledVector(dir, dist()); camera.up.copy(at.up); camera.lookAt(centre);
   camera.near = Math.max(.002, dist() - system() - .01); camera.far = dist() + system() + 1; camera.updateProjectionMatrix();
   renderer.render(scene, camera);
   return true;

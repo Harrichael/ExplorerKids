@@ -1,12 +1,12 @@
 // The Explorer's Globe in the Library Nook. There's no separate screen: the explorer steps up to the
-// real globe, the camera leans in, and Professor Hoot asks them to guess before he tells. It's two
+// real globe, the camera leans in, and Professor Hoot asks them to guess before he tells. It's four
 // globes in one, and the explorer picks which as they step up.
 //
 // The biome globe: pick a biome and Hoot gives a riddle about its weather to find it by; open a food
-// web and it pops up out of the globe as a diorama with no arrows yet, for the explorer to guess who
-// eats whom; then ask what would happen if one animal disappeared. Tapping anywhere just visits it.
-// The geography globe is the real Earth from space, and lives in real-earth.js; this file keeps
-// the room globe, the camera and the hands for both.
+// web and it pops up as a diorama on the floor beside the globe, built a guess at a time as the
+// explorer works out who eats whom; then ask what would happen if one animal disappeared. Tapping anywhere just visits it.
+// The geography, countries and weather globes are the real Earth from space, and live in
+// real-earth.js; this file keeps the room globe, the camera and the hands for all four.
 // Loaded the first time someone uses the globe; once the map is painted, the globe keeps it.
 
 import * as THREE from 'three';
@@ -39,10 +39,10 @@ css.textContent = `
 .gh-title .sub{font-weight:900;font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--gold)}
 .gh-title h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(18px,4.4vw,23px);line-height:1.1;color:var(--parch);white-space:nowrap}
 .gh-btns{display:flex;justify-content:flex-end;gap:8px}
-.gmode{display:flex;gap:4px;margin-top:5px}
+.gmode{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;max-width:250px}
 .gmode button{font-weight:900;font-size:12px;color:var(--parch);background:rgba(26,19,32,.6);border:2px solid rgba(217,164,65,.5);border-radius:999px;padding:2px 9px}
 .gmode button[aria-pressed=true]{background:var(--gold);color:var(--ink);border-color:var(--gold)}
-#gCard .gpick{display:flex;flex-direction:column;gap:8px}
+#gCard .gpick{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 #gCard .gpick button{text-align:left;font-family:var(--body);color:var(--ink);background:#fbf4e2;border:3px solid var(--ink);border-radius:14px;padding:9px 12px;box-shadow:0 3px 0 var(--ink)}
 #gCard .gpick button.last{border-color:var(--plum);box-shadow:0 0 0 3px var(--gold),0 3px 0 var(--ink)}
 #gCard .gpick b{display:block;font-family:var(--display);font-weight:400;font-size:19px}
@@ -65,8 +65,10 @@ css.textContent = `
 #gCard .gb{font-family:var(--display);font-size:16px;color:var(--parch);background:var(--plum);border:2.5px solid var(--gold);border-radius:14px;padding:6px 14px;box-shadow:0 0 0 3px var(--ink)}
 #gCard .gb.ghost{background:#5a4a5e}
 #gCard .gb:disabled{opacity:.45;cursor:default}
-.gstrip{display:flex;flex-wrap:wrap;gap:5px}
-.gstrip button{width:40px;height:40px;border-radius:50%;border:2.5px solid var(--ink);background:#fbf4e2;font-size:21px;display:grid;place-items:center;padding:0}
+.gstrip{display:grid;grid-template-columns:repeat(auto-fill,minmax(68px,1fr));gap:6px}
+.gstrip button{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0;border-radius:14px;border:2.5px solid var(--ink);background:#fbf4e2;color:var(--ink);padding:4px 2px 5px}
+.gstrip i{font-style:normal;font-size:28px;line-height:1.15}
+.gstrip b{align-self:stretch;font-size:10px;font-weight:900;line-height:1.1;text-align:center;overflow-wrap:break-word;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .gstrip button.maker{background:#cfe6b8}
 .gstrip button.sel{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold)}
 .gstrip button.guess{box-shadow:0 0 0 3px #d9a441}
@@ -75,7 +77,6 @@ css.textContent = `
 .gstrip button.wait{opacity:.35}
 .gsay{font-weight:800;font-size:15px;line-height:1.45;min-height:2.9em}
 .gsay .eats{color:#2f7a3a}.gsay .by{color:#b5552f}
-.gwho{display:flow-root}
 .gphoto{margin:0 0 6px}
 .gphoto img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:12px;border:3px solid var(--ink);background:#d8c8a4}
 .gphoto figcaption{margin-top:2px;font-size:10px;font-weight:700;color:#7a6a7e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -96,33 +97,54 @@ css.textContent = `
 .gchip.found::after{content:"✓";color:var(--gold);font-weight:900}
 .gchip.hunting{background:var(--teal);border-style:solid}
 .gcredit{position:absolute;right:16px;bottom:calc(58px + env(safe-area-inset-bottom,0px));font-size:10px;font-weight:700;color:rgba(239,224,191,.55);text-align:right;max-width:50%}
+#gAnimal{pointer-events:auto;position:absolute;inset:0;z-index:3;display:grid;place-items:center;padding:16px;background:rgba(16,12,22,.55);animation:fadein .2s ease-out}
+#gAnimal[hidden]{display:none}
+#gAnimal article{position:relative;width:min(460px,100%);max-height:100%;overflow:auto;box-sizing:border-box;background:linear-gradient(180deg,#f6ecd6,#ecdcb8);color:var(--ink);border:3px solid var(--gold);border-radius:20px;box-shadow:0 0 0 4px var(--ink),0 18px 40px rgba(0,0,0,.5);padding:14px 16px 16px;display:flex;flex-direction:column;gap:9px}
+#gAnimal .gphoto{float:none;width:auto;margin:0}#gAnimal .gphoto img{aspect-ratio:4/3;border-width:3px;border-radius:12px}
+#gAnimal h3{margin:0 44px 0 0;font-family:var(--display);font-weight:400;font-size:26px;line-height:1.1}
+#gAnimal p{margin:0;font-weight:800;font-size:16px;line-height:1.45}
+#gAnimal .gsay{min-height:0}
+#gAnimal .gx{position:absolute;top:10px;right:10px;width:40px;height:40px;border-radius:50%;font-size:20px;font-weight:900;color:var(--parch);background:var(--plum);border:2.5px solid var(--gold);box-shadow:0 0 0 3px var(--ink);padding:0}
 #gtoast{position:absolute;left:50%;top:44%;transform:translateX(-50%);background:#efe0bf;color:var(--ink);border:3px solid var(--gold);border-radius:14px;box-shadow:0 0 0 4px var(--ink);padding:6px 18px 8px;text-align:center;white-space:nowrap;pointer-events:none;animation:bannerIn 3s ease both;z-index:2}
 #gtoast b{display:block;font-family:var(--display);font-weight:400;font-size:clamp(17px,4.5vw,22px)}
 #gtoast small{font-weight:900;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#6d3b5e}
 @media (max-aspect-ratio:1/1){#gCard{left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));width:auto;top:calc(96px + env(safe-area-inset-top,0px));max-height:36%}
   .talking #gCard{max-height:38%}#gCard{padding:9px 12px 11px;gap:6px}#gCard .gicon{width:36px;height:36px;font-size:19px}#gCard h3{font-size:18px}
-  #gCard p{font-size:14px}#gCard .gask{font-size:15px}.gstrip button{width:34px;height:34px;font-size:18px}.gcredit{display:none}
-  #gCard:has(.gphoto){max-height:50%}}
+  #gCard p{font-size:14px}#gCard .gask{font-size:15px}.gstrip{grid-template-columns:repeat(auto-fill,minmax(50px,1fr))}.gstrip i{font-size:24px}.gcredit{display:none}
+  #gCard:has(.gpick){max-height:64%}.gmode button{font-size:16px;padding:1px 8px}.gmode button span+span{display:none}#gCard .gpick span{font-size:12px}}
 @media (max-aspect-ratio:1/1),(max-height:500px){.gphoto{float:left;width:42%;margin:0 10px 2px 0}.gphoto img{border-width:2px;border-radius:9px}}
-@media (prefers-reduced-motion:reduce){#globeHud,#gtoast{animation:none}}`;
+@media (prefers-reduced-motion:reduce){#globeHud,#gtoast,#gAnimal{animation:none}}`;
 document.head.appendChild(css);
 
+const KINDS = [
+  {id: 'biomes', icon: '🌿', name: 'Biomes', about: 'Who lives where, and who eats whom. Riddles and pop-up food webs.'},
+  {id: 'geo', icon: '⛰️', name: 'Geography', about: 'The real Earth from space: mountains, canyons, rivers, reefs and ocean trenches, and the wonders of nature.'},
+  {id: 'countries', icon: '🏳️', name: 'Countries', about: 'Every country: its flag, capital, money, people and culture, in real photos.'},
+  {id: 'weather', icon: '🌦️', name: 'Weather', about: 'The real weather right now, all round the world: clouds, rain, snow, wind, and night.'},
+];
 const hud = document.createElement('div'); hud.id = 'globeHud'; hud.hidden = true;
 hud.innerHTML = `<div class="gh-top"><div class="gh-title"><div class="sub">Library Nook</div><h2>Explorer's Globe</h2>
-    <div class="gmode" role="group" aria-label="Which globe"><button data-m="biomes">🌿 Biomes</button><button data-m="geo">🗺️ Geography</button></div></div>
+    <div class="gmode" role="group" aria-label="Which globe">${KINDS.map(k => `<button data-m="${k.id}" aria-label="${k.name}"><span aria-hidden="true">${k.icon}</span><span> ${k.name}</span></button>`).join('')}</div></div>
     <div class="gh-btns"><button class="gpill" id="gBack" hidden aria-label="Back to the globe">← Globe</button><button class="gpill" id="gLeave">Step away</button></div></div>
   <aside id="gCard" aria-live="polite"></aside>
   <div class="gcredit" id="gCredit"></div>
+  <div id="gAnimal" hidden></div>
   <div class="gbar"><span class="gfound" id="gFound"></span><div class="gchips" id="gChips" role="group" aria-label="Riddles"></div></div>`;
 document.body.appendChild(hud);
-const $g = id => hud.querySelector('#' + id), card = $g('gCard');
+const $g = id => hud.querySelector('#' + id), card = $g('gCard'), animalCard = $g('gAnimal');
+animalCard.addEventListener('click', e => { if (e.target === animalCard || e.target.closest('.gx')) closeAnimal(); });
 
 const stored = load('globe') || {}, list = v => Array.isArray(v) ? v : [];
 const found = new Set(list(stored.found)), learned = new Set(list(stored.webs));
 let met = !!stored.met;
-// what the geography globe keeps: the wonders and landforms found, its lens, and which globe was picked last
-const store = {wonders: new Set(list(stored.wonders)), landforms: new Set(list(stored.landforms)), lens: stored.lens, metGeo: !!stored.metGeo, mode: stored.mode === 'geo' ? 'geo' : 'biomes'};
-const keep = () => save('globe', {found: [...found], webs: [...learned], met, wonders: [...store.wonders], landforms: [...store.landforms], lens: store.lens, metGeo: store.metGeo, mode: store.mode});
+// what the real-Earth globes keep: what's been found and visited, each one's lens, which have said
+// hello, and which globe was picked last
+const set = k => new Set(list(stored[k]));
+const store = {wonders: set('wonders'), landforms: set('landforms'), countries: set('countries'), flags: set('flags'), capitals: set('capitals'), weather: set('weather'),
+  lenses: stored.lenses && typeof stored.lenses === 'object' ? stored.lenses : {}, met: new Set([...list(stored.metGlobes), ...(stored.metGeo ? ['geo'] : [])]),
+  mode: KINDS.some(k => k.id === stored.mode) ? stored.mode : 'biomes'};
+const keep = () => save('globe', {found: [...found], webs: [...learned], met, mode: store.mode, lenses: store.lenses, metGlobes: [...store.met],
+  ...Object.fromEntries(['wonders', 'landforms', 'countries', 'flags', 'capitals', 'weather'].map(k => [k, [...store[k]]]))});
 const ALL = Object.keys(BIOMES);
 const H = text => ['hoot', text];
 const tune = (notes, o = {}) => notes.forEach((f, i) => Sound.tone(f, {type: 'triangle', t: i*(o.gap || .08), dur: o.dur || .2, vol: o.vol || .06}));
@@ -132,6 +154,10 @@ const and = words => words.length < 2 ? words.join('') : words.slice(0, -1).join
 // ---------- the globe in the room, steered while the explorer is at it ----------
 const RAD = Math.PI/180, R = .4, PITCH = 1.35, wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 const center = new THREE.Vector3(GLOBE.x, GLOBE.y, GLOBE.z);
+// Food webs pop up on the floor at the globe's right, a little toward the explorer to clear the potted
+// plant beyond. The diorama and the camera both turn to face along the line from the globe, so the globe
+// stands beside the web on screen rather than behind it.
+const WEB_AT = new THREE.Vector3(GLOBE.x + 1.3, 0, GLOBE.z + .9), WEB_TURN = Math.atan2(-(WEB_AT.z - GLOBE.z), WEB_AT.x - GLOBE.x);
 const pin = new THREE.Group(); pin.visible = false; globeBall.add(pin);
 { const stick = new THREE.Mesh(new THREE.CylinderGeometry(.003, .003, .055, 6), T(C.ink)); stick.position.y = .027; pin.add(stick);
   const head = new THREE.Mesh(new THREE.SphereGeometry(.013, 14, 10), T(0xe0453a)); head.position.y = .055; outline(head, 1.25); pin.add(head); }
@@ -148,7 +174,7 @@ function facing(lat, lon, d){
 }
 // zoom moves the camera in on the biome globe; mag narrows its lens on the geography globe, which
 // leans in far closer than the camera could go without passing through the room's near plane
-const view = {yaw: -Math.PI/2, pitch: 20*RAD, zoom: 1, mag: 1, orbit: 0, vyaw: 0, vpitch: 0, fly: null, idle: true, shrink: 0};
+const view = {yaw: -Math.PI/2, pitch: 20*RAD, zoom: 1, mag: 1, orbit: 0, vyaw: 0, vpitch: 0, fly: null, idle: true};
 
 // ---------- the world model and the map ----------
 let earth = null, here = null, glowFor = null, biomeSkin = null;
@@ -193,10 +219,10 @@ function pick(kind){
   G.picking = false; G.kind = store.mode = kind; keep(); modeButtons();
   if (was === kind) return draw();
   if (convo) endConvo(false);
-  view.vyaw += 9; view.idle = false; view.fly = null; tune(kind === 'geo' ? [523, 659, 784] : [784, 659, 523], {gap: .07, dur: .14, vol: .05});
-  if (kind === 'geo') {
+  view.vyaw += 9; view.idle = false; view.fly = null; tune(kind === 'biomes' ? [784, 659, 523] : [523, 659, 784], {gap: .07, dur: .14, vol: .05});
+  if (kind !== 'biomes') {
     stopHunt(); backToGlobe(); glow.visible = false; pin.visible = false; view.zoom = 1;
-    real.enter();
+    real.enter(kind);
   } else {
     real.leave(); view.mag = 1; pin.visible = false; showBiomes();
     if (!met) { met = true; keep();
@@ -212,16 +238,14 @@ function modeButtons(){
 hud.querySelectorAll('.gmode button').forEach(b => b.addEventListener('click', () => pick(b.dataset.m)));
 function drawPick(){
   card.style.removeProperty('--c');
-  const tile = (m, title, words) => `<button data-m="${m}" class="${store.mode === m ? 'last' : ''}"><b>${title}</b><span>${words}</span></button>`;
   card.innerHTML = `<div class="gtop"><span class="gicon" aria-hidden="true">🦉</span><div><div class="gkind">Professor Hoot asks</div><h3>Which globe today?</h3></div></div>
-    <div class="gpick">${tile('biomes', '🌿 Biomes', 'Who lives where, and who eats whom. Riddles and pop-up food webs.')}
-      ${tile('geo', '🗺️ Geography', 'The real Earth from space: mountains, rivers and volcanoes for Hoot\'s notebook, wonders of the world, and real photos of the animals that live there.')}</div>`;
+    <div class="gpick">${KINDS.map(k => `<button data-m="${k.id}" class="${store.mode === k.id ? 'last' : ''}"><b>${k.icon} ${k.name}</b><span>${k.about}</span></button>`).join('')}</div>`;
   card.querySelectorAll('.gpick button').forEach(b => b.addEventListener('click', () => pick(b.dataset.m)));
 }
 function leave(){
   if (!G) return;
   if (convo) endConvo(true);
-  G = null; held.clear(); hideDiorama(); pin.visible = false; glow.visible = false; real.leave(); view.mag = 1;
+  G = null; held.clear(); hideDiorama(); closeAnimal(); pin.visible = false; glow.visible = false; real.leave(); view.mag = 1;
   camera.zoom = 1; camera.updateProjectionMatrix();
   hud.hidden = true; document.documentElement.classList.remove('globing');
   hero.root.visible = true; blob.visible = true; globeRing.rotation.y = Math.PI/2; steer(false); standUp();
@@ -233,19 +257,25 @@ $g('gBack').addEventListener('click', () => backToGlobe());
 // ---------- the camera: leaning in on the globe, or looking down on the diorama ----------
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), camAt = new THREE.Vector3(), back = new THREE.Vector3(), right = new THREE.Vector3(), up = new THREE.Vector3();
 function steer(on){ game.cutCam = on ? (pos, look) => { pos.copy(camPos); look.copy(camLook); } : null; }
-// the part of the screen the HUD leaves open, so the globe sits in the middle of it
+// The part of the screen the HUD leaves open, so the globe sits in the middle of it, as big as it
+// fits. Beside a card, the globe can rise past the title, which sits in a corner the round globe
+// leaves empty; on a tall screen the card is above it, and it starts below that.
 function openArea(){
-  const top = hud.querySelector('.gh-top').getBoundingClientRect(), c = card.getBoundingClientRect(), W = innerWidth, Hh = innerHeight;
-  const a = {l: 0, t: top.bottom + 6, r: W, b: Hh - Math.min(175, Hh*.3)};
-  if (c.width && c.height) { if (c.left > W*.4) a.r = c.left - 10; else a.t = Math.max(a.t, c.bottom + 6); }
+  const c = card.getBoundingClientRect(), W = innerWidth, Hh = innerHeight;
+  const below = [...hud.querySelectorAll('.gbar, .glenses')].filter(el => el.offsetParent).map(el => el.getBoundingClientRect().top);
+  const a = {l: 0, t: 8, r: W, b: Math.min(Hh, ...below) - 4};
+  if (c.width && c.height) { if (c.left > W*.4) a.r = c.left - 10; else a.t = c.bottom + 6; }
   if (a.b - a.t < 120) a.b = Hh;
   return a;
 }
 function aimCamera(){
-  const web = G.mode === 'web' && dioramaSize(), a = openArea(), geo = G.kind === 'geo' && !G.picking;
-  const el = web ? 1.15 : .1, turn = web ? view.orbit : 0;
-  if (web) camAt.set(GLOBE.x, .7 + web.top*.42, GLOBE.z); else camAt.copy(center);
-  const rho = web ? web.radius*1.02*view.zoom : geo ? .5 : .5*view.zoom;
+  const web = G.mode === 'web' && dioramaSize(), a = openArea(), geo = geoOn();
+  // the diorama fills the open area, low enough that its animals stand up off the floor; the globe it
+  // came from peeks in at the edge on a wide screen
+  const el = web ? .95 : .1, turn = web ? WEB_TURN + view.orbit : 0;
+  if (web) camAt.set(web.at.x, web.top*.42, web.at.z); else camAt.copy(center);
+  // the globe, a little more than its own size, so its stand's ring still shows round it
+  const rho = web ? web.radius*1.02*view.zoom : geo ? .43 : .43*view.zoom;
   const mag = geo ? view.mag : 1;
   if (camera.zoom !== mag) { camera.zoom = mag; camera.updateProjectionMatrix(); }
   back.set(Math.sin(turn)*Math.cos(el), Math.sin(el), Math.cos(turn)*Math.cos(el));
@@ -264,7 +294,7 @@ function draw(){
   if (!G) return;
   $g('gBack').hidden = G.mode !== 'web';
   if (G.picking) return drawPick();
-  if (G.kind === 'geo') return real.draw();
+  if (G.kind !== 'biomes') return real.draw();
   if (!earth) { card.style.removeProperty('--c'); card.innerHTML = '<div class="ghint">Unrolling the map…</div>'; return; }
   if (G.mode === 'web') return drawWeb();
   if (G.hunt) return drawHunt();
@@ -284,7 +314,8 @@ const btn = (id, text, cls = 'gb') => `<button class="${cls}" id="${id}">${text}
 const on = (id, f) => { const b = $g(id); if (b) b.addEventListener('click', f); };
 
 function chips(){
-  if (G && G.kind === 'geo') return real.chips();
+  if (G && G.picking) return;
+  if (G && G.kind !== 'biomes') return real.chips();
   $g('gFound').textContent = `${found.size} of ${ALL.length} found`;
   showChips(ALL.map(id => {
     const b = BIOMES[id];
@@ -380,7 +411,7 @@ function openWeb(){
   stopHunt(); if (convo) endConvo(false);
   G.mode = 'web'; view.zoom = 1; view.orbit = 0; pin.visible = false; loadPhotos();
   const web = here.web;
-  showDiorama(scene, new THREE.Vector3(GLOBE.x, .7, GLOBE.z), web, here.biomeId);
+  showDiorama(scene, WEB_AT, web, here.biomeId, .9, WEB_TURN);
   tune([523, 784], {dur: .14}); [880, 1175, 1568].forEach((f, i) => Sound.tone(f, {type: 'sine', t: .25 + i*.06, dur: .3, vol: .035}));
   if (learned.has(web.id)) { G.lesson = {step: 'explore'}; enter(web.species.map(s => s.name)); growArrows(); }
   else {
@@ -396,7 +427,7 @@ function openWeb(){
 function backToGlobe(){
   if (!G || G.mode !== 'web') return;
   if (convo) endConvo(false);
-  G.mode = 'globe'; G.lesson = null; view.zoom = 1; hideDiorama(); if (here) { dropPin(here.lat, here.lon); pin.t = 1; }
+  G.mode = 'globe'; G.lesson = null; view.zoom = 1; hideDiorama(); closeAnimal(); if (here) { dropPin(here.lat, here.lon); pin.t = 1; }
   tune([659, 523], {gap: .07, dur: .12, vol: .05});
   draw();
 }
@@ -421,8 +452,8 @@ function drawWeb(){
   card.innerHTML = `<div class="gtop"><span class="gicon" aria-hidden="true">${b.icon}</span><div><div class="gkind">${b.name} food web</div><h3>${cap(web.place)}</h3></div></div>
     ${isFar(here) ? `<div class="gfrom">${farNote(here)}</div>` : ''}
     <p class="gask">${ask}</p>${what ? row('food', L.q.food) + row('eater', L.q.eater) : ''}
-    ${what ? '' : `<div class="gstrip" role="group" aria-label="Who lives here">${web.species.map((s, i) => `<button data-i="${i}" class="${stripClass(s)}" aria-label="${s.name}" title="${s.name}" aria-pressed="${quiz ? L.guesses.has(s.name) : L.sel === s.name}">${s.icon}</button>`).join('')}</div>`}
-    ${L.step === 'explore' && L.sel ? `<div class="gwho">${photoFor(L.sel)}<div class="gsay">${sayFor(L.sel)}</div></div>` : ''}
+    ${what ? '' : `<div class="gstrip" role="group" aria-label="Who lives here">${web.species.map((s, i) => `<button data-i="${i}" class="${stripClass(s)}" aria-label="${s.name}" aria-pressed="${quiz ? L.guesses.has(s.name) : L.sel === s.name}"><i aria-hidden="true">${s.icon}</i><b>${s.name}</b></button>`).join('')}</div>`}
+    ${L.step === 'explore' && L.sel ? `<div class="gsay">${sayFor(L.sel)}</div>` : ''}
     <div class="gbtns">${btns}</div>`;
   card.querySelectorAll('.gstrip button').forEach(b => b.addEventListener('click', () => tapAnimal(web.species[+b.dataset.i].name)));
   card.querySelectorAll('.gwhat button').forEach(b => b.addEventListener('click', () => { L.answers[b.dataset.k] = b.dataset.v; Sound.tone(880, {type: 'triangle', dur: .06, vol: .05}); draw(); }));
@@ -440,8 +471,12 @@ function stripClass(s){
   return cls.join(' ');
 }
 function sayFor(name){
+  const s = here.web.species.find(t => t.name === name);
+  return `<b>${s.icon} ${s.name}</b><br>` + placeFor(name);
+}
+function placeFor(name){
   const s = here.web.species.find(t => t.name === name), by = eatenBy(here.web, name);
-  return `<b>${s.icon} ${s.name}</b><br>` + (s.eats.length ? `<span class="eats">Eats:</span> ${lower(s.eats).join(', ')}` : '<span class="eats">Makes its food from sunlight</span>')
+  return (s.eats.length ? `<span class="eats">Eats:</span> ${lower(s.eats).join(', ')}` : '<span class="eats">Makes its food from sunlight</span>')
     + ` · <span class="by">Eaten by:</span> ${by.length ? lower(by).join(', ') : 'nothing here'}`;
 }
 
@@ -452,12 +487,22 @@ function loadPhotos(){
   photos = {};
   fetch('wildlife/photos.json').then(r => r.ok ? r.json() : {}).then(p => { photos = p; if (G && G.mode === 'web') draw(); }, () => {});
 }
+const esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+const photoOf = name => photos[`${here.web.id}/${name}`] || photos[name];
 function photoFor(name){
-  const ph = photos[`${here.web.id}/${name}`] || photos[name];
+  const ph = photoOf(name);
   if (!ph) return '';
-  const esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   return `<figure class="gphoto"><img src="wildlife/${ph.file}" alt="${esc(name)}"><figcaption title="${esc(ph.by)}">Photo: <a href="${ph.page}" target="_blank" rel="noopener">${esc(ph.by)}</a>, ${esc(ph.license)}</figcaption></figure>`;
 }
+
+// one living thing's card, big: its real photo, a little about it, and its place in the web
+function openAnimal(name){
+  const s = here.web.species.find(t => t.name === name), about = photoOf(name)?.about;
+  animalCard.innerHTML = `<article role="dialog" aria-modal="true" aria-label="${esc(name)}"><button class="gx" aria-label="Close">✕</button>
+    <h3>${s.icon} ${esc(name)}</h3>${photoFor(name)}${about ? `<p>${esc(about)}</p>` : ''}<div class="gsay">${placeFor(name)}</div></article>`;
+  animalCard.hidden = false; animalCard.querySelector('.gx').focus({preventScroll: true});
+}
+function closeAnimal(){ animalCard.hidden = true; animalCard.innerHTML = ''; }
 
 function tapAnimal(name){
   const L = G.lesson; if (!L) return;
@@ -467,13 +512,12 @@ function tapAnimal(name){
     if (L.guesses.has(name)) { L.guesses.delete(name); markAnimal(name, null); } else { L.guesses.add(name); markAnimal(name, 'guess'); }
     Sound.tone(L.guesses.has(name) ? 880 : 660, {type: 'triangle', dur: .07, vol: .05});
   } else if (L.step === 'explore') {
-    L.sel = L.sel === name ? null : name; selectAnimal(L.sel);
-    if (L.sel) Sound.tone(880, {type: 'triangle', dur: .07, vol: .05});
-  } else return;
+    // their arrows light up behind the card, to follow once it's closed
+    L.sel = name; selectAnimal(name); openAnimal(name);
+    Sound.tone(880, {type: 'triangle', dur: .07, vol: .05});
+  } else if (L.step === 'checked') return openAnimal(name);
+  else return;
   draw();
-  // on a short screen the card scrolls, and who they tapped would land out of sight below the strip
-  const pick = card.querySelector('.gwho');
-  if (pick) card.scrollTop = Math.max(card.scrollTop, pick.offsetTop + pick.offsetHeight - card.clientHeight);
 }
 
 // predict, then check: right guesses get a tick, wrong ones a cross, and the ones missed a "!"
@@ -601,11 +645,15 @@ canvas.addEventListener('wheel', e => {
 function pinchSpan(){ const [a, b] = [...pointers.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; }
 const clampZoom = z => Math.max(.4, Math.min(1, z));
 const clampMag = m => Math.max(1, Math.min(real.MAX_MAG, m));
-const geoOn = () => G && G.kind === 'geo' && !G.picking;
+const geoOn = () => G && G.kind !== 'biomes' && !G.picking;
 function tap(x, y){
   if (!earth) return;
   const r = canvas.getBoundingClientRect(); ndc.set((x - r.left)/r.width*2 - 1, -(y - r.top)/r.height*2 + 1); ray.setFromCamera(ndc, camera);
-  if (G.mode === 'web') { const name = pickAnimal(ray); if (name) tapAnimal(name); return; }
+  if (G.mode === 'web') {
+    const name = pickAnimal(ray), L = G.lesson;
+    if (name) tapAnimal(name); else if (L.step === 'explore' && L.sel) { L.sel = null; selectAnimal(null); draw(); }
+    return;
+  }
   if (geoOn() && real.tap(x, y)) return;
   const hit = ray.intersectObject(globeBall, false)[0];
   if (hit) pressOn(earth.placeAt(hit.uv.y*180 - 90, hit.uv.x*360 - 180));
@@ -621,8 +669,6 @@ function middle(){
 // ---------- every frame, in the room ----------
 const held = new Set();
 hqAnims.push(dt => {
-  view.shrink += ((G && G.mode === 'web' ? 1 : 0) - view.shrink)*Math.min(1, dt*6);
-  const s = Math.max(.001, 1 - view.shrink); globeBall.scale.setScalar(s); globeRing.scale.setScalar(s);
   updateDiorama(dt);
   if (!G || !G.seated) return;
   aimCamera();
@@ -657,6 +703,7 @@ addEventListener('keydown', e => {
   if (!live() || convo) return;
   e.stopPropagation();
   const k = e.key;
+  if (k === 'Escape' && !animalCard.hidden) { closeAnimal(); return; }
   if (k === 'Escape') { if (G.mode === 'web') { if (G.lesson.step.startsWith('whatif')) endWhatIf(); else backToGlobe(); } else if (G.hunt) stopHunt(); else if (!(geoOn() && real.back())) leave(); return; }
   if (geoOn() && (k === '+' || k === '=' || k === '-' || k === '_')) { real.zoomBy(k === '+' || k === '=' ? 2 : .5); return; }
   if ((k === 'm' || k === 'M') && !e.repeat) { setSound(!Sound.isOn()); return; }
