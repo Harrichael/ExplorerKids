@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AU, LIGHT, geocentric, radec } from '../../web/js/sky/astro.js';
-import { BODIES, axes, underneath } from '../../web/js/sky/bodies.js';
+import { BODIES, axes, sight, underneath } from '../../web/js/sky/bodies.js';
 
 const WHEN = Date.UTC(2026, 9, 18, 3);
 // Horizons, seen from the Earth's centre: RA and Dec (J2000), distance in AU, and the point on the
@@ -37,5 +37,21 @@ test('each world turns the same face to the Earth that it really does', () => {
     // gas giants' longitudes count by their deep spin; a few degrees is a sliver of their face
     assert.ok(Math.abs(under.lat - lat) < 3, `${id} latitude ${under.lat} vs ${lat}`);
     assert.ok(Math.abs(turn(under.lon - lon)) < 4, `${id} longitude ${under.lon} vs ${lon}`);
+  }
+});
+
+// Horizons again, same moment: Io, Europa, Ganymede and Callisto among the stars
+const MOONS_AT = {io: [144.634692685, 14.767006965], europa: [144.651351629, 14.760436818],
+  ganymede: [144.675062197, 14.751921603], callisto: [144.75662032, 14.722093521]};
+const JUPITER_AT = [144.634388624, 14.767111633];
+
+test('Jupiter’s four big moons sit where JPL puts them beside Jupiter', () => {
+  const place = {lat: 0, lon: 0}, jupiter = sight(BODIES.jupiter, WHEN, place);
+  // measured from Jupiter, so a small slip in Jupiter's own place doesn't count against the moons
+  const off = (at, from) => [turn(at[0] - from[0])*Math.cos(from[1]*Math.PI/180)*3600, (at[1] - from[1])*3600];
+  for (const [id, at] of Object.entries(MOONS_AT)) {
+    const m = sight(BODIES[id], WHEN, place), [ex, ey] = off(at, JUPITER_AT), [gx, gy] = off([m.ra, m.dec], [jupiter.ra, jupiter.dec]);
+    // a third of Jupiter's radius, about 6 arcseconds
+    assert.ok(Math.hypot(gx - ex, gy - ey) < 6, `${id} is ${Math.hypot(gx - ex, gy - ey).toFixed(1)}" off`);
   }
 });

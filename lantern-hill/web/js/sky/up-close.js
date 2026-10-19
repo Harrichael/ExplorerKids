@@ -5,10 +5,11 @@
 //
 // World units are the body's radius, on the stars' own axes (RA 0, RA 90°, the celestial pole), with
 // the body at the centre; that way the Sun, the Earth and the body's spin need no converting.
+// Jupiter brings its four big moons, each where it really is tonight.
 
 import * as THREE from 'three';
 import { siderealTime } from './astro.js';
-import { RINGS, axes, sight, surface } from './bodies.js';
+import { RINGS, aroundJupiter, axes, equatorial, sight, surface } from './bodies.js';
 
 export const canvas = document.createElement('canvas');
 const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true, preserveDrawingBuffer:true});
@@ -21,17 +22,41 @@ const camera = new THREE.PerspectiveCamera(30, 1, .01, 100), flat = new THREE.Or
 
 // counts maps as they arrive, so whoever drew a body before its map came knows to draw it again
 export let maps = 0;
-const loader = new THREE.TextureLoader(), worlds = {}, arrived = () => { maps++; };
+const loader = new THREE.TextureLoader(), worlds = {}, globes = {}, arrived = () => { maps++; };
+const texture = (file, done = arrived) => loader.load(`sky/maps/${file}`, t => {
+  t.encoding = THREE.sRGBEncoding; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); t.needsUpdate = true; done(t);
+});
+// Every globe starts in its small map, plenty for the star view; the sharp one, megabytes for the
+// biggest, is only fetched once a kid comes close
+function ball(b){
+  const globe = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 64), new THREE.MeshLambertMaterial({map:texture(`${b.map}-small.jpg`)}));
+  globe.material.map.encoding = THREE.sRGBEncoding;
+  return globes[b.id] = globe;
+}
+function sharpen(b){
+  const globe = globes[b.id];
+  if (!globe || globe.userData.sharp) return;
+  globe.userData.sharp = true;
+  texture(`${b.map}.jpg`, t => { const small = globe.material.map; globe.material.map = t; globe.material.needsUpdate = true; small.dispose(); maps++; });
+}
+// a world's own spinning frame, its rings, and for Jupiter a frame for each of its moons
 function world(body){
   if (worlds[body.id]) return worlds[body.id];
-  const map = loader.load(`sky/maps/${body.map}.jpg`, arrived);
-  map.encoding = THREE.sRGBEncoding; map.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const frame = new THREE.Group(); frame.matrixAutoUpdate = false;
-  const globe = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 64), new THREE.MeshLambertMaterial({map}));
-  globe.scale.y = 1 - (body.flat || 0);
+  const root = new THREE.Group(), frame = new THREE.Group(); frame.matrixAutoUpdate = false;
+  const globe = ball(body); globe.scale.y = 1 - (body.flat || 0);
   frame.add(globe);
   if (body.rings) frame.add(rings(body));
-  return worlds[body.id] = frame;
+  root.add(frame); root.userData.frame = frame;
+  if (body.moons) {
+    const moons = new THREE.Group();
+    for (const m of body.moons) {
+      const f = new THREE.Group(), globe = ball(m); f.matrixAutoUpdate = false; f.userData.moon = m;
+      globe.scale.setScalar(m.km/equatorial(body)); globe.userData.moon = m;
+      f.add(globe); moons.add(f);
+    }
+    root.add(moons); root.userData.moons = moons;
+  }
+  return worlds[body.id] = root;
 }
 
 // How much of the light behind each ring gets through comes from Voyager 2 watching a star through
@@ -39,7 +64,7 @@ function world(body){
 // slant you look, so the shader works it out rather than a fixed transparency. Lit from behind,
 // thin rings glow and thick ones go dark, as they do in Cassini's pictures. Saturn shades them too.
 function rings(body){
-  const inner = RINGS.inner/(body.km/(1 - body.flat/3)), outer = RINGS.outer/(body.km/(1 - body.flat/3));
+  const inner = RINGS.inner/equatorial(body), outer = RINGS.outer/equatorial(body);
   const map = loader.load('sky/maps/saturn-rings.png', arrived); map.minFilter = THREE.LinearFilter;
   const mat = new THREE.ShaderMaterial({transparent:true, depthWrite:false, side:THREE.DoubleSide,
     uniforms:{map:{value:map}, sun:{value:new THREE.Vector3()}, pole:{value:new THREE.Vector3()}, inner:{value:inner}, outer:{value:outer}},
@@ -65,12 +90,16 @@ function rings(body){
 // Places a whole world: its spin tonight, the Sun's direction, and which way is the Earth and the zenith
 const v3 = a => new THREE.Vector3(a[0], a[1], a[2]);
 function place(body, ms, where){
-  const s = sight(body, ms, where), ax = axes(body, ms - s.late*1000), frame = world(body);
-  if (shown && shown !== frame) scene.remove(shown);
-  scene.add(frame); shown = frame;
+  const s = sight(body, ms, where), ax = axes(body, ms - s.late*1000), root = world(body), frame = root.userData.frame;
+  if (shown && shown !== root) scene.remove(shown);
+  scene.add(root); shown = root;
   // the map's sphere has its pole on y and longitude 0 on x; the body's are z and x
   frame.matrix.makeBasis(v3(ax.x), v3(ax.z), v3(ax.y).negate());
-  frame.updateMatrixWorld(true);
+  for (const f of root.userData.moons ? root.userData.moons.children : []) {
+    const m = f.userData.moon, mx = axes(m, ms), p = aroundJupiter(m, ms).map(x => x/equatorial(body));
+    f.matrix.makeBasis(v3(mx.x), v3(mx.z), v3(mx.y).negate()).setPosition(p[0], p[1], p[2]);
+  }
+  root.updateMatrixWorld(true);
   const sun = v3(s.sun.map((x, i) => x - s.v[i])).normalize(), toUs = v3(s.v).negate().normalize();
   sunlight.position.copy(sun);
   for (const c of frame.children) if (c.userData.ring) { c.userData.ring.uniforms.sun.value.copy(sun); c.userData.ring.uniforms.pole.value.copy(v3(ax.z)); }
@@ -83,7 +112,8 @@ let shown = null;
 
 // ---------- the close-up ----------
 let body = null, eye = null, zoomTo = 1, zoomAt = 1, labelled = [], last = '';
-export function show(b){ body = b; eye = null; zoomTo = zoomAt = 1; last = ''; }
+export function show(b){ body = b; eye = null; zoomTo = zoomAt = 1; last = ''; world(b); sharpen(b); }
+export function refresh(){ last = ''; }
 // a drag of the screen's height swings round a third of the way about the body when far off, less
 // as the surface nears, so the ground doesn't race by
 export function orbit(dx, dy){
@@ -93,12 +123,15 @@ export function orbit(dx, dy){
   eye.up.addScaledVector(eye.dir, -eye.up.dot(eye.dir)).normalize();
   eye.mine = true;
 }
-export function zoom(k){ zoomTo = Math.min(4, Math.max(nearest(), zoomTo*k)); }
+// Jupiter lets you back off far enough to take in Callisto's orbit, 26 Jupiters out
+export function zoom(k){ zoomTo = Math.min(body.moons ? 28 : 4, Math.max(nearest(), zoomTo*k)); }
 const reach = () => body.rings ? RINGS.outer/body.km*1.05 : 1.08;
+const system = () => body.moons ? 28 : reach();
 // how far the camera sits to fit the body (rings and all) in the view, times the zoom
 const fit = () => reach()/Math.tan(Math.min(15, Math.atan(Math.tan(15*Math.PI/180)*camera.aspect)/Math.PI*180)*Math.PI/180);
 const dist = () => fit()*zoomAt;
-const nearest = () => 1.06/fit();
+// no closer than a fifth of the body's radius above it, where even the sharpest map runs out of detail
+const nearest = () => 1.2/fit();
 
 // Draws only when something shows a change: a drag, a zoom, a map arriving, or every couple of
 // seconds as the world spins and the night goes on. Says whether it drew.
@@ -115,17 +148,33 @@ export function draw(ms, where, w, h, dt){
   if (key === last) return false;
   last = key;
   camera.position.copy(eye.dir).multiplyScalar(dist()); camera.up.copy(eye.up); camera.lookAt(0, 0, 0);
-  camera.near = Math.max(.002, dist() - reach() - .01); camera.far = dist() + reach() + 1; camera.updateProjectionMatrix();
+  camera.near = Math.max(.002, dist() - system() - .01); camera.far = dist() + system() + 1; camera.updateProjectionMatrix();
   renderer.render(scene, camera);
   return true;
 }
 
-// Names on the surface, nearest-facing first, skipping any that would land on another
-export function names(g, ms, where, w, h){
+// Names on the surface, nearest-facing first, skipping any that would land on another. Jupiter's
+// moons get a dot as well, for when they're too small to see, and the dot shows even with names off.
+export function names(g, ms, where, w, h, named){
   labelled = [];
-  if (!body || !body.places) return;
-  const ax = axes(body, ms - sight(body, ms, where).late*1000), cam = camera.position;
+  if (!body) return;
+  const cam = camera.position;
   g.font = '800 13px Nunito, system-ui, sans-serif'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+  for (const f of shown.userData.moons ? shown.userData.moons.children : []) {
+    const p = new THREE.Vector3().setFromMatrixPosition(f.matrixWorld), s = p.clone().project(camera);
+    const x = (s.x + 1)/2*w, y = (1 - s.y)/2*h, look = p.clone().sub(cam), along = -cam.dot(look.clone().normalize());
+    // hidden if the line of sight passes through Jupiter on the way
+    if (s.z > 1 || x < -20 || y < -20 || x > w + 20 || y > h + 20) continue;
+    if (along > 0 && along < look.length() && cam.lengthSq() - along*along < 1) continue;
+    const name = f.userData.moon.name, tw = g.measureText(name).width, box = [x - 10, y - 10, x + 14 + tw, y + 10];
+    g.fillStyle = 'rgba(239,224,191,.9)'; g.beginPath(); g.arc(x, y, 2, 0, 7); g.fill();
+    if (!named || labelled.some(o => box[0] < o.box[2] && box[2] > o.box[0] && box[1] < o.box[3] && box[3] > o.box[1])) continue;
+    labelled.push({box, moon:f.userData.moon});
+    g.lineWidth = 3; g.strokeStyle = 'rgba(5,4,10,.85)'; g.strokeText(name, x + 10, y);
+    g.fillStyle = '#ffe9a8'; g.fillText(name, x + 10, y);
+  }
+  if (!body.places || !named) return;
+  const ax = axes(body, ms - sight(body, ms, where).late*1000);
   const want = body.places.map(([name, lat, lon, line]) => {
     const p = v3(surface(ax, lat, lon)), facing = p.dot(cam.clone().sub(p).normalize());
     return {name, line, p, facing};
@@ -141,12 +190,14 @@ export function names(g, ms, where, w, h){
     g.fillStyle = '#efe0bf'; g.fillText(q.name, x + 10, y);
   }
 }
-// what a tap lands on: a named place, else the body itself (true), else nothing
+// what a tap lands on: {moon} for one of Jupiter's moons, {place} for a named place, else
+// {body} for the world itself, else nothing
 export function tapped(x, y, w, h){
   const hit = labelled.find(q => x >= q.box[0] - 6 && x <= q.box[2] + 6 && y >= q.box[1] - 6 && y <= q.box[3] + 6);
-  if (hit) return hit.place;
+  if (hit) return hit.moon ? {moon:hit.moon} : {place:hit.place};
   const ray = new THREE.Raycaster(); ray.setFromCamera({x:x/w*2 - 1, y:1 - y/h*2}, camera);
-  return ray.intersectObject(shown, true).some(i => !i.object.userData.ring);
+  const first = ray.intersectObject(shown, true).find(i => !i.object.userData.ring);
+  return !first ? null : first.object.userData.moon ? {moon:first.object.userData.moon} : {body};
 }
 
 // ---------- the body drawn small, for the star view ----------
@@ -159,10 +210,13 @@ export function portrait(b, ms, where, r){
   if (cache.size > 24) cache.clear();
   const span = b.rings ? RINGS.outer/b.km*1.02 : 1.02, size = Math.min(2048, Math.ceil(px*span)*2 + 2);
   renderer.setPixelRatio(1); renderer.setSize(size, size, false);
-  const at = place(b, ms, where), e = size/2/px;
+  const at = place(b, ms, where), e = size/2/px, moons = shown.userData.moons;
   Object.assign(flat, {left:-e, right:e, top:e, bottom:-e}); flat.updateProjectionMatrix();
   flat.position.copy(at.toUs).multiplyScalar(span + 5); flat.up.copy(at.up); flat.lookAt(0, 0, 0);
+  // the star view draws the moons itself, where they are beside Jupiter
+  if (moons) moons.visible = false;
   renderer.render(scene, flat);
+  if (moons) moons.visible = true;
   const out = document.createElement('canvas'); out.width = out.height = size;
   out.getContext('2d').drawImage(canvas, 0, 0);
   cache.set(key, out);
