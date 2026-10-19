@@ -1,5 +1,5 @@
 // The explorer's hands at the desk: a lab glove that follows the pointer, grabs what's under it,
-// carries it while the pointer drags, and tips it while Space, the right mouse button or the
+// carries it while the pointer drags, and tips it while T, Space, the right mouse button or the
 // on-screen Tip button is held.
 
 import * as THREE from 'three';
