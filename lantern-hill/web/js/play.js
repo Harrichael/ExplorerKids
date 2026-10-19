@@ -30,6 +30,7 @@ export function enterWorld(w, spawn){
 export const clock = new THREE.Clock();
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), dir = new THREE.Vector3();
 const ray = new THREE.Raycaster();
+const SUN_FROM = new THREE.Vector3(-9, 16, 7);
 const areaEl = $('area'); let areaName = '';
 let lastNearest = null;
 const inReach = u => Math.hypot(player.x - u.x, player.z - u.z) < u.range && Math.abs(player.y - (u.y || 0)) < 1;
@@ -186,7 +187,7 @@ function update(dt){
   camLook.lerp(tmpV2, Math.min(1, dt * 5));
   camera.position.copy(camPos); camera.lookAt(camLook);
   if (game.camShake > 0) { camera.position.x += (Math.random() - .5)*game.camShake*.12; camera.position.y += (Math.random() - .5)*game.camShake*.12; game.camShake = Math.max(0, game.camShake - dt*5); }
-  game.world.sun.position.set(player.x - 9, 16, player.z + 7); game.world.sun.target.position.set(player.x, 0, player.z);
+  const from = game.world.sunFrom || SUN_FROM; game.world.sun.position.set(player.x + from.x, from.y, player.z + from.z); game.world.sun.target.position.set(player.x, 0, player.z);
 
   game.world.occluders.forEach(o => o.target = 1);
   tmpV.set(player.x, player.y + 1.0, player.z);

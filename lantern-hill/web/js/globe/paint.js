@@ -1,6 +1,7 @@
 // A storybook map of the Earth for a globe: each biome in its own colour, inked coastlines. The
 // colours come from the world model cell by cell, so the map shows exactly what tapping it says.
-// A plain map is just land, sea and polar ice, for a globe that's about places, not biomes.
+// A plain map is just land, sea and polar ice, for a globe that's about places, not biomes; a
+// countries map is each country in its own colour, for the geography globe.
 
 import { tex } from '../core/kit.js';
 import { BIOMES } from '../earth/biomes.js';
@@ -33,8 +34,9 @@ function biomes(g, earth, colorOf, w, h, path, shallows){
   return {land, lakes};
 }
 
-function projection(w){
-  const h = w/2, X = lon => (lon + 180)*w/360, Y = lat => (90 - lat)*h/180;
+// the whole world, or just a box of it ({w, e, s, n} in degrees) for a close-up
+function projection(w, h = w/2, box = {w: -180, e: 180, s: -90, n: 90}){
+  const X = lon => (lon - box.w)*w/(box.e - box.w), Y = lat => (box.n - lat)*h/(box.n - box.s);
   const path = rings => { const p = new Path2D(); for (const r of rings) { p.moveTo(X(r[0]), Y(r[1])); for (let i = 2; i < r.length; i += 2) p.lineTo(X(r[i]), Y(r[i + 1])); p.closePath(); } return p; };
   return {h, Y, path};
 }
@@ -55,6 +57,16 @@ export function paintEarth(earth, {plain = false, w = 2048} = {}){
     g.strokeStyle = 'rgba(217,164,65,.9)'; g.lineWidth = 3; g.setLineDash([14, 8]);
     g.beginPath(); g.moveTo(0, Y(0)); g.lineTo(w, Y(0)); g.stroke(); g.setLineDash([]);
   });
+}
+
+// every country in its own colour; Natural Earth numbers them so no two neighbours share one
+const COUNTRY = ['#e8c87a', '#c9dd8f', '#f0a98e', '#b9c7ef', '#e3b3d6', '#9fd5c4', '#f2d6a2'];
+export function paintCountries(g, geo, earth, w, h, box){
+  const {path} = projection(w, h, box);
+  g.fillStyle = PLAIN.sea; g.fillRect(0, 0, w, h);
+  for (const c of geo.countries) { g.fillStyle = COUNTRY[(c.color - 1) % COUNTRY.length]; g.fill(path(c.rings), 'evenodd'); }
+  g.fillStyle = PLAIN.lake; g.fill(path(earth.lakes.map(l => l.ring)));
+  g.strokeStyle = 'rgba(26,19,32,.7)'; g.lineWidth = 1.2; g.stroke(path(earth.land));
 }
 
 // white wherever the biome is and clear everywhere else, to light it up on the globe; haloed, so

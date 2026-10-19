@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { C, LEAF, T, XF, add, bAdd, barkGeo, box, col, cyl, fr, frand, glowM, glowTex, grp, leafCloud, mergeGeos, meshOf, occluder, outline, outlineMat, rand, rr, rrect, sph, tex } from '../core/kit.js';
 import { buildBus } from '../props/wonder-bus.js';
+import { daylight } from './daylight.js';
 import { hqAnims, scene } from './scene.js';
 
 box(.12,.12,.4,T(C.ink),10.6,2.7,1.75); const porch = box(.25,.35,.25,glowM(0xffcf73,1.2),10.6,2.5,2.0,null,false);
@@ -79,19 +80,20 @@ col(25, 26.2, -9, -7.8);
 for (let i=0;i<60;i++){
   const fx = rr(11.5, 26.4), fz = rr(-9.4, 8.4);
   if (fx < 18.5 && fz > -2.4 && fz < 1.3) continue;
+  if (fx > 14.1 && fx < 18.1 && fz < -7.1) continue;
   if (fx > 17.5 && fx < 25.5 && fz > -6.5 && fz < .5) continue;
   if (fx > 13 && fx < 18.2 && fz > 3.8 && fz < 7.2) continue;
   if (fx > 20.2 && fx < 25.4 && fz > 3.1 && fz < 7.3) continue;
   cyl(.015,.015,.3,T(C.moss),fx,.15,fz,null,4,false);
   sph(.08, T([0xd36a8f,0xe9d9b8,0xd9a441,0x8f7ad6][i%4]), fx,.32,fz, null, 6, false);
 }
-const postLamps = [];
+const postLamps = [], lampLights = [porchLight];
 function lampPost(x, z, light){
   const g = grp(x, 0, z);
   cyl(.06,.08,2.1,T(C.ink),0,1.05,0,g,8); box(.4,.04,.04,T(C.ink),.18,2.05,0,g);
   const l = box(.24,.32,.24,glowM(0xffcf73,1.2),.34,1.82,0,g,false); add(new THREE.ConeGeometry(.22,.15,4),T(C.ink),.34,2.05,0,g).rotation.y = Math.PI/4;
   postLamps.push(l);
-  if (light) { const pl = new THREE.PointLight(0xffb85c, .9, 8, 2); pl.position.set(x+.34, 1.8, z); scene.add(pl); }
+  if (light) { const pl = new THREE.PointLight(0xffb85c, .9, 8, 2); pl.position.set(x+.34, 1.8, z); scene.add(pl); lampLights.push(pl); }
   col(x-.15, x+.15, z-.15, z+.15);
 }
 lampPost(12.6, 1.8, true); lampPost(18.6, 2.4, false); lampPost(26.0, -.5, false);
@@ -140,7 +142,8 @@ const tt2 = cyl(.08,.12,1,T(C.navy),0,1.15,0,tele2,10); tt2.rotation.z = 1.0; ou
 col(24.1, 24.75, -.85, -.3, PLAT-.3, PLAT+1.6);
 const deckLamps = [];
 for (const [lx,lz] of [[18,-6],[25,-6],[25,0],[18,0]]) { const l = sph(.16, glowM(0xffcf73,1.1), lx, PLAT+1.08, lz, null, 8, false); deckLamps.push(l); box(.04,.15,.04,T(C.ink),lx,PLAT+.95,lz); }
-const deckLight = new THREE.PointLight(0xffb85c, .9, 7, 2); deckLight.position.set(20, PLAT+1.6, -2); scene.add(deckLight);
+const deckLight = new THREE.PointLight(0xffb85c, .9, 7, 2); deckLight.position.set(20, PLAT+1.6, -2); scene.add(deckLight); lampLights.push(deckLight);
+lampLights.forEach(l => l.userData.full = l.intensity);
 const bunting = [];
 for (let i=0;i<9;i++){ const t = i/8; const x = 18.2 + t*6.6, y = PLAT+1.0 - Math.sin(t*Math.PI)*.25; const tri = add(new THREE.ConeGeometry(.1,.2,3), T([C.rust,C.gold,C.plum,0x2f8f8a][i%4]), x, y - .1, 0, null, false); tri.rotation.x = Math.PI; bunting.push(tri); }
 const canopy = grp(TX, 0, TZ);
@@ -188,11 +191,14 @@ hqAnims.push((dt, t) => {
   hoverPads.forEach((p, i) => p.material.emissiveIntensity = .9 + Math.sin(t * 6 + i) * .3);
   flag.rotation.y = Math.sin(t * 3) * .3;
   bunting.forEach((b, i) => b.rotation.z = Math.sin(t * 2.4 + i) * .15);
-  glowList.forEach((l, i) => l.material.emissiveIntensity = 1 + Math.sin(t * 2 + i * 1.7) * .15);
+  // the lamps are lit from dusk; by day they're just glass
+  const lit = 1 - daylight.day;
+  glowList.forEach((l, i) => l.material.emissiveIntensity = (1 + Math.sin(t * 2 + i * 1.7) * .15)*(.15 + .85*lit));
+  lampLights.forEach(l => l.intensity = l.userData.full*lit);
   for (let i=0;i<FF;i++){ const f = ffData[i];
     ffPos[i*3] = f.x + Math.sin(t * .4 * f.s + f.p) * 1.2; ffPos[i*3+1] = f.y + Math.sin(t * .9 * f.s + f.p * 2) * .4; ffPos[i*3+2] = f.z + Math.cos(t * .35 * f.s + f.p) * 1.2; }
   ffGeo.attributes.position.needsUpdate = true;
-  fireflies.material.opacity = .65 + Math.sin(t * 3) * .2;
+  fireflies.material.opacity = (.65 + Math.sin(t * 3) * .2)*(1 - daylight.day);
   for (let i=0;i<EM;i++){ const e = emData[i]; e.t += dt * .35 * e.s; if (e.t > 1) { e.t = 0; e.x = rr(-.5,.5); }
     emPos[i*3] = e.x + Math.sin(e.t * 8 + i) * .12; emPos[i*3+1] = .6 + e.t * 2.0; emPos[i*3+2] = -6.0 + e.t * .3; }
   emGeo.attributes.position.needsUpdate = true;

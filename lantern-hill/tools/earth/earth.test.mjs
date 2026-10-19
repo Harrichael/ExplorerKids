@@ -1,15 +1,21 @@
-// The world model against places a child might tap, Hoot's riddles against the map, and the food
-// webs against the rules every web must keep. Runs on the built data:
+// The world model against places a child might tap, Hoot's riddles against the map, the food webs
+// against the rules every web must keep, and the geography globe's wonders against the map. Runs on
+// the built data:
 //   node --test tools/earth/*.test.mjs   (from lantern-hill/)
 
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { BIOMES, WEBS, visit } from '../../web/js/earth/biomes.js';
-import { makeEarth } from '../../web/js/earth/model.js';
+import { makeGeography } from '../../web/js/earth/geography.js';
+import { arc, makeEarth } from '../../web/js/earth/model.js';
+import { WONDERS } from '../../web/js/earth/wonders.js';
 import { eatenBy, hunter, whatIf } from '../../web/js/globe/food-web.js';
+import { oddOneOut } from '../../web/js/globe/photos.js';
+import { judge } from '../../web/js/globe/wonder-hunt.js';
 
-const earth = makeEarth(JSON.parse(readFileSync(new URL('../../web/data/earth.json', import.meta.url), 'utf8')));
+const data = name => JSON.parse(readFileSync(new URL(`../../web/data/${name}.json`, import.meta.url), 'utf8'));
+const earth = makeEarth(data('earth')), geo = makeGeography(data('geography'));
 
 test('famous places are in the biome you would expect, with their own food web', () => {
   const cases = [
@@ -128,4 +134,40 @@ test('everyone in every food web has a photo, with credit to whoever took it', (
     assert.ok(existsSync(new URL(`../../web/wildlife/${p.file}`, import.meta.url)), `${s.name}: ${p.file} is missing`);
     assert.ok(p.by && p.license && p.page, `${s.name}: the photo has no credit`);
   }
+});
+
+test('the wonders are where Hoot says, and their sights are part of them', () => {
+  for (const w of WONDERS) {
+    if (w.country) assert.equal(geo.countryAt(...w.at)?.name, w.country, w.id);
+    for (const s of w.sights || []) assert.ok(arc(...s.at, ...w.at) < 250, `${w.id}: ${s.name} is ${Math.round(arc(...s.at, ...w.at))} km away`);
+  }
+  assert.equal(new Set(WONDERS.map(w => w.id)).size, WONDERS.length);
+  // and the map names the countries a guess lands in, capitals and all
+  assert.deepEqual(['France', 'Paris'], [geo.countryAt(48.86, 2.35).name, geo.countryAt(48.86, 2.35).capital]);
+  assert.equal(geo.countryAt(-4.3, 15.3).name, 'Democratic Republic of the Congo');
+  assert.equal(geo.countryAt(0, -30), null);
+});
+
+test("Hoot's photo riddles say how far off a guess is, which way to go, and whether it's warmer", () => {
+  const pyramid = WONDERS.find(w => w.id === 'pyramids');
+  const fromParis = judge({lat: 48.86, lon: 2.35}, pyramid);
+  assert.deepEqual([fromParis.found, fromParis.about, fromParis.way, fromParis.warmer], [false, 3000, 'south-east', null]);
+  assert.equal(judge({lat: 35, lon: 25}, pyramid, fromParis.km).warmer, true);
+  assert.equal(judge({lat: -30, lon: 25}, pyramid, fromParis.km).way, 'north');
+  assert.equal(judge({lat: 30.1, lon: 31.3}, pyramid).found, true);
+  // at a pole every way is the same way
+  assert.equal(judge({lat: 0, lon: 100}, WONDERS.find(w => w.id === 'south-pole')).way, 'south');
+});
+
+test("Hoot's odd one out is never an animal really seen here", () => {
+  const animal = id => ({id, name: `animal ${id}`});
+  const here = [1, 2, 3, 4, 5].map(animal), far = [3, 4, 9].map(animal);
+  for (let i = 0; i < 20; i++) {
+    const q = oddOneOut(here, far);
+    assert.equal(q.odd.id, 9);
+    assert.equal(q.choices.length, 4);
+    assert.deepEqual(q.choices.filter(a => a !== q.odd).every(a => here.includes(a)), true);
+  }
+  assert.equal(oddOneOut(here.slice(0, 2), far), null, 'too few animals here to ask');
+  assert.equal(oddOneOut(here, [animal(1)]), null, 'nothing from far away that is not also here');
 });
