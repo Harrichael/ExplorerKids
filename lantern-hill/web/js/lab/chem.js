@@ -93,7 +93,7 @@ export function ph(c){
   return Math.max(1, Math.min(13, 7 - a/wv*60));
 }
 const CAB = [[1,0xd01f3c],[3,0xe2457f],[5,0xb04aa8],[7,0x6e45a8],[8.5,0x3d5fc4],[10,0x239a8c],[12,0x5cb83a],[13,0xc8c040]];
-export function cabbageColor(p){
+function cabbageColor(p){
   for (let i = 1; i < CAB.length; i++) if (p <= CAB[i][0]) { const [p0, a] = CAB[i-1], [p1, b] = CAB[i]; return lerpCol(a, b, (p - p0)/(p1 - p0)); }
   return CAB[CAB.length - 1][1];
 }
