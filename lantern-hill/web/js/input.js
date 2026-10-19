@@ -1,4 +1,4 @@
-import { Sound } from './core/sound.js';
+import { MUSIC, Sound } from './core/sound.js';
 import { isNewExplorer } from './explorer.js';
 import { game } from './state.js';
 import { closeDialog, convo, talk } from './ui/dialogue.js';
@@ -17,6 +17,11 @@ function begin(){
     if (isNewExplorer) setTimeout(() => openWardrobe(true), 350); }
 }
 startEl.addEventListener('pointerdown', begin);
+const credits = document.getElementById('credits');
+credits.innerHTML = `Music: ${MUSIC.home.concat(MUSIC.trip).map(s => `“${s.title}”`).join(', ')} by Kevin MacLeod (<a href="https://incompetech.com" target="_blank" rel="noopener">incompetech.com</a>).
+  Licensed under Creative Commons: By Attribution 4.0 (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">creativecommons.org/licenses/by/4.0</a>).`;
+// following a link shouldn't also start the game behind it
+credits.addEventListener('pointerdown', e => { if (e.target.closest('a')) e.stopPropagation(); });
 // flashcards, the globe, the book reader, the telescope, the block tower and the backpack catch keys before this handler while they are open
 addEventListener('keydown', e => {
   const k = e.key;
@@ -28,6 +33,8 @@ addEventListener('keydown', e => {
   const first = !startEl.hidden;
   begin();
   if (first) return;
+  // a secret, left off the key hints: back to the old music box, and again to the songs
+  if (e.code === 'KeyM' && e.altKey) { if (!e.repeat) Sound.toggleMusic(); return; }
   keys[k.length === 1 ? k.toLowerCase() : k] = true;
   if ((k === ' ' || k === 'Enter') && !e.repeat) { const first = game.reach.findIndex(Boolean); if (convo || game.nearest || first < 0) talk(); else useSlot(first); }
   const slot = k.length === 1 ? USE_KEYS.indexOf(k.toLowerCase()) : -1;

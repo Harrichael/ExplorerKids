@@ -6,22 +6,34 @@ hole is filled from another source of the same world. Only the last few degrees 
 that nothing has ever photographed are filled, by repeating the nearest photographed row (the
 gas giants are banded, so their colour holds round a latitude line).
 
-  Moon, Mercury, Venus, Mars, Jupiter, Neptune: HiPS maps at CDS, exported flat with hips2fits.
+  Moon, Mercury, Venus, Mars, Jupiter, Neptune, and Jupiter's four big moons: HiPS maps at CDS,
+          exported flat with hips2fits. Galileo and Voyager left gaps near the moons' poles; a
+          missing pixel takes the average colour of what was photographed along its latitude.
   Saturn: Hubble OPAL 2025, its equator (hidden by the rings' edge) and north pole from OPAL 2018.
   Uranus: Hubble OPAL 2025 for the north, OPAL 2014 for the tropics, and the south pole from
           Voyager 2's 1986 portrait, when that pole faced the spacecraft.
   Saturn's rings: how much light gets through, from Voyager 2 watching a star shine through them
           (PPS occultation); their colour, from Cassini's 2004 natural-colour portrait.
 
-Every map runs east from longitude -180 at the left edge, latitude +90 at the top.
+Every map runs east from longitude -180 at the left edge, latitude +90 at the top. Each comes in
+two sizes: <name>.jpg as sharp as the source allows (up to 4096 wide), for flying close, and
+<name>-small.jpg, 512 wide, for the star view and while the sharp one is on its way.
+
+closeups.json: where Galileo and Voyager flew close over Jupiter's moons. Their maps are mostly
+pictures taken from far off, sharpened up to the few close passes; nobody publishes where those
+passes landed, so each HEALPix tile of the map (at its finest order) is tested for detail that
+holds at the 2-pixel scale as strongly as at the 8-pixel scale, in every direction, which a picture
+blown up from a distant one never has. Written as a MOC, as the Hubble and Webb maps are.
 
     python3 -m venv /tmp/v && /tmp/v/bin/pip install numpy pillow
     /tmp/v/bin/python tools/sky_maps.py        # from lantern-hill/
+    /tmp/v/bin/python tools/sky_maps.py closeups europa   # just the ones named
 """
 
-import io, os, urllib.parse, urllib.request
+import io, json, os, sys, urllib.parse, urllib.request
+from concurrent.futures import ThreadPoolExecutor
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'web', 'sky', 'maps')
 HIPS2FITS = 'https://alasky.cds.unistra.fr/hips-image-services/hips2fits?'
@@ -30,9 +42,13 @@ VOYAGER_URANUS = 'https://images-assets.nasa.gov/image/PIA18182/PIA18182~orig.jp
 CASSINI_SATURN = 'https://images-assets.nasa.gov/image/PIA06193/PIA06193~large.jpg'
 VOYAGER_RINGS = 'https://pds-rings.seti.org/holdings/volumes/VG_28xx/VG_2801/EASYDATA/KM020/PS1P01.TAB'
 
-HIPS = {'moon': ('CDS/P/Moon/LROC-WAC-100m', 2048), 'mercury': ('CDS/P/Mercury/MESSENGER-MDIS-LOI-166m', 1024),
-        'venus': ('CDS/P/Venus/Magellan/C3-MDIR-ClrTopo-6600m-color', 1024), 'mars': ('CDS/P/Mars/Viking-MDIM21-color', 2048),
-        'jupiter': ('CDS/P/Jupiter/PIA07782', 1024), 'neptune': ('CDS/P/Neptune/Voyager2', 1024)}
+# survey, width of the sharp map, and whether it has unphotographed holes to fill
+HIPS = {'moon': ('CDS/P/Moon/LROC-WAC-100m', 4096, False), 'mercury': ('CDS/P/Mercury/MESSENGER-MDIS-LOI-166m', 4096, False),
+        'venus': ('CDS/P/Venus/Magellan/C3-MDIR-ClrTopo-6600m-color', 4096, False), 'mars': ('CDS/P/Mars/Viking-MDIM21-color', 4096, False),
+        # Cassini's Jupiter map is 3600 wide and Voyager 2's Neptune much coarser; more pixels would only blur
+        'jupiter': ('CDS/P/Jupiter/PIA07782', 4096, False), 'neptune': ('CDS/P/Neptune/Voyager2', 2048, False),
+        'io': ('CDS/P/Io/Galileo-SSI-1km', 2048, True), 'europa': ('CDS/P/Europa/Voyager-GalileoSSI-500m', 2048, True),
+        'ganymede': ('CDS/P/Ganymede/VoyagerGalileo-SSI-1km', 2048, True), 'callisto': ('CDS/P/Callisto/Voyager-Galileo-simp-1km', 2048, True)}
 RING_IN, RING_OUT = 74000, 140500   # km from Saturn's centre, the C ring's inner edge out past the F ring
 
 
@@ -46,10 +62,11 @@ def image(url):
     return np.asarray(Image.open(io.BytesIO(get(url))).convert('RGB')).astype(float)
 
 
-def save(name, a, **kw):
-    path = os.path.join(OUT, name)
-    Image.fromarray(np.clip(a, 0, 255).astype(np.uint8)).save(path, **kw)
-    print(f'{name}: {os.path.getsize(path):,} bytes')
+def save(name, a):
+    for file, img in ((f'{name}.jpg', a), (f'{name}-small.jpg', resample(a, 512, 256))):
+        path = os.path.join(OUT, file)
+        Image.fromarray(np.clip(img, 0, 255).astype(np.uint8)).save(path, quality=82)
+        print(f'{file}: {os.path.getsize(path):,} bytes')
 
 
 def lats(h):
@@ -102,12 +119,18 @@ def matched(src, ref, overlap):
 
 
 def hips(name):
-    survey, w = HIPS[name]
+    survey, w, holes = HIPS[name]
     q = urllib.parse.urlencode(dict(hips=survey, width=w, height=w//2, projection='CAR', fov=360, ra=0, dec=0, format='jpg'))
     a = image(HIPS2FITS + q)
     # Cassini never saw Jupiter's south pole; those rows come back black
     lit = (a.max(2) > 20).mean(1) > .5
-    return blend([(a, lambda lat: np.interp(lat, lats(len(lit))[::-1], lit[::-1].astype(float)))], a.shape[0])
+    a = blend([(a, lambda lat: np.interp(lat, lats(len(lit))[::-1], lit[::-1].astype(float)))], a.shape[0])
+    if holes:
+        dark = a.max(2) < 20
+        for i in np.nonzero(dark.any(1))[0]:
+            if (~dark[i]).any():
+                a[i, dark[i]] = a[i, ~dark[i]].mean(0)
+    return a
 
 
 def saturn():
@@ -161,9 +184,32 @@ def rings():
     print(f'saturn-rings.png: {os.path.getsize(os.path.join(OUT, "saturn-rings.png")):,} bytes')
 
 
+def sharp(tile):
+    a = np.asarray(Image.open(io.BytesIO(tile)).convert('L').filter(ImageFilter.MedianFilter(3)), float)[8:-8, 8:-8]
+    step = lambda s: [abs(a[:, s:] - a[:, :-s]).mean(), abs(a[s:, :] - a[:-s, :]).mean(),
+                      abs(a[s:, s:] - a[:-s, :-s]).mean(), abs(a[s:, :-s] - a[:-s, s:]).mean()]
+    return min(f/(w + .5) for f, w in zip(step(2), step(8)))
+
+
+def closeups():
+    # 0.4 by eye: above it, craters and ridges stand crisp; below, the ground is a blur (Io's whole
+    # map falls below, as its close passes aren't in it)
+    order, out = 3, {}
+    for moon in ('io', 'europa', 'ganymede', 'callisto'):
+        url = 'https://alasky.cds.unistra.fr/Planets/' + HIPS[moon][0].replace('/', '_') + f'/Norder{order}/Dir0/Npix{{}}.jpg'
+        with ThreadPoolExecutor(8) as pool:
+            scores = list(pool.map(lambda n: sharp(get(url.format(n))), range(12*4**order)))
+        out[moon] = {str(order): [n for n, v in enumerate(scores) if v > .4]}
+        print(f'closeups {moon}: {len(out[moon][str(order)])} tiles')
+    with open(os.path.join(OUT, 'closeups.json'), 'w') as f:
+        json.dump(out, f, separators=(',', ':'))
+
+
 os.makedirs(OUT, exist_ok=True)
+want = set(sys.argv[1:]) or {*HIPS, 'saturn', 'uranus', 'rings', 'closeups'}
 for body in HIPS:
-    save(f'{body}.jpg', hips(body), quality=82)
-save('saturn.jpg', saturn(), quality=82)
-save('uranus.jpg', uranus(), quality=82)
-rings()
+    if body in want: save(body, hips(body))
+if 'saturn' in want: save('saturn', saturn())
+if 'uranus' in want: save('uranus', uranus())
+if 'rings' in want: rings()
+if 'closeups' in want: closeups()

@@ -1,11 +1,11 @@
 // Pip's telescope, on the treehouse deck: tonight's real sky over wherever the treehouse is, from
 // what your eyes see, down into Hubble's and Webb's pictures, and out across light no eye can see;
-// and the Moon and planets, each where it really is tonight and, up close, a real world to fly
-// round. No tour and no goals; the kid turns, zooms and taps whatever catches their eye.
+// and the Moon and planets, each where it really is tonight and, up close, the face it turns to
+// Earth. No tour and no goals; the kid turns, zooms and taps whatever catches their eye.
 //
 // It steers like a telescope on a tripod: turning round and tipping up and down, the horizon level
-// and the ground below it, and it tracks, so whatever it points at stays put as the Earth turns.
-// Aladin only paints the sky; where it looks, and how it is turned, comes from here.
+// and the ground below it. Aladin only paints the sky; where it looks, and how it is turned, comes
+// from here.
 //
 // The imagery is far too big to ship, so it streams as HiPS tiles (all-sky image pyramids) from
 // CDS Strasbourg, drawn by CDS's own viewer, Aladin Lite. What ships with the game is in web/sky/,
@@ -19,8 +19,9 @@ import { load, save } from '../save.js';
 import { game } from '../state.js';
 import { closeDialog } from '../ui/dialogue.js';
 import { parallactic, siderealTime, sunAltitude, toHorizon, toSky } from './astro.js';
-import { BODIES, PLANETS, sight } from './bodies.js';
+import { BODIES, MOONS, PLANETS, sight } from './bodies.js';
 import { localTime, tonight, where } from './observer.js';
+import * as pictures from './pictures.js';
 import * as upClose from './up-close.js';
 
 // Every survey here is a map of the whole sky in the same coordinates, so they stack like sheets of
@@ -33,12 +34,7 @@ const nightSky = f => ({[MELLINGER]:1, [DSS]:clamp01((12 - f)/9)});
 const only = id => () => ({[id]:1});
 const LENSES = [
   {id:'sky', name:'Night Sky', layers:nightSky,
-    tip:'The sky as your eyes see it. Zoom in to see what a giant telescope sees.', credit:'Axel Mellinger · Digitized Sky Survey (Caltech, STScI)'},
-  // Hubble and Webb lay their pictures over the night sky, with a glow where they exist
-  {id:'hubble', name:'Hubble', layers:f => ({...nightSky(f), 'CDS/P/HST/EPO':1}), moc:'sky/hubble-moc.json', glow:'#ffcf73',
-    tip:'Hubble’s pictures, right where it took them. Find a glowing patch and zoom in!', credit:'Hubble: NASA, ESA, STScI'},
-  {id:'webb', name:'Webb', layers:f => ({...nightSky(f), 'CDS/P/JWST/EPO':1}), moc:'sky/webb-moc.json', glow:'#ff9a6b',
-    tip:'Webb’s pictures, right where it took them. Find a glowing patch and zoom in!', credit:'Webb: NASA, ESA, CSA, STScI'},
+    tip:'The sky as your eyes see it.', credit:'Axel Mellinger · Digitized Sky Survey (Caltech, STScI)'},
   // the rest run along the rainbow, from long, gentle light to short, fierce light
   {id:'micro', name:'Microwaves', layers:only('CDS/P/PLANCK/R2/HFI/color'),
     tip:'Cold, cold dust glowing in microwaves, the light a microwave oven uses.', credit:'Planck (ESA)'},
@@ -52,6 +48,11 @@ const LENSES = [
     tip:'The strongest light there is, from black holes and spinning dead stars.', credit:'Fermi (NASA, DOE)'}
 ];
 const lensBy = id => LENSES.find(l => l.id === id) || LENSES[0];
+// The lenses for light no eye can see open once a kid has spent a while at the telescope: the
+// treat for coming back, after Pip's magic trip at twelve minutes
+const DEEP = 22*60, UNSEEN = ['micro', 'ir', 'uv', 'xray', 'gamma'];
+const looked = () => view.seconds + (game.activity === 'telescope' ? (Date.now() - since)/1000 : 0);
+const locked = l => UNSEEN.includes(l.id) && looked() < DEEP;
 
 const COLOR = {O:'a blue-white star, far hotter than our Sun', B:'a blue-white star, far hotter than our Sun', A:'a white star, hotter than our Sun',
   F:'a yellow-white star, a little hotter than our Sun', G:'a yellow star, just like our Sun', K:'an orange star, a bit cooler than our Sun', M:'a red star, cooler than our Sun'};
@@ -71,7 +72,10 @@ const FLY = {star:.8, galaxy:1, globular:.25, cluster:1.2, nebula:1, pn:.08, snr
 
 // where it was left pointing is kept as a direction in the sky (looking south, a third of the way up),
 // not at a star, which may have set by the next time; `seconds` is how long it has been looked through
-const saved = load('telescope'), view = Object.assign({az:180, alt:35, fov:70, lens:'sky', names:true, seconds:0, mode:'stars', planet:'jupiter'}, saved && typeof saved === 'object' ? saved : {});
+const saved = load('telescope'), view = Object.assign({az:180, alt:35, fov:70, lens:'sky', names:true, seconds:0, pictures:[]}, saved && typeof saved === 'object' ? saved : {});
+// a save that left the telescope looking through the Hubble or Webb lens of an older telescope
+// opens on the night sky with that telescope's pictures switched on
+if (view.lens === 'hubble' || view.lens === 'webb') { view.pictures = [view.lens]; view.lens = 'sky'; }
 
 const css = document.createElement('style');
 css.textContent = `
@@ -103,14 +107,20 @@ css.textContent = `
 #scope .lenses::-webkit-scrollbar{display:none}
 #scope .lens{flex:none;font-family:var(--body);font-weight:900;font-size:14px;color:var(--parch);background:rgba(26,19,32,.82);border:2px solid rgba(217,164,65,.55);border-radius:999px;padding:7px 14px;cursor:pointer;box-shadow:0 0 0 2px var(--ink)}
 #scope .lens[aria-pressed=true]{background:var(--gold);color:var(--ink);border-color:var(--gold)}
+#scope .lens{background-image:linear-gradient(var(--gold),var(--gold));background-repeat:no-repeat;background-size:0 100%;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
+#scope .lens.holding{background-size:100% 100%;transition:background-size .6s linear;color:var(--ink)}
+#scope .lens.early{animation:early .3s ease-out}
+#scope .lens.arrived{animation:arrived 1.2s ease-out 3}
+@keyframes arrived{0%{box-shadow:0 0 0 2px var(--ink),0 0 0 rgba(255,217,138,0)}40%{box-shadow:0 0 0 2px var(--ink),0 0 18px 4px rgba(255,217,138,.9)}100%{box-shadow:0 0 0 2px var(--ink),0 0 0 rgba(255,217,138,0)}}
+@keyframes early{0%,100%{transform:none}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
 #scope .lens i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
 #scope .gap{flex:none;width:2px;height:24px;background:rgba(217,164,65,.4);margin:0 4px}
+#scope .lens.pics{border-style:dashed}
+#scope .lens.pics[aria-pressed=true]{background:rgba(26,19,32,.82);color:var(--parch);border-style:solid;border-color:var(--c);box-shadow:0 0 0 2px var(--ink),0 0 12px var(--c)}
+#scope .lens.pics i{border:2px solid var(--c);background:none;box-sizing:border-box}
+#scope .lens.pics[aria-pressed=true] i{background:var(--c)}
+
 #scope .lenses[hidden]{display:none}
-#scope .modes{display:flex;width:max-content;max-width:calc(100% - 32px);margin:0 auto 8px;border:2.5px solid var(--gold);border-radius:999px;overflow:hidden;box-shadow:0 0 0 3px var(--ink)}
-#scope .mode{font-family:var(--display);font-size:17px;color:var(--parch);background:rgba(26,19,32,.88);border:0;padding:7px 20px;cursor:pointer}
-#scope .mode+.mode{border-left:2px solid rgba(217,164,65,.55)}
-#scope .mode[aria-pressed=true]{background:var(--gold);color:var(--ink)}
-#scope .mode:focus-visible{outline:3px solid var(--parch);outline-offset:-4px}
 #scopeNear{position:absolute;inset:0;width:100%;height:100%}
 #scope .credit{font-size:11px;font-weight:700;color:rgba(239,224,191,.6);padding:2px max(16px,env(safe-area-inset-left,0px)) 0}
 #scope .info{position:absolute;left:50%;bottom:calc(142px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:min(380px,calc(100% - 32px));box-sizing:border-box;background:rgba(26,19,32,.94);border:2.5px solid var(--gold);border-radius:16px;box-shadow:0 0 0 3px var(--ink),0 10px 30px rgba(0,0,0,.5);padding:12px 16px 14px}
@@ -125,36 +135,73 @@ document.head.appendChild(css);
 const el = document.createElement('div'); el.id = 'scope'; el.hidden = true; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Pip’s telescope');
 el.innerHTML = `<div id="scopeSky"></div><canvas id="scopeNames"></canvas><div class="rim"></div><div id="scopeGlass"></div>
   <header><div><div class="sub" id="sWhere">Pip’s Telescope</div><h2 id="sLens"></h2><p class="tip" id="sTip"></p><p class="note" id="sNote" hidden></p></div>
-    <div class="tools"><button class="sb" id="sFind" hidden>Find in sky</button><button class="sb ghost" id="sNames" aria-pressed="true">Names</button><button class="sb ghost" id="sClose">Close</button></div></header>
+    <div class="tools"><button class="sb" id="sBack" hidden>Back to the sky</button><button class="sb ghost" id="sNames" aria-pressed="true">Names</button><button class="sb ghost" id="sClose">Close</button></div></header>
   <div class="zoom"><button class="sb" id="sIn" aria-label="Zoom in">+</button><div class="like" id="sLike"></div><button class="sb" id="sOut" aria-label="Zoom out">−</button></div>
   <div class="info" id="sCard" hidden></div>
-  <footer><div class="modes" role="group" aria-label="Look at"><button class="mode" data-mode="stars">Stars</button><button class="mode" data-mode="moon">Moon</button><button class="mode" data-mode="planets">Planets</button></div>
-    <div class="lenses" id="sLenses"></div><div class="lenses" id="sPlanets" hidden></div><div class="credit" id="sCredit"></div></footer>`;
+  <footer>
+    <div class="lenses" id="sLenses"></div><div class="lenses" id="sWorld" hidden></div><div class="credit" id="sCredit"></div></footer>`;
 document.body.appendChild(el);
 const $s = id => el.querySelector('#' + id);
 const skyEl = $s('scopeSky'), namesCv = $s('scopeNames'), glass = $s('scopeGlass'), card = $s('sCard');
 upClose.canvas.id = 'scopeNear'; upClose.canvas.hidden = true; skyEl.after(upClose.canvas);
 
+// The lenses for light no eye can see take a press held until the button fills, so a kid tapping
+// down the row as fast as they can doesn't flash the sky through five strange colours, while one
+// who wants a view gets it. Let go early and the button shakes off the half-filled press. The
+// keyboard holds Space or Enter the same way (see the key handlers below).
+const HOLD = 600;
+function holdToPick(b, pick){
+  let timer = 0;
+  const start = () => {
+    if (timer || b.getAttribute('aria-pressed') === 'true') return;
+    b.classList.add('holding'); Sound.tone(440, {type:'sine', dur:.5, vol:.025});
+    timer = setTimeout(() => { timer = 0; b.classList.remove('holding'); pick(); }, HOLD);
+  };
+  const stop = () => {
+    if (!timer) return;
+    clearTimeout(timer); timer = 0; b.classList.remove('holding');
+    b.classList.remove('early'); void b.offsetWidth; b.classList.add('early');
+  };
+  b.addEventListener('pointerdown', start);
+  for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, stop);
+  b.addEventListener('contextmenu', e => e.preventDefault());
+  b.hold = {start, stop};
+}
+
+// Hubble's and Webb's pictures switch on and off with a tap, over whichever lens is in: they are
+// pictures laid on the sky, not another way of seeing it
+for (const set of pictures.SETS) {
+  const b = document.createElement('button'); b.className = 'lens pics'; b.dataset.pics = set.id; b.style.setProperty('--c', set.color);
+  b.innerHTML = `<i></i>${set.name}`;
+  b.addEventListener('click', () => { showPictures(set, !view.pictures.includes(set.id)); Sound.tone(view.pictures.includes(set.id) ? 988 : 660, {type:'triangle', dur:.08, vol:.05}); });
+  $s('sLenses').append(b);
+}
+{ const g = document.createElement('span'); g.className = 'gap'; g.id = 'sPicsGap'; $s('sLenses').append(g); }
 const BAND_DOT = {micro:'#c0392b', ir:'#e67e22', uv:'#8e44ad', xray:'#3c6fd1', gamma:'#20b2aa'};
 for (const l of LENSES) {
-  if (l.id === 'micro') { const g = document.createElement('span'); g.className = 'gap'; $s('sLenses').append(g); }
+  if (l.id === 'micro') { const g = document.createElement('span'); g.className = 'gap'; g.dataset.unseen = ''; $s('sLenses').append(g); }
   const b = document.createElement('button'); b.className = 'lens'; b.dataset.id = l.id;
+  if (UNSEEN.includes(l.id)) b.dataset.unseen = '';
   b.innerHTML = (BAND_DOT[l.id] ? `<i style="background:${BAND_DOT[l.id]}"></i>` : '') + l.name;
-  b.addEventListener('click', () => { setLens(l.id); Sound.tone(880, {type:'triangle', dur:.08, vol:.05}); });
+  const pick = () => { setLens(l.id); Sound.tone(880, {type:'triangle', dur:.08, vol:.05}); };
+  if (UNSEEN.includes(l.id)) holdToPick(b, pick); else b.addEventListener('click', () => { if (view.lens !== l.id) pick(); });
   $s('sLenses').append(b);
+}
+// the lenses for unseen light stay out of sight until they open, then arrive glowing in the row
+let shut = null;   // whether they were locked when last looked at
+function lenses(){
+  const now = locked(LENSES.find(l => l.id === 'micro'));
+  if (shut === now) return;
+  const opening = shut && !now;
+  shut = now;
+  el.querySelectorAll('#sLenses [data-unseen]').forEach(b => { b.hidden = now; if (opening) b.classList.add('arrived'); });
+  if (opening) [523, 659, 784, 1047].forEach((f, i) => Sound.tone(f, {type:'triangle', t:i*.1, dur:.4, vol:.05}));
 }
 
 const TINT = {mercury:'#c9b8a6', venus:'#fff1cf', mars:'#e8845a', jupiter:'#ead6ad', saturn:'#e3cf94', uranus:'#a9e2e6', neptune:'#7c98ec'};
-for (const b of PLANETS) {
-  const c = document.createElement('button'); c.className = 'lens'; c.dataset.id = b.id;
-  c.innerHTML = `<i style="background:${TINT[b.id]}"></i>${b.name}`;
-  c.addEventListener('click', () => { setMode('planets', b.id); Sound.tone(880, {type:'triangle', dur:.08, vol:.05}); });
-  $s('sPlanets').append(c);
-}
-el.querySelectorAll('.mode').forEach(m => m.addEventListener('click', () => { setMode(m.dataset.mode); Sound.tone(660, {type:'triangle', dur:.1, vol:.05}); }));
 
-let A = null, aladin = null, stars = [], deepSky = [], lens = null, moc = null;
-const mocs = {}, stack = new Map();   // survey id -> {layer, at: its opacity now}
+let A = null, aladin = null, stars = [], deepSky = [], lens = null;
+const stack = new Map();   // survey id -> {layer, at: its opacity now}
 
 // Aladin is fetched on first use, so a kid offline still gets the treehouse, and a cloudy-night note here
 async function boot(){
@@ -168,7 +215,8 @@ async function boot(){
     return false;
   }
   // stereographic, as planetariums draw it: zoomed out, you look around from inside the sphere, not at a ball
-  aladin = A.aladin(skyEl, {fov:view.fov, target:`${aim.ra} ${aim.dec}`, cooFrame:'ICRS', projection:'STG', backgroundColor:'rgb(5,4,10)',
+  const c = centre();
+  aladin = A.aladin(skyEl, {fov:view.fov, target:`${c.ra} ${c.dec}`, cooFrame:'ICRS', projection:'STG', backgroundColor:'rgb(5,4,10)',
     showReticle:false, showZoomControl:false, showLayersControl:false, showGotoControl:false, showFrame:false, showCooLocation:false,
     showFov:false, showProjectionControl:false, showFullscreenControl:false, showSettingsControl:false, showShareControl:false,
     showSimbadPointerControl:false, showStatusBar:false, showContextMenu:false, showCooGrid:false});
@@ -180,19 +228,29 @@ async function boot(){
 }
 
 function setLens(id){
-  const l = lensBy(id); view.lens = l.id; card.hidden = true;
-  el.querySelectorAll('.lens').forEach(b => b.setAttribute('aria-pressed', b.dataset.id === l.id));
-  $s('sLens').textContent = l.name; $s('sTip').textContent = l.tip;
-  $s('sCredit').textContent = `${l.credit} · Sky tiles: CDS Strasbourg, Aladin Lite · Star names: HYG Database (CC BY-SA)`;
+  const l = locked(lensBy(id)) ? LENSES[0] : lensBy(id); view.lens = l.id; card.hidden = true;
+  el.querySelectorAll('#sLenses .lens[data-id]').forEach(b => b.setAttribute('aria-pressed', b.dataset.id === l.id));
+  // Hubble's and Webb's pictures are light of their own kinds; through a lens for another, they go
+  for (const set of pictures.SETS) {
+    const fits = set.lenses.includes(l.id);
+    if (!fits && view.pictures.includes(set.id)) showPictures(set, false);
+    el.querySelectorAll(`#sLenses [data-pics=${set.id}]`).forEach(b => { b.hidden = !fits; });
+  }
+  $s('sPicsGap').hidden = !pictures.SETS.some(set => set.lenses.includes(l.id));
+  $s('sLens').textContent = l.name; words(l);
   if (!aladin || lens === l) return;
   lens = l;
   // new surveys go on top, in the recipe's order, starting invisible; fade() brings them up
   for (const id of Object.keys(l.layers(view.fov))) if (!stack.has(id)) {
     const layer = A.imageHiPS(id); layer.setOpacity(0); aladin.setOverlayImageLayer(layer, id); stack.set(id, {layer, at:0});
   }
-  if (moc) { if (moc.ready) aladin.removeOverlay(moc); moc = null; }
-  if (l.moc) showMoc(l);
   zoomed();
+}
+const picturesOn = () => pictures.SETS.filter(p => view.pictures.includes(p.id));
+function words(l = lensBy(view.lens)){
+  const on = picturesOn();
+  $s('sTip').textContent = l.tip;
+  $s('sCredit').textContent = [l.credit, ...on.map(p => p.credit), 'Sky tiles: CDS Strasbourg, Aladin Lite', 'Star names: HYG Database (CC BY-SA)'].join(' · ');
 }
 // eases every survey toward what the lens wants at this zoom. The old lens holds still underneath
 // until the new one is all the way up, so tiles still on their way show the old sky, never black;
@@ -206,41 +264,49 @@ function fade(dt){
     if (!(id in want) && s.at === 0 && id !== MELLINGER) { aladin.removeImageLayer(id); stack.delete(id); }
   }
 }
-async function showMoc(l){
-  mocs[l.id] = mocs[l.id] || await fetch(l.moc).then(r => r.json());
-  if (lens !== l) return;
-  // Aladin adds a MOC asynchronously, and touching one before it is ready panics its WebAssembly,
-  // so it is shown, hidden or removed only from here on
-  moc = A.MOCFromJSON(mocs[l.id], {color:l.glow, fillColor:l.glow, fill:true, opacity:.45, lineWidth:2, perimeter:true},
-    m => { if (m === moc) zoomed(); else aladin.removeOverlay(m); });
-  aladin.addMOC(moc);
+function showPictures(set, on){
+  view.pictures = view.pictures.filter(id => id !== set.id).concat(on ? [set.id] : []);
+  el.querySelectorAll(`#sLenses [data-pics=${set.id}]`).forEach(b => b.setAttribute('aria-pressed', on));
+  if (!on && pictures.picked()?.set === set) { pictures.choose(null); card.hidden = true; }
+  words(); drawn = '';
+  if (on) pictures.load(set).then(() => { drawn = ''; });
 }
-// the coverage glow goes out once Hubble's or Webb's pictures are big enough to see for themselves
 function zoomed(){
   if (!aladin || !lens) return;
   const f = view.fov;
-  if (moc && moc.ready) f > 3 ? moc.show() : moc.hide();
   $s('sLike').textContent = f > 30 ? 'Like your eyes' : f > 3 ? 'Like binoculars' : f > .3 ? 'Like a backyard telescope' : f > .05 ? 'Like a giant telescope' : 'As close as Hubble';
 }
 
-// ---------- stars, the Moon, or a planet ----------
-// The star view is Aladin's; the Moon and planets each get the close-up instead, and Aladin rests
-const bodyShown = () => view.mode === 'moon' ? BODIES.moon : view.mode === 'planets' ? BODIES[view.planet] || BODIES.jupiter : null;
-let told = '';
-function setMode(mode, planet){
-  view.mode = mode === 'moon' || mode === 'planets' ? mode : 'stars';
-  if (BODIES[planet] && planet !== 'moon') view.planet = planet;
+// ---------- the sky, or one world up close ----------
+// Nothing is picked from a list: a kid finds the Moon or a planet in the sky and taps it to look
+// closer. The star view is Aladin's; up close has its own picture, and Aladin rests.
+let near = null, nearLens = 0, told = '';
+const bodyShown = () => near;
+function closeTo(b){
+  near = b || null;
   card.hidden = true; drawn = told = '';
-  el.querySelectorAll('.mode').forEach(m => m.setAttribute('aria-pressed', m.dataset.mode === view.mode));
-  el.querySelectorAll('#sPlanets .lens').forEach(c => c.setAttribute('aria-pressed', c.dataset.id === view.planet));
-  const b = bodyShown();
-  $s('sLenses').hidden = !!b; $s('sPlanets').hidden = view.mode !== 'planets'; $s('sLike').hidden = !!b; $s('sFind').hidden = true;
+  $s('sLenses').hidden = !!b; $s('sLike').hidden = !!b; $s('sBack').hidden = !b; $s('sWorld').hidden = true;
   // hidden, not removed: Aladin keeps its size and tiles for the trip back
   skyEl.style.visibility = b ? 'hidden' : ''; upClose.canvas.hidden = !b;
   if (!b) { setLens(view.lens); if (aladin && game.activity === 'telescope') resume(); return; }
   if (aladin) park();
   upClose.show(b);
-  $s('sLens').textContent = b.name; $s('sCredit').textContent = b.credit; $s('sTip').textContent = '';
+  $s('sLens').textContent = b.name; $s('sTip').textContent = '';
+  // a world seen through more than one spacecraft's eyes gets its own row of lenses, here only
+  const row = $s('sWorld'), ls = upClose.lenses(b);
+  row.innerHTML = ''; row.hidden = ls.length < 2;
+  ls.forEach((l, i) => {
+    const c = document.createElement('button'); c.className = 'lens';
+    c.innerHTML = (l.glow ? `<i style="background:${l.glow}"></i>` : '') + l.name;
+    c.addEventListener('click', () => { if (nearLens !== i) { worldLens(b, i); Sound.tone(880, {type:'triangle', dur:.08, vol:.05}); } });
+    row.append(c);
+  });
+  worldLens(b, 0);
+}
+function worldLens(b, i){
+  nearLens = i; upClose.lens(i); told = '';
+  $s('sWorld').querySelectorAll('.lens').forEach((c, j) => c.setAttribute('aria-pressed', j === i));
+  $s('sCredit').textContent = upClose.lenses(b)[i]?.credit || b.credit;
 }
 
 // what a kid wants to know about a body tonight: is it up, where, and when it rises if not
@@ -266,12 +332,14 @@ function travelled(s){
   const m = s.late/60;
   return m < 90 ? `The light you see left it ${Math.round(m)} minutes ago.` : `The light you see left it ${Math.round(m/6)/10} hours ago.`;
 }
-function bodyCard(b, fromStars){
-  const s = sight(b, skyNow(), place), lines = [status(b, skyNow()), ...(fromStars ? b.facts.slice(0, 1) : b.facts), travelled(s)];
-  card.innerHTML = `<em>${b.id === 'moon' ? 'Our Moon' : 'Planet'}</em><h3></h3>${lines.map(t => `<p>${t}</p>`).join('')}
-    <div class="row">${fromStars ? '<button class="sb" data-go>Look closer</button>' : ''}<button class="sb ghost" data-x>OK</button></div>`;
+// closer: offer to fly up to it, from the star view or from Jupiter to one of its moons
+function bodyCard(b, closer){
+  const s = sight(b, skyNow(), place), lines = [status(b, skyNow()), ...(closer ? b.facts.slice(0, 1) : b.facts), travelled(s)];
+  const kind = b.id === 'moon' ? 'Our Moon' : b.around ? 'Moon of Jupiter' : 'Planet';
+  card.innerHTML = `<em>${kind}</em><h3></h3>${lines.map(t => `<p>${t}</p>`).join('')}
+    <div class="row">${closer ? `<button class="sb" data-go>Look closer</button>` : ''}<button class="sb ghost" data-x>OK</button></div>`;
   card.querySelector('h3').textContent = b.name;
-  card.querySelector('[data-go]')?.addEventListener('click', () => setMode(b.id === 'moon' ? 'moon' : 'planets', b.id));
+  card.querySelector('[data-go]')?.addEventListener('click', () => closeTo(b));
   card.querySelector('[data-x]').addEventListener('click', () => { card.hidden = true; });
   card.hidden = false; Sound.tone(1046, {type:'sine', dur:.12, vol:.05});
 }
@@ -281,24 +349,35 @@ function placeCard(b, q){
   card.querySelector('[data-x]').addEventListener('click', () => { card.hidden = true; });
   card.hidden = false; Sound.tone(1046, {type:'sine', dur:.12, vol:.05});
 }
-$s('sFind').addEventListener('click', () => {
+// back out to the sky, with the world just left in view; a moon of Jupiter with its family round it
+function backToSky(){
   const b = bodyShown(); if (!b) return;
   const s = sight(b, skyNow(), place);
-  setMode('stars'); flyTo(s.ra, s.dec, Math.max(.003, s.radius*(b.rings ? 16 : 7)));
-});
+  closeTo(null); flyTo(s.ra, s.dec, b.around ? .25 : Math.max(.003, s.radius*(b.rings ? 16 : 7)));
+}
+$s('sBack').addEventListener('click', backToSky);
 
 // ---------- tonight, from here ----------
 // The sky shows tonight over wherever the treehouse is: now if it's dark there, else the coming
-// nightfall. Its clock then runs in real time, so the stars rise and set while you watch.
+// nightfall, held at that moment while the telescope is open. A real sky turns, and a view kept level
+// with the horizon must spin to follow it, fastest overhead, so a turning sky slides away under a
+// kid's hand all by itself.
 const R = Math.PI/180;
-let place = where(), t0 = 0, opened = 0;
-const skyNow = () => t0 + Date.now() - opened;
-const lstNow = () => siderealTime(skyNow(), place.lon);
-// the telescope tracks: it holds a spot among the stars, and only a kid's hand moves it
-const aim = {ra:0, dec:0};
-const facing = () => toHorizon(aim.ra, aim.dec, place.lat, lstNow());
-const clampAlt = a => Math.max(-8, Math.min(89.9, a));
-function look(alt, az){ Object.assign(aim, toSky(clampAlt(alt), az, place.lat, lstNow())); }
+let place = where(), t0 = 0, lst = 0;
+const skyNow = () => t0;
+// where the telescope points, as a direction from the deck; only a kid's hand moves it
+const aim = {alt:35, az:180};
+const facing = () => aim;
+const centre = () => toSky(aim.alt, aim.az, place.lat, lst);
+// Tipping down stops with the skyline two thirds of the way down the view, and tipping up stops with
+// the point overhead a little way below the top. Centred, that point is where a level view has to
+// spin round on the spot to turn at all.
+const tall = () => 4*Math.atan(Math.tan(view.fov*R/4)*el.clientHeight/(el.clientWidth || 1))/R;
+const ceiling = () => Math.min(89.5, 90 - .3*tall());
+function look(alt, az){
+  aim.alt = Math.max(.2*tall(), Math.min(ceiling(), alt));
+  aim.az = (az % 360 + 360) % 360;
+}
 // the hills along the skyline, a degree or two high
 const hill = az => { const a = az*R; return 1.4 + .9*Math.sin(3*a + .7) + .5*Math.sin(7*a + 2.1) + .25*Math.sin(17*a); };
 const COMPASS = [[0, 'North'], [90, 'East'], [180, 'South'], [270, 'West']];
@@ -320,8 +399,12 @@ function drawOverlay(lst, sunAlt, ms){
   // until the Sun is 12° down the sky still glows (the same line tonight() draws), washing faint stars out
   const glow = clamp01((sunAlt + 12)/14)*.9;
   if (glow > 0) { g.fillStyle = `rgba(78,112,168,${glow})`; g.fillRect(0, 0, w, h); }
+  const project = (ra, dec) => { const p = aladin.world2pix(ra, dec); return p && isFinite(p[0]) && isFinite(p[1]) ? p : null; };
+  pictures.draw(g, project, Math.min(devicePixelRatio, 2));
+  pictures.outline(g, picturesOn(), centre(), Math.max(view.fov, tall())*.75, project);
   const shown = drawBodies(g, w, h, lst, ms);
   drawGround(g, w, h, lst);
+  drawOverhead(g, w, h, lst);
   if (!view.names) return;
   const f = view.fov, starLimit = Math.min(6.5, 1.2 + 2.6*Math.log10(100/f)) - glow*2;
   // the Moon and planets are named first, and whatever they cover goes unnamed
@@ -329,7 +412,7 @@ function drawOverlay(lst, sunAlt, ms){
     if (m.alt < hill(m.az)) continue;
     placed.push({box:[m.x - m.r, m.y - m.r, m.x + m.r, m.y + m.r], o:m.b, body:true, x:m.x, y:m.y});
     const tx = m.x + Math.max(m.r, 4) + 6, tw = g.measureText(m.b.name).width, box = [tx - 4, m.y - 10, tx + tw + 4, m.y + 10];
-    if (m.r > w/3 || placed.some(q => !q.body && box[0] < q.box[2] && box[2] > q.box[0] && box[1] < q.box[3] && box[3] > q.box[1])) continue;
+    if (m.r > w/3 || placed.some(q => q.o !== m.b && box[0] < q.box[2] && box[2] > q.box[0] && box[1] < q.box[3] && box[3] > q.box[1])) continue;
     placed.push({box, o:m.b, body:true, x:m.x, y:m.y});
     g.font = '900 14px Nunito, system-ui, sans-serif'; g.textBaseline = 'middle'; g.lineJoin = 'round';
     g.lineWidth = 3; g.strokeStyle = 'rgba(5,4,10,.85)'; g.strokeText(m.b.name, tx, m.y);
@@ -357,13 +440,22 @@ function drawOverlay(lst, sunAlt, ms){
 // The Moon and planets, drawn where they are tonight from the same picture the close-up shows,
 // turned so the zenith at their spot on the screen is up. The Moon is always drawn as a disc you can
 // see the phase of, a little bigger than life when zoomed far out; a planet is a dot until it grows.
+// Jupiter's moons are dots too, once zoomed in enough to see them apart from Jupiter.
 function drawBodies(g, w, h, lst, ms){
   const out = [];
-  for (const b of [BODIES.moon, ...PLANETS]) {
+  let jupiter = null;
+  for (const b of [BODIES.moon, ...PLANETS, ...MOONS]) {
     const s = sight(b, ms, place), p = aladin.world2pix(s.ra, s.dec);
     const r = s.radius*w/view.fov, reach = b.rings ? r*2.4 : r;
     if (!p || p[0] < -reach - 40 || p[1] < -reach - 40 || p[0] > w + reach + 40 || p[1] > h + reach + 40) continue;
     const [x, y] = p;
+    if (b.id === 'jupiter') jupiter = {x, y, r};
+    if (b.around) {
+      if (!jupiter || Math.hypot(x - jupiter.x, y - jupiter.y) < Math.max(jupiter.r, 3) + 8) continue;
+      out.push({b, x, y, r:2, alt:s.alt, az:s.az});
+      g.fillStyle = '#f3ead2'; g.beginPath(); g.arc(x, y, Math.max(1.6, r), 0, 7); g.fill();
+      continue;
+    }
     out.push({b, x, y, r:Math.max(r, b.id === 'moon' ? 6 : 3), alt:s.alt, az:s.az});
     if (b.id !== 'moon' && r < 3) {
       g.fillStyle = TINT[b.id]; g.shadowColor = TINT[b.id]; g.shadowBlur = 8;
@@ -411,11 +503,16 @@ function tap(x, y){
   const b = bodyShown();
   if (b) {
     const hit = upClose.tapped(x, y, el.clientWidth, el.clientHeight);
-    if (hit === true) bodyCard(b, false); else if (hit) placeCard(b, hit); else card.hidden = true;
+    if (!hit) card.hidden = true; else if (hit.moon) bodyCard(hit.moon, true); else if (hit.place) placeCard(b, hit.place); else bodyCard(b, false);
     return;
   }
   const hit = placed.find(q => x >= q.box[0] - 6 && x <= q.box[2] + 6 && y >= q.box[1] - 6 && y <= q.box[3] + 6);
-  if (!hit) { card.hidden = true; return; }
+  if (!hit) {
+    // where pictures overlap, each tap on the same spot steps out to the next, wider one
+    const here = pictures.under(x, y), i = here.indexOf(pictures.picked());
+    if (here.length) pictureCard(here[(i + 1)%here.length], (i + 1)%here.length, here.length); else card.hidden = true;
+    return;
+  }
   if (hit.body) { bodyCard(hit.o, true); return; }
   const o = hit.o; let kind, lines;
   if (hit.deep) {
@@ -435,14 +532,68 @@ function tap(x, y){
   card.querySelector('[data-x]').addEventListener('click', () => { card.hidden = true; });
   card.hidden = false; Sound.tone(1046, {type:'sine', dur:.12, vol:.05});
 }
+function pictureCard(p, i, n){
+  pictures.choose(p);
+  card.innerHTML = `<em></em><h3></h3>
+    <div class="row"><button class="sb" data-go>Fill the view</button><button class="sb ghost" data-hide>Hide picture</button><button class="sb ghost" data-x>OK</button></div>`;
+  card.querySelector('em').textContent = `${p.set.name} picture${n > 1 ? ` · ${i + 1} of ${n} here` : ''}`;
+  card.querySelector('h3').textContent = p.t;
+  card.querySelector('[data-go]').addEventListener('click', () => {
+    card.hidden = true;
+    const c = p.c, ra = (c[0] + c[4])/2 + (Math.abs(c[0] - c[4]) > 180 ? 180 : 0), dec = (c[1] + c[5])/2;
+    flyTo(ra % 360, dec, Math.max(.003, Math.hypot((c[0] - c[4])*Math.cos(dec*R), c[1] - c[5])*1.1));
+  });
+  card.querySelector('[data-hide]').addEventListener('click', () => { card.hidden = true; pictures.choose(null); });
+  card.querySelector('[data-x]').addEventListener('click', () => { card.hidden = true; });
+  card.hidden = false; Sound.tone(1046, {type:'sine', dur:.12, vol:.05});
+}
 
 // ---------- steering: drag to turn, pinch or scroll to zoom, tap to ask what something is ----------
 let wantFov = view.fov, fly = null;
 const zoom = k => { if (bodyShown()) { upClose.zoom(k); return; } fly = null; wantFov = Math.min(150, Math.max(.002, wantFov*k)); };
-// a drag across the screen turns the telescope by about the width of what it sees
+// A drag across the screen turns the telescope by about the width of what it sees. Looking high, a
+// sideways turn swings round the point overhead, and following the finger exactly would whirl it,
+// so up there it turns slower than the finger.
 function turn(dx, dy){
-  const here = facing(), k = view.fov/el.clientWidth;
-  look(here.alt + dy*k, here.az - dx*k/Math.max(.2, Math.cos(here.alt*R)));
+  const k = view.fov/el.clientWidth;
+  if (dy > 0 && aim.alt >= ceiling() - .01) overhead();
+  if (Math.abs(dx) > Math.abs(dy)) cueUntil = 0;
+  look(aim.alt + dy*k, aim.az - dx*k/Math.max(.5, Math.cos(aim.alt*R)));
+}
+// Held or pushed again up against the top of the sky, arrows slide out sideways from the mark
+// overhead: from there, up is no direction at all, only round and round. A first nudge that just
+// reaches the top isn't asking for anything, so it shows nothing.
+let pushFrom = 0, pushLast = -1e9, pushes = 0, cueUntil = 0;
+const bumping = () => performance.now() < cueUntil;
+function overhead(){
+  const now = performance.now();
+  if (now - pushLast > 250) { pushes = now - pushLast < 2000 ? pushes + 1 : 1; pushFrom = now; }
+  pushLast = now;
+  if (now - pushFrom > 300 || pushes > 1) {
+    if (!bumping()) Sound.tone(330, {type:'triangle', dur:.12, vol:.04});
+    cueUntil = now + 1400;
+  }
+}
+// the point straight overhead, marked wherever it is on screen, so the top of the sky has a place
+function drawOverhead(g, w, h, lst){
+  const [x, y] = px(90, 0, lst);
+  if (!(x > -20 && x < w + 20 && y > -20 && y < h + 20)) return;
+  if (bumping()) {
+    const now = performance.now(), slide = (now/600) % 1, fade = Math.min(1, (cueUntil - now)/400);
+    g.save(); g.strokeStyle = '#ffd98a'; g.lineWidth = 4; g.lineCap = 'round'; g.lineJoin = 'round';
+    for (const side of [-1, 1]) for (let i = 0; i < 3; i++) {
+      const d = 34 + (i + slide)*24, cx = x + side*d;
+      g.globalAlpha = fade*(1 - (i + slide)/3);
+      g.beginPath(); g.moveTo(cx - side*9, y - 16); g.lineTo(cx + side*9, y); g.lineTo(cx - side*9, y + 16); g.stroke();
+    }
+    g.restore();
+  }
+  g.strokeStyle = 'rgba(217,164,65,.9)'; g.lineWidth = 2;
+  g.beginPath(); g.arc(x, y, 9, 0, 7); g.moveTo(x - 15, y); g.lineTo(x - 5, y); g.moveTo(x + 5, y); g.lineTo(x + 15, y);
+  g.moveTo(x, y - 15); g.lineTo(x, y - 5); g.moveTo(x, y + 5); g.lineTo(x, y + 15); g.stroke();
+  g.font = '900 13px Nunito, system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'top'; g.lineJoin = 'round';
+  g.lineWidth = 3; g.strokeStyle = 'rgba(5,4,10,.85)'; g.strokeText('Straight up', x, y + 18);
+  g.fillStyle = '#d9a441'; g.fillText('Straight up', x, y + 18); g.textAlign = 'start';
 }
 function flyTo(ra, dec, fov){
   fly = {ra, dec, fov};
@@ -450,11 +601,11 @@ function flyTo(ra, dec, fov){
 }
 // swing round to the target first, then zoom in once it's on screen
 function flying(dt){
-  const lst = lstNow(), at = toHorizon(aim.ra, aim.dec, place.lat, lst), to = toHorizon(fly.ra, fly.dec, place.lat, lst), k = Math.min(1, dt*3);
-  const daz = ((to.az - at.az + 540) % 360) - 180, left = Math.hypot(daz*Math.cos(at.alt*R), to.alt - at.alt);
+  const to = toHorizon(fly.ra, fly.dec, place.lat, lst), k = Math.min(1, dt*3), alt = Math.min(89.5, to.alt);
+  const daz = ((to.az - aim.az + 540) % 360) - 180, left = Math.hypot(daz*Math.cos(aim.alt*R), alt - aim.alt);
   if (left < view.fov*.3) wantFov = fly.fov;
-  if (left < .0005 && Math.abs(Math.log(view.fov/fly.fov)) < .01) { Object.assign(aim, {ra:fly.ra, dec:fly.dec}); fly = null; return; }
-  look(at.alt + (to.alt - at.alt)*k, at.az + daz*k);
+  if (left < .0005 && Math.abs(Math.log(view.fov/fly.fov)) < .01) { look(alt, to.az); fly = null; return; }
+  look(aim.alt + (alt - aim.alt)*k, aim.az + daz*k);
 }
 
 const pointers = new Map();
@@ -473,7 +624,7 @@ glass.addEventListener('pointermove', e => {
     else wantFov = view.fov = Math.min(150, Math.max(.002, drag.fov*drag.span/span()));
     return;
   }
-  if (bodyShown()) upClose.orbit(dx, dy); else if (aladin) turn(dx, dy);
+  if (bodyShown()) upClose.pan(dx, dy); else if (aladin) turn(dx, dy);
 });
 const lift = e => {
   if (!pointers.delete(e.pointerId)) return;
@@ -482,10 +633,30 @@ const lift = e => {
   else drag = {moved:99, span:span(), fov:wantFov};
 };
 glass.addEventListener('pointerup', lift); glass.addEventListener('pointercancel', lift);
-glass.addEventListener('wheel', e => { e.preventDefault(); zoom(e.deltaY > 0 ? 1.15 : 1/1.15); }, {passive:false});
+// A mouse wheel zooms. A trackpad speaks in wheel events too: two fingers sliding turn the telescope
+// the way a drag does, and a pinch, which browsers send as a wheel with Ctrl held, zooms with the
+// fingers. A wheel clicks in big even steps straight up and down; a trackpad glides in small ones.
+let pad = -1e9, pinched = -1e9;
+glass.addEventListener('wheel', e => {
+  e.preventDefault(); fly = null;
+  const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? el.clientHeight : 1, dx = e.deltaX*unit, dy = e.deltaY*unit;
+  if (e.ctrlKey) { pinched = e.timeStamp; zoom(Math.exp(dy*.01)); return; }
+  if (e.deltaMode === 0 && (dx || !Number.isInteger(dy) || Math.abs(dy) < 50)) pad = e.timeStamp;
+  if (e.timeStamp - pad < 400) { if (bodyShown()) upClose.pan(-dx, -dy); else if (aladin) turn(-dx, -dy); return; }
+  zoom(dy > 0 ? 1.15 : 1/1.15);
+}, {passive:false});
+// Safari tells of a trackpad pinch with its own gesture events instead; a touch screen's pinch is
+// already handled by the pointers above
+let gesture = 1;
+glass.addEventListener('gesturestart', e => { e.preventDefault(); gesture = 1; });
+glass.addEventListener('gesturechange', e => {
+  e.preventDefault();
+  if (pointers.size < 2 && e.timeStamp - pinched > 300) zoom(gesture/e.scale);
+  gesture = e.scale;
+});
 
 $s('sIn').addEventListener('click', () => zoom(.5)); $s('sOut').addEventListener('click', () => zoom(2));
-$s('sNames').addEventListener('click', () => { view.names = !view.names; $s('sNames').setAttribute('aria-pressed', view.names); });
+$s('sNames').addEventListener('click', () => { view.names = !view.names; $s('sNames').setAttribute('aria-pressed', view.names); upClose.refresh(); });
 $s('sClose').addEventListener('click', () => close());
 
 // Aladin redraws every frame for as long as it lives and has no off switch, so closing the telescope
@@ -501,38 +672,52 @@ function loop(now){
   if (game.activity !== 'telescope') return;
   const dt = Math.min(.1, (now - last)/1000 || 0); last = now;
   const ms = skyNow(), b = bodyShown();
+  steer(b, dt);
   if (b) closeUp(b, ms, dt); else if (aladin) starsUp(ms, dt);
   const shown = localTime(place, ms);
   if (shown !== clockShown) { clockShown = shown; $s('sWhere').textContent = `Tonight · ${place.name} · ${shown}`; }
   // the time spent looking is saved as it goes, so closing the tab doesn't lose it
   if (now - kept > 20000) { keep(); kept = now; }
+  lenses();
   raf = requestAnimationFrame(loop);
 }
 function closeUp(b, ms, dt){
   const w = el.clientWidth, h = el.clientHeight;
-  if (upClose.draw(ms, place, w, h, dt)) { const g = overlay(w, h); if (view.names) upClose.names(g, ms, place, w, h); }
+  if (upClose.draw(ms, place, w, h, dt)) upClose.names(overlay(w, h), ms, place, w, h, view.names);
   const minute = `${b.id}:${Math.floor(ms/60000)}`;
   if (minute !== told) {
-    told = minute; $s('sTip').textContent = status(b, ms);
-    const s = sight(b, ms, place); $s('sFind').hidden = !(s.alt > hill(s.az));
+    told = minute; $s('sTip').textContent = [status(b, ms), upClose.lenses(b)[nearLens]?.tip].filter(Boolean).join(' ');
   }
+}
+// arrows glide while held, about a third of a view a second, easing in and out
+const held = new Set(), glide = {x:0, y:0};
+function steer(b, dt){
+  let x = 0, y = 0;
+  for (const k of held) { x += TURN[k][0]; y += TURN[k][1]; }
+  const k = Math.min(1, dt*6); glide.x += (x - glide.x)*k; glide.y += (y - glide.y)*k;
+  if (Math.abs(glide.x) + Math.abs(glide.y) < 1e-3) return;
+  if (b) upClose.pan(-glide.x*el.clientHeight*.7*dt, -glide.y*el.clientHeight*.7*dt);
+  else if (aladin) turn(-glide.x*el.clientWidth*.35*dt, -glide.y*el.clientWidth*.35*dt);
 }
 function starsUp(ms, dt){
   if (fly) flying(dt);
   if (Math.abs(Math.log(wantFov/view.fov)) > .001) { view.fov *= Math.pow(wantFov/view.fov, Math.min(1, dt*8)); aladin.setFoV(view.fov); zoomed(); }
-  const lst = lstNow();
-  const to = `${aim.ra},${aim.dec}`;
-  if (to !== sent) { sent = to; aladin.gotoRaDec(aim.ra, aim.dec); }
-  // keep the way up to the zenith pointing up the screen; Aladin refuses a rotation of exactly 0
-  aladin.setRotation(-parallactic(aim.ra, aim.dec, place.lat, lst) || 1e-6);
+  // zooming out raises the floor, and the view rises with it
+  look(aim.alt, aim.az);
+  const c = centre(), to = `${c.ra},${c.dec}`;
+  if (to !== sent) {
+    sent = to; aladin.gotoRaDec(c.ra, c.dec);
+    // keep the way up to the zenith pointing up the screen; Aladin refuses a rotation of exactly 0
+    aladin.setRotation(-parallactic(c.ra, c.dec, place.lat, lst) || 1e-6);
+  }
   fade(dt);
-  const at = [aim.ra, aim.dec, view.fov, view.names, el.clientWidth, el.clientHeight, lst.toFixed(2), upClose.maps].join();
+  const at = [to, view.fov, view.names, el.clientWidth, el.clientHeight, upClose.maps, pictures.version, view.pictures, bumping() && performance.now()].join();
   if (at !== drawn) { drawn = at; drawOverlay(lst, sunAltitude(ms, place.lat, place.lon), ms); }
 }
 let since = 0;
 function keep(){
   const n = Date.now(); view.seconds += (n - since)/1000; since = n;
-  if (aladin) Object.assign(view, facing());
+  Object.assign(view, aim);
   save('telescope', view);
 }
 // a sky the Sun never leaves is worth a word, or the kid wonders where the stars went
@@ -549,31 +734,36 @@ export async function openTelescope(){
   document.documentElement.classList.add('stargazing'); el.hidden = false; card.hidden = true;
   el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
   $s('sNames').setAttribute('aria-pressed', view.names);
-  place = where(); opened = since = Date.now(); t0 = tonight(place, opened); fly = null; wantFov = view.fov;
+  place = where(); since = Date.now(); t0 = tonight(place, since); lst = siderealTime(t0, place.lon); fly = null; wantFov = view.fov;
   look(view.alt, view.az); nightNote(); clockShown = '';
   Sound.duck(true); [392, 523, 659].forEach((f, i) => Sound.tone(f, {type:'sine', t:i*.12, dur:.5, vol:.05}));
-  setMode(view.mode);
+  lenses(); closeTo(null);
   // the Moon and planets ship with the game, so they still work when the sky's tiles can't come down
   const sky = await boot();
   if (game.activity !== 'telescope') return;
-  if (sky) { setMode(view.mode); aladin.setFoV(view.fov); zoomed(); }
+  if (sky) { closeTo(null); aladin.setFoV(view.fov); for (const set of picturesOn()) showPictures(set, true); zoomed(); }
   drawn = sent = ''; last = performance.now(); kept = last; raf = requestAnimationFrame(loop);
 }
 function close(){
   if (game.activity !== 'telescope') return;
   keep(); if (aladin) park();
   game.activity = null; el.hidden = true; document.documentElement.classList.remove('stargazing'); cancelAnimationFrame(raf);
-  pointers.clear(); drag = null; glass.classList.remove('dragging');
+  pointers.clear(); drag = null; glass.classList.remove('dragging'); held.clear();
   Sound.duck(false); clock.getDelta();
 }
 const TURN = {ArrowLeft:[-1, 0], ArrowRight:[1, 0], ArrowUp:[0, -1], ArrowDown:[0, 1]};
 addEventListener('keydown', e => {
   if (game.activity !== 'telescope') return;
   e.stopPropagation();
-  if (e.key === 'Escape') { if (!card.hidden) card.hidden = true; else close(); }
+  if ((e.key === ' ' || e.key === 'Enter') && e.target.hold) { e.preventDefault(); if (!e.repeat) e.target.hold.start(); }
+  else if (e.key === 'Escape') { if (!card.hidden) card.hidden = true; else if (bodyShown()) backToSky(); else if (pictures.picked()) pictures.choose(null); else close(); }
   else if (e.key === '+' || e.key === '=') zoom(.5);
   else if (e.key === '-' || e.key === '_') zoom(2);
-  // arrows turn the telescope a fifth of a screen
-  else if (TURN[e.key] && bodyShown()) { e.preventDefault(); upClose.orbit(-TURN[e.key][0]*el.clientHeight/8, -TURN[e.key][1]*el.clientHeight/8); }
-  else if (TURN[e.key] && aladin) { e.preventDefault(); fly = null; turn(-TURN[e.key][0]*el.clientWidth/5, -TURN[e.key][1]*el.clientWidth/5); }
+  else if (TURN[e.key]) { e.preventDefault(); fly = null; held.add(e.key); }
 }, true);
+addEventListener('keyup', e => {
+  held.delete(e.key);
+  if (game.activity !== 'telescope' || !e.target.hold || (e.key !== ' ' && e.key !== 'Enter')) return;
+  e.preventDefault(); e.target.hold.stop();
+}, true);
+addEventListener('blur', () => held.clear());

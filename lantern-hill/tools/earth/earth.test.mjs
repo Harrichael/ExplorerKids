@@ -1,15 +1,24 @@
-// The world model against places a child might tap, Hoot's riddles against the map, and the food
-// webs against the rules every web must keep. Runs on the built data:
+// The world model against places a child might tap, Hoot's riddles against the map, the food webs
+// against the rules every web must keep, the geography globe's wonders and landforms against the map,
+// and the countries globe's facts against what every child's atlas says. Runs on the built data:
 //   node --test tools/earth/*.test.mjs   (from lantern-hill/)
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { BIOMES, WEBS, visit } from '../../web/js/earth/biomes.js';
-import { makeEarth } from '../../web/js/earth/model.js';
-import { eatenBy, hunter, whatIf } from '../../web/js/globe/food-web.js';
+import { makeGeography } from '../../web/js/earth/geography.js';
+import { LANDFORMS, LANDMARKS, landformBy, landformOf } from '../../web/js/earth/landforms.js';
+import { arc, makeEarth } from '../../web/js/earth/model.js';
+import { foundedSaying, governmentOf } from '../../web/js/earth/nations.js';
+import { WONDERS } from '../../web/js/earth/wonders.js';
+import { arrivals, asked, eatenBy, makers, whatIf } from '../../web/js/globe/food-web.js';
+import { choices } from '../../web/js/globe/landform-quiz.js';
+import { oddOneOut } from '../../web/js/globe/photos.js';
+import { judge } from '../../web/js/globe/wonder-hunt.js';
 
-const earth = makeEarth(JSON.parse(readFileSync(new URL('../../web/data/earth.json', import.meta.url), 'utf8')));
+const data = name => JSON.parse(readFileSync(new URL(`../../web/data/${name}.json`, import.meta.url), 'utf8'));
+const earth = makeEarth(data('earth')), geo = makeGeography(data('geography'));
 
 test('famous places are in the biome you would expect, with their own food web', () => {
   const cases = [
@@ -40,9 +49,11 @@ test('a web from the same realm beats a closer one across the border', () => {
   assert.equal(earth.placeAt(22.3, 80.6).web.id, 'kanha');
   // Gabon is Afrotropic, so it gets the Congo, not whichever rainforest is nearest by distance
   assert.equal(earth.placeAt(-1, 12).web.id, 'congo');
-  // the Gobi has no web of its own, and borrows the Sahara's: same realm, and labelled with where it's from
+  // Tanzania's coast is nearer Madagascar than the Congo, but lemurs keep to their island
+  assert.equal(earth.placeAt(-7, 39).web.id, 'mount-kenya');
+  // the Gobi is the Sahara's realm, but too far to share its fennec foxes and cheetahs
   const gobi = earth.placeAt(43, 105);
-  assert.equal(gobi.biomeId, 'desert'); assert.equal(gobi.web.place, 'the Sahara');
+  assert.equal(gobi.biomeId, 'desert'); assert.equal(gobi.web.id, 'gobi');
 });
 
 test('water knows which sea it is', () => {
@@ -74,6 +85,20 @@ test('every spot on Earth gets a biome and a food web', () => {
     const p = earth.placeAt(lat, lon);
     assert.ok(p.biome && p.web, `${lat},${lon} (${p.name}, ${p.biomeId})`);
   }
+});
+
+test("almost everywhere, the web shown is one whose animals really live there", () => {
+  // the rest are slivers at the edges of regions and islands too small for a web of their own,
+  // where the card says the web is only from the same biome
+  let misfits = 0, all = 0;
+  for (let lat = -89.5; lat < 90; lat += 1) for (let lon = -179.5; lon < 180; lon += 1) {
+    all++; if (!earth.placeAt(lat, lon).webFits) misfits++;
+  }
+  assert.ok(misfits/all < .003, `${misfits} of ${all} spots have no web of their own`);
+  // every lake, reef and sea the map names has a web of its own, but for a lagoon and the polar seas, whose webs are their biome's
+  const named = new Set(WEBS.flatMap(w => w.waters || []));
+  const d = data('earth'), waters = [...d.lakes, ...d.reefs].map(l => l.name).concat(d.seas.map(s => s[0]));
+  assert.deepEqual([...new Set(waters.filter(n => !named.has(n)))].sort(), ['Arctic Ocean', 'Lago Madre', 'Southern Ocean']);
 });
 
 test('every food web is a web: it starts from plants or algae and has no loops', () => {
@@ -108,8 +133,14 @@ test("Hoot's riddles point the right way: most of each biome lies in the band of
 
 test("every food web can carry Hoot's lessons", () => {
   for (const w of WEBS) {
-    const h = hunter(w);
-    assert.ok(h && h.eats.length > 1, `${w.id} has no hunter that eats more than one thing`);
+    // built a piece at a time: the makers, then every animal once, each after everything it eats
+    const order = [...makers(w), ...arrivals(w).map(s => s.name)];
+    assert.deepEqual([...order].sort(), w.species.map(s => s.name).sort(), `${w.id}: someone never arrives`);
+    for (const s of arrivals(w)) for (const f of s.eats) assert.ok(order.indexOf(f) < order.indexOf(s.name), `${w.id}: ${s.name} arrives before ${f}`);
+    // Hoot asks about a handful of them, mostly hunters; plant eaters that only eat plants are easy and samey
+    const ask = [...asked(w)].map(n => w.species.find(s => s.name === n)), grazers = ask.filter(s => s.eats.every(f => makers(w).includes(f)));
+    assert.ok(ask.length >= 5 && ask.length <= 6, `${w.id} asks about ${ask.length}`);
+    assert.ok(grazers.length <= 2, `${w.id} asks about ${grazers.length} plant eaters`);
     const q = whatIf(w);
     assert.ok(q, `${w.id} has nothing to make disappear`);
     assert.ok(q.gone.eats.includes(q.food.name), `${w.id}: ${q.gone.name} doesn't eat ${q.food.name}`);
@@ -118,4 +149,137 @@ test("every food web can carry Hoot's lessons", () => {
   // the classic case: with no prairie dogs, more grass and fewer of the ferrets that hunt them
   const plains = whatIf(WEBS.find(w => w.id === 'great-plains'));
   assert.deepEqual([plains.gone.name, plains.food.name, plains.eater.name], ['Prairie dog', 'Grass', 'Black-footed ferret']);
+});
+
+test('everyone in every food web has a photo, with credit to whoever took it', () => {
+  const photos = JSON.parse(readFileSync(new URL('../../web/wildlife/photos.json', import.meta.url), 'utf8'));
+  for (const w of WEBS) for (const s of w.species) {
+    const p = photos[`${w.id}/${s.name}`] || photos[s.name];
+    assert.ok(p, `${w.id}: no photo of ${s.name}; run tools/earth/photos.mjs`);
+    assert.ok(existsSync(new URL(`../../web/wildlife/${p.file}`, import.meta.url)), `${s.name}: ${p.file} is missing`);
+    assert.ok(p.by && p.license && p.page, `${s.name}: the photo has no credit`);
+  }
+});
+
+test('the wonders are where Hoot says, and their sights are part of them', () => {
+  for (const w of WONDERS) {
+    if (w.country) assert.equal(geo.countryAt(...w.at)?.name, w.country, w.id);
+    for (const s of w.sights || []) assert.ok(arc(...s.at, ...w.at) < 250, `${w.id}: ${s.name} is ${Math.round(arc(...s.at, ...w.at))} km away`);
+  }
+  assert.equal(new Set(WONDERS.map(w => w.id)).size, WONDERS.length);
+  // and the map names the countries a guess lands in, capitals and all
+  assert.deepEqual(['France', 'Paris'], [geo.countryAt(48.86, 2.35).name, geo.countryAt(48.86, 2.35).capital]);
+  assert.equal(geo.countryAt(-4.3, 15.3).name, 'Democratic Republic of the Congo');
+  assert.equal(geo.countryAt(0, -30), null);
+});
+
+test("Hoot's photo riddles say how far off a guess is, which way to go, and whether it's warmer", () => {
+  const pyramid = WONDERS.find(w => w.id === 'pyramids');
+  const fromParis = judge({lat: 48.86, lon: 2.35}, pyramid);
+  assert.deepEqual([fromParis.found, fromParis.about, fromParis.way, fromParis.warmer], [false, 3000, 'south-east', null]);
+  assert.equal(judge({lat: 35, lon: 25}, pyramid, fromParis.km).warmer, true);
+  assert.equal(judge({lat: -30, lon: 25}, pyramid, fromParis.km).way, 'north');
+  assert.equal(judge({lat: 30.1, lon: 31.3}, pyramid).found, true);
+  // at a pole every way is the same way
+  assert.equal(judge({lat: 0, lon: 100}, WONDERS.find(w => w.id === 'south-pole')).way, 'south');
+});
+
+test("Hoot's odd one out is never an animal really seen here", () => {
+  const animal = id => ({id, name: `animal ${id}`});
+  const here = [1, 2, 3, 4, 5].map(animal), far = [3, 4, 9].map(animal);
+  for (let i = 0; i < 20; i++) {
+    const q = oddOneOut(here, far);
+    assert.equal(q.odd.id, 9);
+    assert.equal(q.choices.length, 4);
+    assert.deepEqual(q.choices.filter(a => a !== q.odd).every(a => here.includes(a)), true);
+  }
+  assert.equal(oddOneOut(here.slice(0, 2), far), null, 'too few animals here to ask');
+  assert.equal(oddOneOut(here, [animal(1)]), null, 'nothing from far away that is not also here');
+});
+
+test("every kind of landform in Hoot's notebook can be found on the globe, with a real photo", () => {
+  // a name shows once the globe leans in far enough: Natural Earth's zoom 8 is about as close as it goes
+  const names = [...geo.places, ...LANDMARKS, ...geo.rivers.map(r => ({...r, kind: 'river'}))].filter(p => p.min <= 8);
+  for (const lf of LANDFORMS) {
+    const all = names.filter(p => landformOf(p.kind) === lf);
+    assert.ok(all.length, `no ${lf.name.toLowerCase()} on the globe`);
+    if (lf.id !== 'river') assert.ok(all.some(p => p.wiki), `no ${lf.name.toLowerCase()} with an article`);
+  }
+  const named = name => landformOf(geo.places.find(p => p.name === name).kind)?.id;
+  assert.deepEqual(['Mount Fuji', 'Grand Canyon', 'Lake Victoria', 'Caspian Sea', 'Hudson Bay', 'English Channel', 'Nile Delta', 'Iberian Peninsula'].map(named),
+    ['volcano', 'canyon', 'lake', 'lake', 'bay', 'strait', 'delta', 'peninsula']);
+  // Natural Earth calls the Punjab's farmland a desert; the notebook doesn't
+  assert.equal(named('Punjab'), undefined);
+  for (const w of WONDERS) if (w.landform) assert.ok(landformBy(w.landform), `${w.id}: no landform ${w.landform}`);
+});
+
+test("Hoot's hand-picked landforms are where he says: on land, in their country, or a fjord on its coast", () => {
+  for (const p of LANDMARKS) {
+    const lf = landformOf(p.kind);
+    assert.ok(lf && p.wiki, p.name);
+    // a fjord is finer than the map's coastline, so the map can have it as land or as open sea, but
+    // its country is right beside it
+    const near = p.kind !== 'fjord' ? [p.at] : [[0, 0], ...[0, 1, 2, 3, 4, 5, 6, 7].map(k => [Math.cos(k*Math.PI/4)*.2, Math.sin(k*Math.PI/4)*.4])].map(([n, e]) => [p.at[0] + n, p.at[1] + e]);
+    if (p.country) assert.ok(near.some(at => geo.countryAt(...at)?.name === p.country), `${p.name} is not in ${p.country}`);
+    if (p.kind !== 'fjord') assert.ok(!earth.placeAt(...p.at).biome.water, `${p.name} is in the ${earth.placeAt(...p.at).name}`);
+  }
+  assert.equal(new Set(LANDMARKS.map(p => p.name)).size, LANDMARKS.length);
+});
+
+test("Hoot asks what kind of landform it is from three: the right one, and two it isn't", () => {
+  for (const lf of LANDFORMS) {
+    assert.ok(lf.like.length >= 2 && !lf.like.includes(lf.id), lf.id);
+    for (const id of lf.like) assert.ok(landformBy(id), `${lf.id} is like unknown ${id}`);
+    for (let i = 0; i < 20; i++) {
+      const c = choices(lf);
+      assert.equal(c.length, 3); assert.equal(new Set(c).size, 3);
+      assert.ok(c.includes(lf) && c.every(o => o === lf || lf.like.includes(o.id)), lf.id);
+    }
+  }
+  // never something it also is: a volcano is a mountain too, and a canyon is a valley
+  const offers = (id, other) => landformBy(id).like.includes(other);
+  assert.ok(!offers('volcano', 'peak') && !offers('volcano', 'mountains') && !offers('canyon', 'valley') && !offers('bay', 'gulf') && !offers('gulf', 'bay'));
+});
+
+test('the natural world reaches under the sea and along the coasts, each thing where it should be', () => {
+  const place = name => geo.places.find(p => p.name === name);
+  const mariana = place('Mariana Trench'), everest = place('Mount Everest');
+  assert.equal(mariana.kind, 'trench');
+  assert.equal(earth.placeAt(...mariana.at).name, 'Pacific Ocean');
+  assert.ok(mariana.at[1] > 120 && mariana.at[1] < 160, 'in the western Pacific');
+  assert.ok(mariana.depth > everest.elevation, 'deeper than Everest is tall');
+  assert.equal(place('Mid-Atlantic Ridge').kind, 'ridge');
+  assert.equal(earth.placeAt(...place('Mid-Atlantic Ridge').at).name, 'Atlantic Ocean');
+  assert.equal(place('Great Barrier Reef').kind, 'reef');
+  assert.ok(arc(...place('Great Barrier Reef').at, -18, 146) < 400, 'off the coast of Queensland');
+  assert.deepEqual(['Copacabana', 'Old Faithful', 'Uluru', 'Cliffs of Moher', 'Lascaux'].map(n => place(n)?.kind), ['beach', 'geyser', 'butte', 'cliff', 'cave']);
+  // what isn't nature stays out: an airport island, a resort strip, holy places filed as hills
+  for (const name of ['Kansai International Airport', 'Hong Kong International Airport', 'Hotel Zone', 'Temple Mount', 'Ajanta Caves']) assert.equal(place(name), undefined, name);
+  // Natural Earth names a great ocean or range twice, far apart, but the catalogue adds each thing once, under one kind
+  const caught = geo.places.filter(p => ['trench', 'ridge', 'seamount', 'reef', 'beach', 'cave', 'geyser', 'cliff', 'hill', 'dune', 'lagoon', 'cape'].includes(p.kind));
+  for (const p of caught) assert.equal(geo.places.filter(o => o.wiki === p.wiki).length, 1, p.name);
+});
+
+test('every country on the map can say its flag, money, capital, government and how it began', () => {
+  const nations = data('nations');
+  for (const c of geo.countries) {
+    const n = nations[c.id];
+    assert.ok(n, `${c.name} has no facts`);
+    assert.ok(governmentOf(n.government), `${c.name}: government ${n.government}`);
+    // a territory says whose it is; a country that isn't one says how it began
+    if (n.sovereign) assert.equal(n.government, 'territory', c.name);
+    else if (!['ATA', 'ESH', 'KAS'].includes(c.id)) assert.ok(foundedSaying(n), `${c.name}: when did it begin?`);
+    assert.equal(c.capital, n.capital, `${c.name}: the map and the facts agree on its capital`);
+  }
+  const say = id => [nations[id].capital, nations[id].currency.map(m => m.code).join(), nations[id].government];
+  assert.deepEqual(say('JPN'), ['Tokyo', 'JPY', 'constitutional-monarchy']);
+  assert.deepEqual(say('USA'), ['Washington, D.C.', 'USD', 'presidential']);
+  assert.deepEqual(say('DEU'), ['Berlin', 'EUR', 'parliamentary']);
+  assert.deepEqual(say('MMR').slice(0, 1), ['Naypyidaw']);
+  assert.equal(foundedSaying(nations.USA), '1776, when it broke away from Great Britain');
+  assert.ok(nations.USA.federal && !nations.JPN.federal);
+  assert.equal(nations.GRL.sovereign, 'Denmark');
+  assert.deepEqual(nations.JPN.cities.slice(0, 2).map(c => c.name), ['Tokyo', 'Osaka']);
+  // where countries disagree, the facts say so rather than pick a side
+  for (const id of ['TWN', 'KOS', 'PSE', 'ESH', 'AFG']) assert.ok(nations[id].disputed, id);
 });

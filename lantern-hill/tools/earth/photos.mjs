@@ -1,0 +1,459 @@
+// Fetches a photo of everyone in the globe's food webs from Wikimedia Commons into web/wildlife/,
+// with web/wildlife/photos.json naming each one's file, photographer and licence, and a sentence or
+// two about them from the opening of their Wikipedia article.
+//
+//   node tools/earth/photos.mjs           (from lantern-hill/; fetches only what's missing)
+//   node tools/earth/photos.mjs Jaguar    (fetches that one again, after changing its SOURCE)
+//
+// A photo is found by a species' name, or by 'web/name' where the same name means a different animal
+// in that web (a badger in Germany is not a badger on the Great Plains). SOURCE says where to look: a
+// Wikipedia article, whose lead image is used, or a Commons file by name; anything not listed tries
+// the article named after the species. Only files on Commons are taken, since everything there is free
+// to use; their licences ask for credit, which the globe shows under each photo. The words come from
+// the same article as the photo, so they describe what's pictured; a Commons file has no article, so
+// its words come from the one named after the species, if there is one.
+//
+// Needs macOS, for sips.
+
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { WEBS } from '../../web/js/earth/biomes.js';
+
+const OUT = join(dirname(fileURLToPath(import.meta.url)), '../../web/wildlife');
+const WIDTH = 640;
+const UA = 'ExplorerKids/1.0 (https://github.com/Harrichael/ExplorerKids)';
+
+const SOURCE = {
+  'Leaves': 'Leaf', 'Fruits & nuts': 'File:Brazil nut DSC05477.JPG', 'Insects': 'File:Colorful Katydid (Tettigoniidae) (15874932421).jpg', 'Sloth': 'Brown-throated sloth', 'Peccary': 'Collared peccary',
+  'Agouti': 'Red-rumped agouti', 'Toucan': 'Toco toucan',
+  'Wild fruit': 'File:Kcg-Bwan (Landolphia Owariensis).jpg', 'Gorilla': 'Western lowland gorilla', 'Forest elephant': 'African forest elephant', 'Bongo': 'Bongo (antelope)',
+  'Colobus monkey': 'Mantled guereza', 'Crowned eagle': 'Crowned eagle',
+  'Figs & fruit': 'File:Ficus racemosa - Flickr - Dick Culbert.jpg', 'Orangutan': 'Bornean orangutan', 'Bearded pig': 'Bornean bearded pig', 'Hornbill': 'Rhinoceros hornbill',
+  'Fruit bat': 'Megabat', 'Tree frog': "Wallace's flying frog",
+  'Grass': 'File:Close up of grass.jpg', 'Leaves & fruit': 'File:Sal tree.jpg', 'Grasshoppers & termites': 'Grasshopper', 'Chital deer': 'Chital',
+  'Langur monkey': 'Gray langur', 'Peacock': 'Indian peafowl', 'Tiger': 'Bengal tiger',
+  'Leaves & plants': 'Rhododendron maximum', 'Acorns & nuts': 'Acorn', 'Caterpillars': 'Caterpillar', 'Gray squirrel': 'Eastern gray squirrel',
+  'Songbirds': 'Northern cardinal', 'Black bear': 'American black bear', 'Rat snake': 'Pantherophis alleghaniensis',
+  'Leaves & grass': 'Meadow', 'Beechnuts & acorns': 'File:Zaaddozen van een beuk (Fagus sylvatica) 13-09-2024 (d.j.b.).jpg', 'Earthworms': 'Earthworm', 'Red squirrel': 'Red squirrel',
+  'canada-taiga/Red squirrel': 'American red squirrel', 'Badger': 'European badger', 'great-plains/Badger': 'American badger',
+  'Goshawk': 'Eurasian goshawk',
+  'Fir & spruce trees': 'File:Pseudotsuga menziesii seed cones.jpg', 'Berries & shrubs': 'Salmonberry', 'Salmon': 'Sockeye salmon',
+  'Spruce & pine': 'Picea glauca', 'Willows & berries': 'File:Vaccinium myrtilloides berries.jpg', 'Budworm caterpillars': 'Choristoneura fumiferana',
+  'Vole': 'Vole', 'Warblers': 'Yellow warbler', 'Lynx': 'Eurasian lynx', 'canada-taiga/Lynx': 'Canada lynx',
+  'Larch & pine': 'Larch', 'Shrubs & berries': 'Lingonberry', 'Capercaillie': 'Western capercaillie',
+  'Acacia trees': 'Vachellia tortilis', 'Grasshoppers': 'Grasshopper', 'Zebra': 'Plains zebra', 'Wildebeest': 'Blue wildebeest',
+  'Gazelle': "Thomson's gazelle", 'Elephant': 'African bush elephant', 'Roller bird': 'Lilac-breasted roller', 'Hyena': 'Spotted hyena',
+  'Crocodile': 'Nile crocodile',
+  'Eucalyptus trees': 'Eucalyptus', 'Termites': 'Termite', 'Wallaby': 'Agile wallaby', 'Cockatoo': 'Sulphur-crested cockatoo',
+  'Flying fox': 'Black flying fox', 'Echidna': 'Short-beaked echidna', 'Frilled lizard': 'Frill-necked lizard',
+  'Kookaburra': 'Blue-winged kookaburra',
+  'Wildflowers & seeds': 'Wildflower', 'Bison': 'American bison', 'Prairie dog': 'Black-tailed prairie dog', 'Mouse': 'Western harvest mouse',
+  'Meadowlark': 'Western meadowlark', 'Rattlesnake': 'Western diamondback rattlesnake', 'great-plains/Rattlesnake': 'File:Crotalus viridis 151463461.jpg',
+  'Herbs & shrubs': 'Artemisia frigida', 'Marmot': 'Tarbagan marmot', 'tibet/Marmot': 'Himalayan marmot', 'Pika': "Pallas's pika",
+  'tibet/Pika': 'Plateau pika', 'Lark': 'Mongolian lark',
+  'Water plants': 'Aquatic plant', 'Palm nuts': 'File:Acrocomia totai fruits.jpeg', 'Apple snails': 'Pomacea', 'Small fish': 'File:Astyanax mexicanus.JPG',
+  'Piranha': 'Red-bellied piranha', 'Jabiru stork': 'Jabiru', 'Caiman': 'Yacare caiman',
+  'Grass & sedges': 'File:Summer Paradise - Flickr - Jaykhuang.jpg', 'Alpine flowers': 'Alpine plant', 'Blue sheep': 'Bharal', 'Tibetan fox': 'Tibetan fox',
+  'Puna grass': 'File:Festuca orthophylla, geisers del Tatio, Region de Antofagasta, Chile 01.JPG', 'Cushion plants & shrubs': 'Azorella compacta', 'Viscacha': 'Southern viscacha',
+  'Leaf-eared mouse': 'File:Phyllotis darwinii.jpg', 'Lizard': 'Liolaemus', 'Andean fox': 'Culpeo', 'Puma': 'Cougar',
+  'Moss & lichen': 'Lichen', 'Sedges & willows': 'Salix arctica', 'Berries': 'Cloudberry', 'Lemming': 'File:Lemmus trimucronatus 302115320.jpg',
+  'Caribou': 'Reindeer', 'Ground squirrel': 'Arctic ground squirrel', 'Ptarmigan': 'Willow ptarmigan',
+  'Shrubs': 'Adenostoma fasciculatum', 'Acorns & seeds': 'File:Quercus agrifolia acorns Mount Diablo.jpg', 'Woodrat': 'Dusky-footed woodrat',
+  'Fence lizard': 'Western fence lizard', 'Mountain lion': 'Cougar',
+  'Herbs & grass': 'File:Dehesa in Extremadura.jpg', 'Acorns': 'File:Quercus ilex acorns RHU 001.JPG', 'Rabbit': 'European rabbit', 'Partridge': 'Red-legged partridge',
+  'Imperial eagle': 'Spanish imperial eagle',
+  'Desert grasses': 'Panicum turgidum', 'Acacias & shrubs': 'Calotropis procera', 'Locusts': 'Desert locust',
+  'Darkling beetle': 'Darkling beetle', 'Spiny-tailed lizard': 'Uromastyx', 'Jerboa': 'Lesser Egyptian jerboa', 'Scorpion': 'Deathstalker',
+  'Horned viper': 'Cerastes cerastes', 'Eagle-owl': 'File:Grand-duc ascalaphe Oued Tataouine (Bubo ascalaphus).jpg', 'Saharan cheetah': 'Northwest African cheetah',
+  'Saguaro & prickly pear': 'Saguaro', 'Mesquite & shrubs': 'Prosopis velutina', 'Harvester ants': 'Pogonomyrmex',
+  'Nectar bat': 'Lesser long-nosed bat', 'Kangaroo rat': "Merriam's kangaroo rat", 'Jackrabbit': 'Black-tailed jackrabbit',
+  'Javelina': 'Collared peccary', 'Horned lizard': 'Regal horned lizard', 'Roadrunner': 'Greater roadrunner',
+  'Spinifex grass': 'Triodia (plant)', 'Saltbush & shrubs': 'File:Atriplex nummularia subsp. nummularia 1DS-II 5020.jpg', 'Ants & termites': 'Meat ant', 'Hopping mouse': 'Spinifex hopping mouse',
+  'Perentie lizard': 'Perentie', 'Mulga snake': 'King brown snake',
+  'Mangrove leaves': 'File:Starr-130703-5577-Rhizophora mangle-leaves-Kealia Pond-Maui (25219400655).jpg', 'Algae & plankton': 'Plankton', 'Crabs': 'Fiddler crab', 'Shrimp': 'Shrimp', 'Kingfisher': 'Stork-billed kingfisher',
+  'Water monitor': 'Asian water monitor', 'River dolphin': 'Ganges river dolphin',
+  'Tiny algae': 'Zooxanthellae', 'Seaweed & seagrass': 'Seagrass', 'Coral': 'Coral', 'Crabs & shrimp': 'Cleaner shrimp',
+  'Clownfish': 'Ocellaris clownfish', 'Giant triton': 'Charonia tritonis', 'Octopus': 'Octopus', 'Reef shark': 'Grey reef shark',
+  'Krill & copepods': 'Copepod', 'Jellyfish': 'Jellyfish', 'Tuna': 'File:Yellowfin tuna nurp.jpg', 'Dolphin': 'Spinner dolphin', 'Frigatebird': 'Great frigatebird',
+  'Ice algae & phytoplankton': 'Diatom', 'Copepods': 'Calanus glacialis', 'Clams': 'Mya truncata', 'Kittiwake': 'Black-legged kittiwake',
+  'Beluga whale': 'Beluga whale', 'Orca': 'Orca',
+  'Krill': 'Antarctic krill', 'Silverfish': 'Antarctic silverfish', 'Squid': 'Squid', 'Albatross': 'Wandering albatross', 'Skua': 'South polar skua',
+  'Algae': 'File:The freshwater alga Spirogyra.jpg', 'Water fleas': 'Daphnia', 'Mayfly nymphs': 'Mayfly', 'Shiners': 'Emerald shiner', 'Loon': 'Common loon',
+  'River otter': 'North American river otter',
+  'Arctic cod': 'File:Boreogadus saida Kaiyukan.jpg',
+  'Lanternfish': 'File:Bolinichthys supralateralis.jpg',
+  'Lake trout': 'File:Lake trout fish in hands salvelinus namaycush.jpg',
+  'Mongolian gazelle': 'File:Procapra gutturosa - Анна Васильченко - 464472315.jpeg',
+  'Narwhal': 'File:Pod Monodon monoceros.jpg',
+  'Snowy owl': 'File:Schneeeule Bubo scandiacus Grugapark 2013.jpg',
+  'Tibetan antelope': 'File:Chiru (Pantholops hodgsonii) 02.jpg',
+  'Wild yak': 'File:Bos grunniens at Letdar on Annapurna Circuit.jpg',
+  'Weddell seal': 'File:Leptonychotes weddellii.jpg',
+  'Squirrel': 'Red squirrel',
+  'Pine squirrel': 'Tamiasciurus',
+  'Alpine grass & sedges': 'Kobresia',
+  'Rhododendron & flowers': 'Rhododendron anthopogon',
+  'Wildcat': 'European wildcat',
+  'Rain frog': 'Eleutherodactylus',
+  'Thorn trees & cactus': 'Schinopsis balansae',
+  'Gray brocket deer': 'Gray brocket',
+  'mexico-dry-forest/Jays': 'White-throated magpie-jay',
+  'Fruits & leaves': 'Fruit',
+  'Forest buffalo': 'African forest buffalo',
+  'Bushbuck': 'Cape bushbuck',
+  'Cane rat': 'Greater cane rat',
+  'Red-bellied squirrel': "Pallas's squirrel",
+  'Deer': 'Philippine deer',
+  'Hawk-eagle': 'Philippine hawk-eagle',
+  'Ringneck parrot': 'Australian ringneck',
+  'Brown snake': 'Pseudonaja',
+  'Whip snake': 'Hierophis viridiflavus',
+  'Skylark': 'Eurasian skylark',
+  'Pike': 'Northern pike',
+  'Fruits & figs': 'File:Ficus racemosa - Flickr - Dick Culbert.jpg',
+  'Red-eyed tree frog': 'Agalychnis callidryas',
+  'Fer-de-lance': 'Bothrops asper',
+  'Fruits & seeds': 'Fruit',
+  'Spiny rat': 'Trinomys',
+  'Shrubs & seeds': 'Scalesia',
+  'Pampas grass': 'Cortaderia selloana',
+  'Herbs & seeds': 'Wildflower',
+  'Mara': 'Patagonian mara',
+  'Southern beech trees': 'Nothofagus',
+  'Bamboo & berries': 'Chusquea',
+  'Chucao': 'Chucao tapaculo',
+  'Lenga beech trees': 'Nothofagus pumilio',
+  'Moss & berries': 'Berberis microphylla',
+  'Cactus & seeds': 'Echinopsis chiloensis',
+  'Degu': 'Common degu',
+  'Long-tailed snake': 'Philodryas chamissonis',
+  'Acorns & pine nuts': 'Pinus cembroides',
+  'Oyamel fir trees': 'Abies religiosa',
+  'Milkweed & flowers': 'Asclepias',
+  'Wild avocados & berries': 'Avocado',
+  'Cactus & thorn shrubs': 'Caatinga',
+  'Seeds & fruit': 'Seed',
+  'Tree leaves': 'Leaf',
+  'Thorn trees & leaves': 'Prosopis juliflora',
+  'Cactus fruit & seeds': 'Opuntia',
+  'Thorn shrubs & seeds': 'Prosopis juliflora',
+  'Desert flowers & cactus': 'Copiapoa cinerea',
+  'Lichen & shrubs': 'Lichen',
+  'Sawgrass': 'Cladium jamaicense',
+  'Algae & water plants': 'Aquatic plant',
+  'Ohia trees': 'Metrosideros polymorpha',
+  'Ferns & berries': 'Cibotium glaucum',
+  'Sitka spruce & hemlock': 'Sitka spruce',
+  'Berries & skunk cabbage': 'Lysichiton americanus',
+  'Lodgepole pine & fir': 'Pinus contorta',
+  'Grass & berries': 'Huckleberry',
+  'Wiregrass & seeds': 'Aristida stricta',
+  'Oak & juniper': 'Juniperus ashei',
+  'Prairie flowers & seeds': 'Echinacea',
+  'Wildflowers & sage': 'Artemisia frigida',
+  'Bunchgrass & wildflowers': 'Pseudoroegneria spicata',
+  'Creosote & wildflowers': 'Larrea tridentata',
+  'Sidewinder': 'Crotalus cerastes',
+  'Creosote & yucca': 'Yucca elata',
+  'Grass & seeds': 'Bouteloua gracilis',
+  'Maple & birch trees': 'Acer saccharum',
+  'Berries & nuts': 'Blueberry',
+  'Fisher': 'Fisher (animal)',
+  'Arctic willow & flowers': 'Saxifraga oppositifolia',
+  'Fruits & nectar': 'Flower',
+  'Leaf-tailed gecko': 'Uroplatus',
+  'Mantella frog': 'Mantella baroni',
+  'Fossa': 'Fossa (animal)',
+  'Baobab & tree leaves': 'Adansonia grandidieri',
+  'Fruits & flowers': 'Tamarindus indica',
+  'Spiny octopus trees': 'Didierea madagascariensis',
+  'Nuts & fruit': 'Coula edulis',
+  'Striped ground squirrel': 'Xerus erythropus',
+  'Shea & baobab trees': 'Vitellaria',
+  'Buffalo': 'African buffalo',
+  'Juniper & acacia trees': 'Juniperus procera',
+  'Grass & herbs': 'Grassland',
+  'Camelthorn trees & melons': 'Vachellia erioloba',
+  'Mopane & acacia trees': 'Colophospermum mopane',
+  'Miombo trees': 'Brachystegia',
+  'Wildflowers & proteas': 'Protea',
+  'Eland': 'Common eland',
+  'Grass & giant lobelias': 'Lobelia rhynchopetalum',
+  'Heather & herbs': 'Erica arborea',
+  'Grass rats': 'Arvicanthis',
+  'Proteas & fynbos': 'Fynbos',
+  'Seeds & bulbs': 'Gladiolus',
+  'Striped mouse': 'Four-striped grass mouse',
+  'Papyrus & water plants': 'Cyperus papyrus',
+  'Sambar': 'Sambar deer',
+  'Elephant grass': 'Saccharum spontaneum',
+  'Tall grass': 'Saccharum spontaneum',
+  'Sal trees & fruit': 'Shorea robusta',
+  'Pig-tailed macaque': 'Northern pig-tailed macaque',
+  'Dipterocarp trees': 'Dipterocarpus tuberculatus',
+  'Leaves & bamboo': 'Bamboo',
+  'Acorns & fruit': 'Castanopsis',
+  'Javan deer': 'Javan rusa',
+  'Wild pig': 'Javan warty pig',
+  'timor/Wild pig': 'Wild boar',
+  'Warty pig': 'Philippine warty pig',
+  'Oak & rhododendron': 'Rhododendron arboreum',
+  'Monal pheasant': 'Himalayan monal',
+  'Deodar & oak trees': 'Cedrus deodara',
+  'Fir & rhododendron': 'Rhododendron',
+  'Desert jird': 'Indian desert jird',
+  'Desert grass': 'Panicum turgidum',
+  'Khejri trees': 'Prosopis cineraria',
+  'Locusts & beetles': 'Desert locust',
+  'Bird of paradise': 'Raggiana bird-of-paradise',
+  'Flowers & nectar': 'Flower',
+  'Eucalyptus leaves': 'Eucalyptus',
+  'Blossoms & seeds': 'Banksia',
+  'Eucalyptus & myrtle beech': 'Nothofagus cunninghamii',
+  'Grass & ferns': 'Bracken',
+  'Banksia & heath': 'Banksia',
+  'Bobtail skink': 'Tiliqua rugosa',
+  'Shingleback lizard': 'Tiliqua rugosa',
+  'Mallee eucalyptus': 'Mallee (habit)',
+  'Brigalow & eucalyptus': 'Acacia harpophylla',
+  'Beech & podocarp trees': 'Podocarpus totara',
+  'Berries & nectar': 'Sophora microphylla',
+  'Kiwi': 'Kiwi (bird)',
+  'Oak & beech trees': 'Quercus robur',
+  'Acorns & berries': 'Acorn',
+  'Robin': 'European robin',
+  'Buzzard': 'Common buzzard',
+  'Cedar & oak trees': 'Cedrus atlantica',
+  'Oak & pistachio trees': 'Quercus brantii',
+  'Chukar': 'Chukar partridge',
+  'Steppe grass': 'Stipa',
+  'Herbs & wildflowers': 'Wildflower',
+  'Feather grass': 'Stipa pennata',
+  'Wildflowers & tulips': 'Tulipa',
+  'Saxaul & shrubs': 'Haloxylon ammodendron',
+  'Desert grass & tulips': 'Tulipa',
+  'karakum/Jerboa': 'Dipus sagitta',
+  'Desert shrubs': 'Calligonum',
+  'Toad-headed agama': 'Phrynocephalus',
+  'Acacia & shrubs': 'Vachellia tortilis',
+  'Grass & wild onions': 'Allium',
+  'Oak & pine trees': 'Quercus mongolica',
+  'Seeds & berries': 'Berry',
+  'Korean pine & oak': 'Pinus koraiensis',
+  'Pine nuts & acorns': 'Pine nut',
+  'Beech & oak trees': 'Fagus crenata',
+  'Fir & oak trees': 'Abies sachalinensis',
+  'Bamboo grass & berries': 'Sasa (plant)',
+  'Grass & flowers': 'Saxifraga oppositifolia',
+  'Dwarf pine & berries': 'Pinus pumila',
+  'Birch & berries': 'Betula pubescens',
+  'Alpine meadow grass': 'Kobresia',
+  'Juniper & herbs': 'Juniperus',
+  'tian-shan/Marmot': 'Gray marmot',
+  'altai/Marmot': 'Gray marmot',
+  'Herbs & dwarf birch': 'Betula nana',
+  'Reeds & sedges': 'Phragmites',
+  'Snails & insects': 'Snail',
+  'Reeds': 'Phragmites',
+  'Brine shrimp & snails': 'Artemia',
+  'Purple swamphen': 'Western swamphen',
+  'Sargassum seaweed': 'Sargassum',
+  'Shrimp & crabs': 'Shrimp',
+  'Posidonia seagrass': 'Posidonia oceanica',
+  'Anchovies & sardines': 'European anchovy',
+  'Salema': 'Sarpa salpa',
+  'Mandarinfish': 'Synchiropus splendidus',
+  'Midge larvae': 'Chironomidae',
+  'Quagga mussels': 'Quagga mussel',
+  'Snails & shrimp': 'Snail',
+  'Totora reeds': 'Schoenoplectus californicus',
+  'Silverside fish': 'Odontesthes bonariensis',
+  'Lake flies & snails': 'Chaoborus',
+  'Water fleas & insect larvae': 'Daphnia',
+  'Reeds & water plants': 'Phragmites',
+  'Kilka': 'Clupeonella cultriventris',
+  'Epischura copepods': 'Epischura baikalensis',
+  'Grayling': 'Arctic grayling',
+  'Water fleas & shrimp': 'Daphnia',
+  'Shrimp & snails': 'Snail',
+  'Snakehead': 'Channa striata',
+  'Water snake': 'Rainbow water snake',
+  'Shrimp & insects': 'Shrimp',
+  'Cisco': 'Cisco (fish)',
+  'Whitetip reef shark': 'File:Triaenodon obesus 453102126.jpg',
+  'Hog deer': 'Indian hog deer',
+  'Wild dog': 'African wild dog',
+  'Vendace': 'File:Muikku.jpg',
+  'Whitefish': 'File:Coregonus lavaretus maraena 1.jpg',
+  'Caspian roach': 'Common roach',
+  'Alpine grass & flowers': 'Silene acaulis',
+  'Coirón grass': 'Festuca gracillima',
+  'Shrubs & herbs': 'File:Mulinum spinosum 1.jpg',
+  'Pine & oak trees': 'Pinus ponderosa',
+  'Olive & oak scrub': 'Olea europaea',
+  'Flooded forest & water plants': 'Barringtonia acutangula',
+  'Matorral shrubs': 'Quillaja saponaria',
+  'Arabian gazelle': 'File:Gazella arabica 224486462.jpg',
+  'Lake sardines': 'File:Rastrineobola argentea 63950435.jpg',
+  'Ground hornbill': 'File:Southern Ground Hornbill (Bucorvus leadbeateri) male, Kruger NP (51889201069).jpg',
+  'Lory': 'File:Lorius lory.JPG',
+  'Pale fox': 'File:Pale fox (Vulpes pallida) (cropped).jpg',
+  'Lemuroid ringtail possum': 'File:Hemibelideus lemuroides -Queensland-8.jpg',
+  'Brushtail possum': 'File:Common brushtail possum (Trichosurus vulpecula) with joey Triabunna.jpg',
+  'Western brush wallaby': 'File:Western Brush Wallaby.jpg',
+  'Galápagos racer': 'File:Galápagos Racer imported from iNaturalist photo 458368258 on 23 December 2024.jpg',
+  "Gurney's eagle": "File:Gurney's Eagle - Halmahera Is - Indonesia S4E0034 (15340377350).jpg",
+  'Sailfish': 'File:Istiophorus platypterus 101956558.jpg',
+  "Cory's shearwater": 'File:Cagarro - Calonectris borealis, Terceira, Açores.jpg',
+  'Acacia & myrrh shrubs': 'File:Commiphora myrrha.jpg',
+  'Seeds & shrubs': 'File:Atriplex nummularia - Flickr - Kevin Thiele.jpg',
+  'Swamp deer': 'File:Barasingha in Kaziranga National Park March 2025 by Tisha Mukherjee 06.jpg',
+  'Capelin': 'File:20250524 Mallotus villosus fish.jpg',
+  'Mandarin fish': 'File:Siniperca chuatsi.jpg',
+  'Pichi': 'File:Piche (Zaedyus pichiy) in laguna Las Coloradas Chubut.JPG',
+  'Kudu': 'Greater kudu',
+  'costa-rica/Agouti': 'Central American agouti', 'Coati': 'White-nosed coati', 'Spider monkey': "Geoffroy's spider monkey",
+  'Tapir': 'South American tapir', 'Marmoset': 'Common marmoset', 'Frogs': 'Frog', 'Jararaca': 'Bothrops jararaca',
+  'Boa': 'Cuban boa', 'Parrot': 'Cuban amazon', 'caribbean/Fruit bat': 'Jamaican fruit bat', 'Rat': 'Black rat', 'Anole lizard': 'Brown anole',
+  'Coquí frog': 'Common coquí', 'Tody': 'Cuban tody', 'Cavy': 'Cavia aperea', 'Armadillo': 'Six-banded armadillo',
+  'Lava lizard': 'Microlophus', 'galapagos/Lava lizard': 'Galápagos lava lizard', 'Lizards': 'Cnemidophorus lemniscatus', 'Parakeets': 'Brown-throated parakeet',
+  'tongass/Red squirrel': 'American red squirrel', 'yellowstone/Red squirrel': 'American red squirrel', 'north-woods/Red squirrel': 'American red squirrel',
+  'yellowstone/Lynx': 'Canada lynx', 'tallgrass/Badger': 'American badger', 'canadian-prairie/Badger': 'American badger',
+  'canadian-prairie/Ground squirrel': "Richardson's ground squirrel",
+  'fiji/Flying fox': 'Pacific flying fox', 'new-caledonia/Flying fox': 'Pacific flying fox', 'philippines/Flying fox': 'Large flying fox',
+  'moluccas/Flying fox': 'Large flying fox', 'solomons/Flying fox': 'Pteropus',
+  'atlas/Ocellated lizard': 'Timon tangitanus', 'thar/Spiny-tailed lizard': 'Saara hardwickii',
+  'gobi/Gerbils': 'Mongolian gerbil', 'brazil-reservoirs/Caiman': 'Broad-snouted caiman', 'moluccas/Cockatoo': 'Salmon-crested cockatoo',
+  'Herring': 'File:Herringadultkils.jpg',
+  // new webs' plants and food groups, by what grows there
+  'Alpine flowers & grass': 'Alpine tundra', 'Crowberries & grass': 'Empetrum nigrum', 'Cardón & cholla cactus': 'Pachycereus pringlei',
+  'Desert shrubs & seeds': 'Larrea tridentata', 'Leaves & seeds': 'Leaf', 'Cloud forest trees': 'Cloud forest', 'Palm fruit & seeds': 'Copernicia alba',
+  'Tussac grass': 'Poa flabellata', 'Diddle-dee & berries': 'Empetrum rubrum', 'Kelp & plankton': 'Macrocystis pyrifera', 'Lobster krill': 'Munida gregaria',
+  'Roble beech trees': 'Nothofagus obliqua', 'Flowers & berries': 'Arbutus xalapensis', 'Caribbean pine & seeds': 'Pinus caribaea',
+  'Cactus & thorn scrub': 'Motagua Valley thornscrub', 'Leaves & ferns': 'Hibiscus tiliaceus', 'Spruce & fir trees': 'Picea engelmannii',
+  'Douglas fir & pine': 'Pseudotsuga menziesii', 'Spruce & pine trees': 'Picea pungens', 'Aspen & grass': 'Populus tremuloides',
+  'Limber & bristlecone pines': 'Pinus longaeva', 'Pinyon nuts & juniper berries': 'Pinus monophylla', 'Sagebrush & grass': 'Artemisia tridentata',
+  'Pine & fir trees': 'Pinus jeffreyi', 'Marsh grass': 'Spartina alterniflora', 'Pine seeds & acorns': 'Pinus taeda', 'Prairie grass': 'Schizachyrium scoparium',
+  'Seeds & flowers': 'Rudbeckia hirta', 'Pinyon & juniper': 'Pinyon–juniper woodland', 'Saltbush & grass': 'Atriplex canescens', 'Karoo bushes': 'Karoo',
+  'Leaves & acorns': 'Castanopsis sieboldii', 'Fruit & berries': 'Ficus microcarpa', 'Acacia & heath shrubs': 'Acacia ligulata', 'Spinifex & grass': 'Triodia (plant)',
+  'Eucalyptus & cypress pine': 'Callitris glaucophylla', 'Akeake & karaka trees': 'Corynocarpus laevigatus', 'Holm oak & myrtle scrub': 'File:Maquis and garrigue in Corsica3.jpg',
+  'Olive & carob scrub': 'Ceratonia siliqua', 'Herbs & thyme': 'Thymbra capitata', 'Pine & oak scrub': 'Quercus alnifolia', 'Grass & wormwood': 'Artemisia frigida',
+  'Sea buckthorn & shrubs': 'Hippophae rhamnoides', 'Sea urchins & crabs': 'Strongylocentrotus droebachiensis', 'Kelp': 'Kelp',
+  'aleutians/Fish': 'Atka mackerel', 'chesapeake/Fish': 'Atlantic menhaden', 'Ducks': 'Mallard', 'Crawfish': 'Procambarus clarkii', 'Blue crab': 'Callinectes sapidus',
+  'Land crabs': 'Gecarcinus ruricola', 'Rosy wolfsnail': 'Euglandina rosea',
+  // new webs' animals, where the plain name would find another one
+  'Bullfinch': 'Lesser Antillean bullfinch', 'Night heron': 'Yellow-crowned night heron', 'Whistling frog': 'Eleutherodactylus johnstonei',
+  'Kestrel': 'Common kestrel', 'Bulbul': 'Réunion bulbul', 'Day gecko': 'Phelsuma borbonica', 'Grey white-eye': 'Réunion grey white-eye',
+  'Paradise flycatcher': 'Mascarene paradise flycatcher', 'Wolf snake': 'Lycodon aulicus', 'Cape Verde sparrow': 'Iago sparrow', 'Cape Verde skink': 'Chioninia',
+  'Green monkey': 'Chlorocebus sabaeus', 'Tree squirrel': 'File:Mexican Gray Squirrel - Sciurus Aureogaster.jpg', 'Chipmunk': 'Least chipmunk', 'Ringtail': 'Ringtail',
+  'Spiny lizard': 'Desert spiny lizard', 'Cotton rat': 'Hispid cotton rat', 'Alligator': 'American alligator', 'Cottonmouth': 'Agkistrodon piscivorus',
+  'Whiptail lizard': 'Aspidoscelis', 'Crested tinamou': 'Elegant crested tinamou', 'Red tegu': 'Salvator rufescens', 'Argentine boa': 'Boa constrictor occidentalis',
+  'Tussacbird': 'File:Blackish Cinclodes Falklands.jpg', 'Rock agama': 'Agama agama', 'Akamata snake': 'Lycodon semicarinatus', 'Okinawa tree lizard': 'Diploderma polygonatum',
+  'Ryukyu green pigeon': 'Ryukyu green pigeon', 'Habu': 'Protobothrops flavoviridis', 'Humpback dolphin': 'Indian Ocean humpback dolphin',
+  'Brush-turkey': 'Australian brushturkey', 'Eastern water dragon': 'Australian water dragon', 'Sand goanna': 'Varanus gouldii', 'Chatham warbler': 'Chatham gerygone',
+  'Cretan spiny mouse': 'Acomys minous', 'Large whip snake': 'Dolichophis jugularis', 'Sicilian wall lizard': 'Podarcis waglerianus',
+  'Racerunner lizard': 'Eremias argus', 'Yellow-naped parrot': 'Yellow-naped amazon', 'Guatemalan beaded lizard': 'Heloderma charlesbogerti',
+  'Collared lizard': 'Common collared lizard', 'Northern goshawk': 'American goshawk', 'Spotted owl': 'California spotted owl', 'Grey-crowned rosy-finch': 'Gray-crowned rosy finch',
+  'Corsican red deer': 'Corsican red deer', 'Cyprus mouse': 'Mus cypriacus', 'Gentoo penguin': 'File:Brown Bluff-2016-Tabarin Peninsula–Gentoo penguin (Pygoscelis papua) 03.jpg', 'Western tarsier': 'File:Bornean Tarsier (Cephalopachus bancanus borneanus) (8066958099).jpg',
+  'Prairie rattlesnake': 'File:Crotalus viridis 151463461.jpg',
+  'Ryukyu wild boar': 'File:Ryukyu Islands Wild Pig 388154003.jpg', 'Ryukyu long-haired rat': 'File:Diplothrix legata Amami2.jpg', 'Ocellated skink': 'File:Chalcides ocellatus 002.jpg',
+  // plain names that had been finding an animal from another continent
+  'Hare': 'European hare', 'libyan-coast/Hare': 'Cape hare', 'Tortoise': 'Testudo graeca', 'greece/Tortoise': "Hermann's tortoise",
+  'Monitor lizard': 'Mangrove monitor', 'jos/Monitor lizard': 'Nile monitor', 'philippines/Monitor lizard': 'Varanus cumingi',
+  'Rats': 'Polynesian rat', 'mascarenes/Rats': 'Black rat',
+  'Skinks': 'Emoia cyanura', 'blue-mountains/Skinks': 'Eastern water skink', 'new-zealand-tussock/Skinks': 'Oligosoma', 'chatham/Skinks': 'Oligosoma',
+  'yungas/Frogs': 'Rhinella arenarum', 'ryukyu/Frogs': "Ishikawa's frog", 'zhalong/Frogs': 'Pelophylax nigromaculatus', 'tasmania/Frogs': 'Brown tree frog',
+  'mesopotamian-marshes/Frogs': 'Pelophylax ridibundus',
+  'eungella/Kookaburra': 'Laughing kookaburra', 'blue-mountains/Kookaburra': 'Laughing kookaburra', 'pilliga/Kookaburra': 'Laughing kookaburra',
+  'mosquitia/Boa': 'Boa imperator', 'motagua/Boa': 'Boa imperator', 'mosquitia/Meadowlark': 'Eastern meadowlark', 'cajun-prairie/Meadowlark': 'Eastern meadowlark',
+  'canada-taiga/Vole': 'Southern red-backed vole', 'northern-rockies/Vole': 'Southern red-backed vole', 'idaho-rockies/Vole': 'Southern red-backed vole',
+  'yellowstone/Vole': 'Montane vole', 'coast-mountains/Vole': 'Long-tailed vole', 'mongolia/Vole': "Brandt's vole", 'anatolia/Vole': 'Common vole',
+  'hokkaido/Vole': 'Grey red-backed vole',
+  'canada-taiga/Wolf': 'Northwestern wolf', 'coast-mountains/Wolf': 'Northwestern wolf', 'yukon-mountains/Wolf': 'Northwestern wolf', 'north-slope/Wolf': 'Northwestern wolf',
+  'tongass/Wolf': 'Northwestern wolf', 'yellowstone/Wolf': 'Northwestern wolf', 'northern-rockies/Wolf': 'Northwestern wolf', 'idaho-rockies/Wolf': 'Northwestern wolf',
+  'northern-rockies/Red squirrel': 'American red squirrel', 'idaho-rockies/Red squirrel': 'American red squirrel', 'southern-rockies/Red squirrel': 'American red squirrel',
+  'black-hills/Red squirrel': 'American red squirrel', 'northern-rockies/Lynx': 'Canada lynx', 'tongass/Marten': 'American marten', 'northern-rockies/Marten': 'American marten',
+  'baja/Rattlesnake': 'Red diamond rattlesnake', 'sierra-nevada/Rattlesnake': 'Crotalus oreganus', 'great-basin-ranges/Rattlesnake': 'Crotalus oreganus',
+  'mexico-pine-oak/Rattlesnake': 'File:Crotalus triseriatus 25910577.jpg', 'lesser-antilles/Fruit bat': 'Jamaican fruit bat', 'lesser-antilles/Anole lizard': 'Anolis marmoratus',
+  'cape-verde/Barn owl': 'Western barn owl', 'vanuatu/Barn owl': 'Eastern barn owl', 'vanuatu/Flying fox': 'File:Renard volant du Vanuatu.jpg', 'nyika/Chameleon': 'Flap-necked chameleon',
+  'namibe/Baboon': 'File:Chacma baboon (Papio ursinus griseipes) male head.jpg', 'eritrea/Dik-dik': "Salt's dik-dik", 'loess/Ground squirrel': 'File:Spermophilus alashanicus 381342585.jpg', 'namibe/Gerbils': 'Bushveld gerbil',
+  'sardinia-corsica/Wildcat': 'African wildcat',
+  'Slow loris': 'Sunda slow loris', 'Serow': 'Mainland serow', 'Hoopoe': 'Eurasian hoopoe', 'Tree kangaroos': "Lumholtz's tree-kangaroo",
+  'Ringtail possums': 'Lemuroid ringtail possum', 'Bilby': 'Greater bilby', 'Feather grass & wormwood': 'Stipa', 'Olive & acacia scrub': 'Olea europaea subsp. cuspidata',
+  'Pine & oak': 'Pinus kesiya', 'Berries & bamboo': 'Bamboo', 'Pine & wild olive': 'Pinus halepensis', 'Olives & thorny shrubs': 'Phrygana', 'Wild fruit & figs': 'Ficus',
+  'Creosote & ocotillo': 'Fouquieria splendens', 'Acacia & doum palms': 'Hyphaene thebaica', 'Karoo shrubs & seeds': 'Themeda triandra', 'Wattle & seeds': 'Acacia',
+  'Dune grass & sedges': 'Dune', 'Butia palms & fruit': 'Butia odorata',
+  'salt-range/Monitor lizard': 'Bengal monitor', 'salt-range/Hare': 'Indian hare', 'restinga/Caiman': 'Broad-snouted caiman', 'uvs/Gerbils': 'Mongolian gerbil',
+  'free-state/Gerbils': 'Highveld gerbil', 'nagaland/Macaque': 'Assam macaque', 'uvs/Jerboa': 'Siberian jerboa', 'balearics/Hedgehog': 'North African hedgehog',
+};
+
+const get = async url => {
+  for (let i = 0; ; i++) {
+    const r = await fetch(url, {headers: {'User-Agent': UA}});
+    if (r.ok) return r;
+    if (r.status !== 429 || i > 4) throw new Error(`${r.status} ${url}`);
+    await new Promise(ok => setTimeout(ok, 2000*(i + 1)));
+  }
+};
+const json = async url => (await get(url)).json();
+const plain = html => (html || '').replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/\s+/g, ' ').trim();
+const slug = key => key.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+async function commonsFile(source){
+  if (source.startsWith('File:')) return source.slice(5);
+  const s = await json(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(source.replace(/ /g, '_'))}`);
+  const src = s.originalimage && s.originalimage.source;
+  if (!src) {
+    // some articles have no lead photo, though Wikidata knows one
+    const d = s.wikibase_item && await json(`https://www.wikidata.org/wiki/Special:EntityData/${s.wikibase_item}.json`);
+    const p18 = d && d.entities[s.wikibase_item].claims.P18;
+    if (!p18) throw new Error(`"${source}" has no lead image`);
+    return p18[0].mainsnak.datavalue.value;
+  }
+  if (!src.includes('/wikipedia/commons/')) throw new Error(`"${source}"'s lead image isn't on Commons`);
+  // a big original comes back as one of its thumbnails, …/thumb/a/ab/Name.jpg/3840px-Name.jpg
+  const parts = src.split('?')[0].split('/');
+  return decodeURIComponent(parts[parts.length - (parts.includes('thumb') ? 2 : 1)]);
+}
+async function fetchPhoto(key, source){
+  const file = await commonsFile(source);
+  const q = await json(`https://commons.wikimedia.org/w/api.php?action=query&format=json&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=${WIDTH}&titles=${encodeURIComponent('File:' + file)}`);
+  const info = Object.values(q.query.pages)[0].imageinfo[0], m = info.extmetadata;
+  const name = `${slug(key)}.jpg`, tmp = join(OUT, '.download');
+  writeFileSync(tmp, Buffer.from(await (await get(info.thumburl)).arrayBuffer()));
+  // Commons' thumbnails are kind to the eye and heavy; twice the card's width is plenty
+  execFileSync('sips', ['--resampleWidth', String(WIDTH), '-s', 'format', 'jpeg', '-s', 'formatOptions', 'normal', tmp, '--out', join(OUT, name)], {stdio: 'ignore'});
+  unlinkSync(tmp);
+  return {file: name, by: plain(m.Artist && m.Artist.value) || 'Unknown', license: plain(m.LicenseShortName && m.LicenseShortName.value), page: info.descriptionurl};
+}
+
+async function about(key, source){
+  const title = source.startsWith('File:') ? key.split('/').pop() : source;
+  const r = await get(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`).catch(e => { if (/^404 /.test(e.message)) return null; throw e; });
+  const s = r && await r.json();
+  if (!s || s.type !== 'standard') return '';
+  // scientific names and pronunciations, in brackets, are heavy going for a child
+  const text = s.extract.replace(/\s*\([^()]*\)/g, '').replace(/\s+([,.])/g, '$1');
+  return (text.match(/(?:[^.!?]|[.!?](?!\s|$))+[.!?]+(?=\s|$)/g) || []).slice(0, 2).join(' ').replace(/\s+/g, ' ').trim();
+}
+
+mkdirSync(OUT, {recursive: true});
+const manifest = existsSync(join(OUT, 'photos.json')) ? JSON.parse(readFileSync(join(OUT, 'photos.json'), 'utf8')) : {};
+const again = new Set(process.argv.slice(2));
+const wanted = new Set();
+for (const w of WEBS) for (const s of w.species) wanted.add(SOURCE[`${w.id}/${s.name}`] ? `${w.id}/${s.name}` : s.name);
+for (const key of Object.keys(manifest)) if (!wanted.has(key)) { rmSync(join(OUT, manifest[key].file), {force: true}); delete manifest[key]; }
+const failed = [];
+for (const key of wanted) {
+  const source = SOURCE[key] || key;
+  try {
+    if (!manifest[key] || again.has(key)) manifest[key] = await fetchPhoto(key, source);
+    else if (manifest[key].about !== undefined) continue;
+    manifest[key].about = await about(key, source); console.log('✓', key);
+  } catch (e) { failed.push(key); console.log('✗', key, e.message); }
+}
+const sorted = Object.fromEntries(Object.keys(manifest).sort().map(k => [k, manifest[k]]));
+writeFileSync(join(OUT, 'photos.json'), JSON.stringify(sorted, null, 1) + '\n');
+console.log(`${Object.keys(sorted).length} photos, ${failed.length} missing${failed.length ? ': ' + failed.join(', ') : ''}`);

@@ -1,7 +1,8 @@
 // The cottage: interior x -10..10, z -7..7, door on the east wall.
 
 import * as THREE from 'three';
-import { C, T, add, box, col, cyl, glowM, grad, grp, occluder, outline, rand, rr, rrect, sph, tex } from '../core/kit.js';
+import { C, T, add, box, col, cyl, glowM, glowTex, grad, grp, occluder, outline, rand, rr, rrect, sph, tex } from '../core/kit.js';
+import { camera } from '../core/render.js';
 import { Sound } from '../core/sound.js';
 import { player } from '../player.js';
 import { dressing } from '../ui/wardrobe.js';
@@ -137,17 +138,33 @@ const stoneTex = tex(256,256,(g,w,h)=>{ g.fillStyle='#4e4656'; g.fillRect(0,0,w,
     g.fillStyle = ['#7d7486','#8a8090','#6f6678','#94899a'][Math.floor(rand()*4)]; rrect(g, x, y, 50, 38, 10); g.fill(); } }, 1.4, 1.2);
 const stoneMat = T(0xffffff, {map:stoneTex});
 const fire = grp(0, 0, -6.55);
+// where the flames burn, for anyone who wants to look at them
+export const FIRE = {x:0, y:.7, z:-6.15};
 box(3.4, 2.8, .9, stoneMat, 0, 1.4, 0, fire);
-box(1.8, 1.35, .3, T(0x1c1014), 0, .75, .35, fire, false);
+box(1.8, 1.35, .04, T(0x1c1014), 0, .75, .47, fire, false);
 add(new THREE.SphereGeometry(.9,16,8,0,Math.PI,0,Math.PI/2), stoneMat, 0, 1.42, .3, fire).scale.set(1,.35,.25);
 box(3.9, .12, 1.5, stoneMat, 0, .06, .55, fire);
 box(3.9, .18, 1.1, T(C.wood), 0, 2.15, .15, fire);
-for (const [lx,lr] of [[-.25,.3],[.25,-.3],[0,0]]) { const lg = cyl(.11,.11,1.1,T(C.woodDk),lx,.22,.35,fire,8); lg.rotation.z = Math.PI/2; lg.rotation.y = lr; }
+// The fire is laid on the hearth in front of the sooty back. The firelight on the soot and the embers'
+// glow pulse with the flames, and the flames are lit by nothing but themselves, so they stay fire-coloured.
+const sootGlow = add(new THREE.PlaneGeometry(1.8, 1.35), new THREE.MeshBasicMaterial({map:tex(128,96,(g,w,h)=>{
+  const gr = g.createRadialGradient(w/2,h,4,w/2,h,h*1.1); gr.addColorStop(0,'rgba(255,140,50,.85)'); gr.addColorStop(.45,'rgba(200,70,20,.35)'); gr.addColorStop(1,'rgba(120,30,10,0)');
+  g.fillStyle = gr; g.fillRect(0,0,w,h); }), transparent:true, depthWrite:false, blending:THREE.AdditiveBlending}), 0, .75, .495, fire, false);
+const embers = add(new THREE.CylinderGeometry(.55, .62, .07, 14), new THREE.MeshBasicMaterial({color:0xff5a1f}), 0, .155, .7, fire, false);
+embers.scale.z = .45;
+for (const [lx,lr] of [[-.25,.3],[.25,-.3],[0,0]]) { const lg = cyl(.11,.11,1.1,T(C.woodDk),lx,.25,.7,fire,8); lg.rotation.z = Math.PI/2; lg.rotation.y = lr; }
 const flames = [];
-for (const [fx,fs,fc] of [[0,1,0xff8a3d],[-.25,.7,0xffb347],[.27,.75,0xffb347],[0,.55,0xffe08a]]) {
-  const f = add(new THREE.ConeGeometry(.2*fs,.75*fs,7), glowM(fc, 1.3), fx, .4 + .36*fs, .4, fire, false);
-  flames.push({m:f, ph:rand()*6});
+// a tongue of flame: a smooth teardrop, wide near its foot and drawn up to a point
+const tongue = new THREE.LatheGeometry([[0,0],[.55,.12],[.62,.32],[.46,.58],[.22,.84],[0,1]].map(([x,y]) => new THREE.Vector2(x,y)), 12);
+const flameM = c => new THREE.MeshBasicMaterial({color:c, transparent:true, opacity:.92, depthWrite:false});
+// [x, z, height, width, colour]: the big orange ones at the back, yellow and white-hot in front, blue at the feet
+for (const [fx,fz,fh,fw,fc,i] of [[0,.66,1,.2,0xff7a2a,0],[-.27,.68,.72,.17,0xff8a30,1],[.3,.68,.78,.16,0xff8a30,2],[0,.72,.6,.13,0xffe08a,3],
+    [-.14,.74,.5,.12,0xffc04a],[.16,.74,.46,.12,0xffc04a],[-.42,.7,.42,.1,0xff7a2a],[.45,.7,.4,.1,0xff7a2a],[0,.78,.3,.08,0xfff4d0],[-.08,.8,.1,.09,0x6f8cff],[.1,.8,.09,.08,0x6f8cff]]) {
+  const f = add(tongue, flameM(fc), fx, .2, fz, fire, false); f.scale.set(fw, fh*.8, fw);
+  flames.push({m:f, h:fh*.8, ph:i === undefined ? fx*7 + fh*11 : rand()*6});
 }
+const fireGlow = new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex, color:0xff9a40, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.55}));
+fireGlow.scale.set(2.2, 1.6, 1); fireGlow.position.set(0, .6, .75); fire.add(fireGlow);
 const fireLight = new THREE.PointLight(0xff8a3d, 1.6, 11, 1.6); fireLight.position.set(0, 1.0, -5.5); scene.add(fireLight);
 col(-1.95, 1.95, -7, -5.75, -5, .2);
 col(-1.7, 1.7, -7, -6.05);
@@ -181,7 +198,9 @@ function armchair(x, z, ry, c){
   for (let i=0;i<3;i++) sph(.035,T(C.gold),-.35+i*.35,1.2,-.26,g,6,false);
   return g;
 }
-armchair(-1.9, -3.4, Math.PI - .6, C.forest); armchair(1.9, -3.4, -(Math.PI - .6), C.rust);
+// each turned to face the fire; ry turns the chair's front (its +z) round to face that way
+export const ARMCHAIRS = [{x:-1.9, z:-3.4, ry:Math.PI - .6, c:C.forest}, {x:1.9, z:-3.4, ry:-(Math.PI - .6), c:C.rust}];
+for (const a of ARMCHAIRS) armchair(a.x, a.z, a.ry, a.c);
 col(-2.6, -1.2, -4.1, -2.7, -5, 1.4); col(1.2, 2.6, -4.1, -2.7, -5, 1.4);
 const tea = grp(0, 0, -2.5);
 cyl(.45,.45,.06,T(C.wood),0,.55,0,tea,18); cyl(.06,.1,.52,T(C.woodDk),0,.27,0,tea,8); cyl(.25,.3,.04,T(C.woodDk),0,.02,0,tea,10);
@@ -366,8 +385,12 @@ hqAnims.push((dt, t) => {
   doorOpen += ((dressing ? 1 : 0) - doorOpen) * Math.min(1, dt * 5);
   doors.forEach(d => d.hinge.rotation.y = d.sx * 1.35 * doorOpen);
   flames.forEach(f => { if (f.candle) { f.m.scale.set(1, 1.6 + Math.sin(t * 13 + f.ph) * .25, 1); return; }
-    const s = 1 + Math.sin(t * 9 + f.ph) * .12 + Math.sin(t * 23 + f.ph) * .06; f.m.scale.set(1, s, 1); f.m.rotation.y = t * 1.5 + f.ph; });
-  fireLight.intensity = 1.5 + Math.sin(t * 11) * .15 + Math.sin(t * 27) * .1;
+    const s = 1 + Math.sin(t * 9 + f.ph) * .14 + Math.sin(t * 23 + f.ph * 1.7) * .07 + Math.sin(t * 37 + f.ph) * .03;
+    f.m.scale.y = f.h * s; f.m.rotation.z = Math.sin(t * 3.1 + f.ph) * .08 + Math.sin(t * 7.3 + f.ph) * .04; f.m.rotation.x = Math.sin(t * 2.3 + f.ph * 1.3) * .06; });
+  const flick = Math.sin(t * 11) * .5 + Math.sin(t * 27) * .33 + Math.sin(t * 4.3) * .17;
+  fireLight.intensity = 1.5 + flick * .25;
+  fireGlow.material.opacity = .5 + flick * .08; sootGlow.material.opacity = .85 + flick * .15;
+  embers.material.color.setRGB(1, .33 + Math.sin(t * 1.7) * .06 + flick * .03, .1);
   deskFlame.scale.y = 1.6 + Math.sin(t * 14) * .3;
   const fd = Math.hypot(player.x, player.z + 5.8);
   if (fd < 7 && Math.random() < dt * 6) Sound.crackle(.05 * (1 - fd / 7));
@@ -375,4 +398,77 @@ hqAnims.push((dt, t) => {
   mobile.rotation.y += dt * .12; planets.forEach(p => p.g.rotation.y += dt * p.speed);
   hand1.rotation.z = -t * .1;
   bubbles.forEach(b => { b.t += dt; const k = (b.t % 1.5) / 1.5; b.m.position.set(b.x, b.y0 + k * .45, b.z); b.m.material.opacity = 1 - k; });
+});
+
+// ---------- Roof ----------
+// A steep shingled gable over the whole cottage. It is there whenever it hides nothing: seen from
+// the yard, or from under it (sat on the rug with the crane, say). It fades away while the camera
+// looks down through it at the explorer indoors, or over it at them behind the cottage.
+const EX = 10.4, EZ = 7.4, PITCH = Math.tan(27*Math.PI/180), SLAB = .32;
+const RIDGE = WH + SLAB*Math.hypot(1, PITCH) + EZ*PITCH;
+const roof = grp();
+// no rand() here: the cottage shares the seeded layout RNG with the areas built after it
+const shingleTex = tex(256, 256, (g, w, h) => {
+  const tones = ['#b5552f', '#a8492a', '#c0623a', '#9c4326'], rh = h/4, sw = w/8;
+  for (let r = 0; r < 4; r++) for (let i = -1; i < 8; i++) {
+    const x = i*sw + (r%2)*sw/2, k = Math.abs(Math.sin(r*12.9 + i*78.2))*4 | 0;
+    g.fillStyle = tones[k]; rrect(g, x + 2, r*rh, sw - 4, rh - 3, 10); g.fill();
+    g.fillStyle = 'rgba(255,220,180,.12)'; g.fillRect(x + 6, r*rh + 4, sw - 12, 5);
+  }
+  g.globalCompositeOperation = 'destination-over'; g.fillStyle = '#4a2018'; g.fillRect(0, 0, w, h);
+}, 5.5, 5);
+const eaveMat = T(C.woodDk), underMat = T(0xb89a88, {map:plankTex});
+// the kit's outline grows a mesh evenly, which on a long thin slab is a fat rim at the ends and none on top
+function ink(m, w, h, d, e = .05){ outline(m).children[0].scale.set(1 + 2*e/w, 1 + 2*e/h, 1 + 2*e/d); return m; }
+const slabs = [], slabLen = (EZ + .7)*Math.hypot(1, PITCH);
+for (const s of [1, -1]) {
+  const side = grp(0, RIDGE, 0, 0, roof); side.rotation.x = s*Math.atan(PITCH);
+  slabs.push(ink(box(2*EX + 1.2, SLAB, slabLen, [eaveMat, eaveMat, T(0xffffff, {map:shingleTex}), underMat, eaveMat, eaveMat], 0, -SLAB/2, s*slabLen/2, side), 2*EX + 1.2, SLAB, slabLen));
+}
+const cap = cyl(.22, .22, 2*EX + 1.4, T(0x8a3a22), 0, RIDGE + .02, 0, roof, 10); cap.rotation.z = Math.PI/2; outline(cap, 1.04);
+
+const gableTex = tex(256, 256, (g, w, h) => { g.fillStyle = '#8c6b55'; g.fillRect(0, 0, w, h); g.fillStyle = 'rgba(40,20,10,.35)'; for (let y = 0; y < h; y += 32) g.fillRect(0, y, w, 4); }, .55, .55);
+const gableGeo = new THREE.ExtrudeGeometry(new THREE.Shape([new THREE.Vector2(-EZ, 0), new THREE.Vector2(EZ, 0), new THREE.Vector2(0, EZ*PITCH)]), {depth:.4, bevelEnabled:false});
+for (const s of [1, -1]) {
+  add(gableGeo, T(0xffffff, {map:gableTex}), s*10.2 - .2, WH, 0, roof).rotation.y = Math.PI/2;
+  // a round attic window, lit from inside
+  const win = grp(s*10.42, WH + 1.35, 0, s*Math.PI/2, roof);
+  add(new THREE.CircleGeometry(.42, 20), glowM(0xffcf73, .9), 0, 0, .01, win, false);
+  outline(add(new THREE.TorusGeometry(.42, .07, 6, 20), T(C.woodLt), 0, 0, 0, win), 1.06);
+  box(.84, .05, .04, T(C.woodLt), 0, 0, .03, win, false); box(.05, .84, .04, T(C.woodLt), 0, 0, .03, win, false);
+}
+
+// the hearth's chimney, coming up through the north slope
+const CH = {x:0, z:-6.6, top:RIDGE - 1.3};
+outline(box(1.3, CH.top - WH, .9, stoneMat, CH.x, (CH.top + WH)/2, CH.z, roof), 1.03);
+outline(box(1.6, .26, 1.2, T(0x4e4656), CH.x, CH.top + .13, CH.z, roof), 1.04);
+const puffs = [0, 1, 2, 3, 4].map(i => ({t:i/5, m:sph(1, new THREE.MeshToonMaterial({color:C.cream, gradientMap:grad, transparent:true, depthWrite:false}), CH.x, CH.top, CH.z, roof, 10, false)}));
+
+let roofShown = 1;
+const roofMats = new Map();
+roof.traverse(m => { if (!m.isMesh || puffs.some(p => p.m === m)) return;
+  if (!roofMats.has(m.material)) roofMats.set(m.material, Array.isArray(m.material) ? m.material.map(x => x.clone()) : m.material.clone());
+  m.material = roofMats.get(m.material); });
+const fadeMats = [...roofMats.values()].flat(); fadeMats.forEach(m => m.transparent = true);
+const indoors = (x, z) => Math.abs(x) < EX && Math.abs(z) < EZ;
+const underRoof = p => indoors(p.x, p.z) && p.y < WH + (EZ - Math.abs(p.z))*PITCH;
+const roofRay = new THREE.Raycaster(), chestAt = new THREE.Vector3();
+function roofInTheWay(){
+  const cam = camera.position;
+  if (indoors(player.x, player.z)) return !underRoof(cam);
+  // a ray from inside the roof meets only the backs of its faces, which it doesn't see
+  if (underRoof(cam)) return true;
+  chestAt.set(player.x, player.y + 1, player.z).sub(cam);
+  roofRay.set(cam, chestAt.clone().normalize()); roofRay.far = chestAt.length();
+  return roofRay.intersectObjects(slabs, false).length > 0;
+}
+hqAnims.push(dt => {
+  roofShown += ((roofInTheWay() ? 0 : 1) - roofShown) * Math.min(1, dt * 6);
+  roof.visible = roofShown > .02;
+  fadeMats.forEach(m => { m.opacity = roofShown; m.depthWrite = roofShown > .95; });
+  for (const p of puffs) {
+    p.t = (p.t + dt/4.5) % 1;
+    p.m.position.set(CH.x + p.t*.9, CH.top + .3 + p.t*2.4, CH.z + p.t*.3); p.m.scale.setScalar(.22 + p.t*.5);
+    p.m.material.opacity = .7 * Math.sin(Math.min(1, p.t*4)*Math.PI/2) * (1 - p.t) * roofShown;
+  }
 });

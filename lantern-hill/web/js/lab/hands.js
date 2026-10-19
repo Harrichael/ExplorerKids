@@ -1,6 +1,7 @@
 // The explorer's hands at the desk: a lab glove that follows the pointer, grabs what's under it,
-// carries it while the pointer drags, and tips it while Space, the right mouse button or the
-// on-screen Tip button is held.
+// carries it while the pointer drags, and tips it while T, Space, the right mouse button or the
+// on-screen Tip button is held. It can also reach past the mat (into the Free Lab's cabinet):
+// `reach.point(ray)` hears where the pointer is, and `reach.press(ray)` says whether it took the press.
 
 import * as THREE from 'three';
 import { T, cyl, outline, sph } from '../core/kit.js';
@@ -26,7 +27,7 @@ const latex = T(0xa9d8ef);
   glove.scale.setScalar(1.3); glove.visible = false;
 }
 
-let on = false, pid = null, hover = false, curl = 0, tipKey = false, tipMouse = false, tipBtn = false;
+let on = false, reach = null, pid = null, hover = false, curl = 0, tipKey = false, tipMouse = false, tipBtn = false;
 const ndc = new THREE.Vector2(), rc = new THREE.Raycaster(), _m = new THREE.Vector3();
 function aim(e){
   const r = canvas.getBoundingClientRect();
@@ -38,11 +39,14 @@ function down(e){
   if (e.button === 2) { tipMouse = true; e.preventDefault(); return; }
   if (pid !== null || e.button > 0) return;
   Sound.init(); pid = e.pointerId; try { canvas.setPointerCapture(pid); } catch (err) {} aim(e); hover = true;
+  if (reach && reach.press(desk.ray)) return;
   const it = pick(desk.ray); if (it) grab(it);
 }
-function move(e){ if (!on) return; if (pid === null && e.pointerType !== 'mouse') return; if (pid !== null && e.pointerId !== pid) return; aim(e); hover = true; }
+// a second button pressed mid-drag only shows up in `buttons` on later events, never as its own pointerdown
+function move(e){ if (!on) return; if (e.pointerType === 'mouse') tipMouse = !!(e.buttons & 2); if (pid === null && e.pointerType !== 'mouse') return; if (pid !== null && e.pointerId !== pid) return; aim(e); hover = true; }
 function up(e){
-  if (e.button === 2) { tipMouse = false; return; }
+  if (e.pointerType === 'mouse') tipMouse = !!(e.buttons & 2);
+  if (e.button === 2) return;
   if (e.pointerId !== pid) return;
   pid = null; release(); if (e.pointerType !== 'mouse') hover = false;
 }
@@ -51,15 +55,16 @@ canvas.addEventListener('pointermove', move);
 canvas.addEventListener('pointerup', up);
 canvas.addEventListener('pointercancel', up);
 canvas.addEventListener('pointerleave', e => { if (on && pid === null && e.pointerType === 'mouse') hover = false; });
+addEventListener('blur', () => { tipMouse = false; });
 canvas.addEventListener('contextmenu', e => { if (on) e.preventDefault(); });
 
-export function handsOn(root){ on = true; root.add(glove); glove.visible = false; hover = false; }
+export function handsOn(root, beyond = null){ on = true; reach = beyond; root.add(glove); glove.visible = false; hover = false; }
 export function handsOff(){
   on = false; if (pid !== null) { try { canvas.releasePointerCapture(pid); } catch (e) {} } pid = null;
   release(); glove.visible = false; tipKey = tipMouse = tipBtn = false; desk.tip = false;
+  if (reach) reach.point(null); reach = null;
 }
 export const setTipKey = v => { tipKey = v; }, setTipButton = v => { tipBtn = v; };
-export const holding = () => desk.held;
 
 export function updateHands(dt, t){
   desk.tip = tipKey || tipMouse || tipBtn;
@@ -67,12 +72,12 @@ export function updateHands(dt, t){
   curl += ((it ? 1 : 0) - curl)*Math.min(1, dt*14);
   fingers.forEach((f, i) => { f.rotation.x = -curl*(i === 4 ? .5 : 1.4); });
   glove.visible = on && (hover || !!it);
+  if (reach) reach.point(hover && !it ? desk.ray : null);
   if (!glove.visible) return;
   if (it) {
     // grip the near side of whatever is held, turning with it as it tips
-    const g = it.state === 'attached' ? it.host.g : it.g;
-    g.updateMatrix(); _m.set(0, it.state === 'attached' ? it.host.def.h*.25 + .05 : .006, (it.state === 'attached' ? it.host.def.r : it.def.r) + .016).applyMatrix4(g.matrix);
-    glove.position.lerp(_m, Math.min(1, dt*25)); glove.rotation.set(-.35, 0, it.state === 'attached' ? 0 : it.tilt + it.swz);
+    it.g.updateMatrix(); _m.set(0, it.attached ? .06 : it.grip, it.def.r + .016).applyMatrix4(it.g.matrix);
+    glove.position.lerp(_m, Math.min(1, dt*25)); glove.quaternion.copy(it.g.quaternion); glove.rotateX(-.35);
   } else if (desk.ray) {
     const p = deskPoint(desk.ray, .11);
     if (p) { glove.position.set(p.x, p.y + Math.sin(t*3)*.004, p.z); glove.rotation.set(-.55, 0, 0); }
