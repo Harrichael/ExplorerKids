@@ -225,7 +225,7 @@ button.snd:focus-visible,button.word:focus-visible{outline:3px solid #6d3b5e;out
 .use.big{left:16px;right:16px;bottom:auto;top:calc(max(120px, 26%) + env(safe-area-inset-top,0px));margin:0 auto;width:fit-content;max-width:calc(100% - 32px);height:auto;border-radius:24px;padding:18px 28px;font-size:26px;line-height:1.15;z-index:6;animation:popin .25s ease-out,bigpulse 1.2s ease-in-out .25s infinite}
 @keyframes bigpulse{50%{box-shadow:0 0 0 3px var(--ink),0 0 34px rgba(255,211,107,.9)}}
 #prompt.big{bottom:auto;top:calc(max(120px, 26%) + env(safe-area-inset-top,0px));font-size:28px;line-height:1.3;padding:14px 28px;white-space:normal;max-width:calc(100% - 32px);box-sizing:border-box}
-/* Theo's worry list, each worry crossed off as a place shows it can't happen */
+/* Basil's worry list, each worry crossed off as a place shows it can't happen */
 #worries{position:fixed;top:calc(84px + env(safe-area-inset-top,0px));left:16px;right:16px;margin:0 auto;width:fit-content;max-width:min(360px,calc(100% - 32px));box-sizing:border-box;z-index:5;pointer-events:none;
   background:#efe0bf;color:#1a1320;border:3px solid var(--gold);border-radius:14px;box-shadow:0 0 0 4px var(--ink),0 10px 26px rgba(0,0,0,.45);padding:8px 16px 10px;transform:rotate(-1.5deg);animation:popin .35s cubic-bezier(.3,1.4,.5,1);
   background-image:repeating-linear-gradient(transparent 0 23px,rgba(52,64,107,.16) 23px 24px)}
@@ -262,6 +262,9 @@ button.snd:focus-visible,button.word:focus-visible{outline:3px solid #6d3b5e;out
 #notebook .slot canvas{width:100%;height:auto;border-radius:8px}
 #notebook .slot.empty{opacity:.35;border-style:dashed}
 #notebook .slot.new{animation:popin .6s .25s cubic-bezier(.3,1.4,.5,1) both}
+#notebook .slot.full{background:#fff1c4;border-color:#b07a1e;box-shadow:0 0 0 3px #ffd36b}
+#notebook .stars{display:block;font-size:17px;letter-spacing:2px;color:#d9a441;-webkit-text-stroke:1px #1a1320;margin-top:2px}
+#notebook .stars i{font-style:normal;color:#fff8e8;opacity:.8}
 #notebook .cap{font-weight:800;font-size:13.5px;line-height:1.35;text-align:center;padding:4px 2px 2px}
 #notebook .cap b{display:block;font-family:var(--display);font-weight:400;font-size:16px}
 @media (max-width:520px){#notebook .slots{grid-template-columns:1fr 1fr;gap:8px}#notebook .cap{font-size:12px}}

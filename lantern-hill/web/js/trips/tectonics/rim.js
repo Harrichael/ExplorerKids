@@ -121,7 +121,7 @@ export function buildRim(t){
   const say = t.say;
   // a tall phone screen sees a narrow slice, so the binoculars stand back to fit the whole row in
   const far = (pos, look) => { if (innerWidth < innerHeight) { pos.x = look.x + (pos.x - look.x)*1.5; pos.z = look.z + (pos.z - look.z)*1.5; } };
-  cls.find('pip', {at:[-1.4, CRATER + 1.3, Math.PI], pose:'peer', core:true, call:"Come see what's down there!", after:["Volcanoes all in a row. Like beads on a string!"],
+  cls.find('pip', {name:'row', at:[-1.4, CRATER + 1.3, Math.PI], pose:'peer', call:"Come see what's down there!", after:["Volcanoes all in a row. Like beads on a string!"],
     async scene(){
       await say([['pip', "{name}! Look down inside the crater. It's glowing!"]]);
       t.cut((pos, look) => { pos.set(-1.4, 3.2, CRATER + 1.4); look.set(0, LAVA, 0); });
@@ -139,20 +139,19 @@ export function buildRim(t){
       await say([[ 'pip', ["Ooh, something under the ground. That's my guess too!", "Ha! Giant volcano builders? I don't think so…", "Me neither. But I want to find out!"][pick]],
                  ['juniper', "I'm writing that question down. Why are the volcanoes in a row?"]]);
     }});
-  cls.find('theo', {at:[VENT[0] - .9, VENT[1] + 1.8, 2.7], core:true, call:"Is this supposed to happen?!", after:["I'm keeping my hands in my pockets, thank you."],
+  cls.find('basil', {name:'vent', at:[VENT[0] - .9, VENT[1] + 1.8, 2.7], call:"Is this supposed to happen?!", after:["I'm keeping my hands in my pockets, thank you."],
     async scene(){
       vent.burst = 1.2; Sound.hiss({dur:1.2, vol:.14, type:'bandpass', freq:900, q:.6});
-      await say([['theo', "{name}, this rock keeps hissing at me!"]]);
-      const pick = await t.ask('theo', "Will you check it? I'm not putting MY hand there.", ["Hold my hand near it", "Back away slowly"]);
+      await say([['basil', "{name}, this rock keeps hissing at me!"]]);
+      const pick = await t.ask('basil', "Will you check it? I'm not putting MY hand there.", ["Hold my hand near it", "Back away slowly"]);
       if (pick === 0) { vent.burst = 1.5; Sound.hiss({dur:1, vol:.12, type:'lowpass', freq:600});
-        await say([['theo', "Is it warm? It's warm, isn't it. You're so brave."]]); }
-      else await say([['theo', "Good thinking. Let's watch from here."]]);
-      await say([['theo', "That's steam coming right out of the ground. Something under us is really, really hot."],
-                 ['theo', "But the heat is way down deep. It can't burn us up here!"]]);
-      worries(0);
-      await say([['theo', "One worry, crossed off."]]);
+        await say([['basil', "Is it warm? It's warm, isn't it. You're so brave."]]); }
+      else await say([['basil', "Good thinking. Let's watch from here."]]);
+      await say([['basil', "That's steam coming right out of the ground. Something under us is really, really hot."],
+                 ['basil', "But the heat is way down deep. It can't burn us up here!"]]);
+      await say([['basil', worries(0)]]);
     }});
-  cls.find('juniper', {at:[POOL[0] + .7, POOL[1] + 1.5, -2.6], pose:'crouch', call:"Rocks that float? Come see!", after:["Pumice. It's full of holes, like a sponge made of stone."],
+  cls.find('juniper', {name:'pumice', at:[POOL[0] + .7, POOL[1] + 1.5, -2.6], pose:'crouch', call:"Rocks that float? Come see!", after:["Pumice. It's full of holes, like a sponge made of stone."],
     async scene(){
       await say([['juniper', "Pick one up, {name}. These rocks are as light as a cookie!"]]);
       const pick = await t.ask('juniper', "If you toss one in the pool, will it float or sink?", ["It will float", "It will sink"]);
@@ -160,7 +159,7 @@ export function buildRim(t){
       await t.wait(1.6);
       await say([['juniper', (pick === 0 ? "You were right, it floats! " : "Surprise, it floats! ") + "It's full of tiny holes, from gas bubbles in the lava."]]);
     }});
-  cls.find('mo', {at:[TOAST[0] + .8, TOAST[1] + .9, -2.3], pose:'crouch', call:"Snack time! Come here!", after:["Best. Field trip. Ever."],
+  cls.find('mo', {name:'toast', at:[TOAST[0] + .8, TOAST[1] + .9, -2.3], pose:'crouch', call:"Snack time! Come here!", after:["Best. Field trip. Ever."],
     async scene(){
       Sound.hiss({dur:1.5, vol:.06, type:'highpass', freq:2500});
       await say([['mo', "Feel the ground here, {name}. It's warm! Like a stove!"],
@@ -168,10 +167,8 @@ export function buildRim(t){
       const pick = await t.ask('mo', "Want one?", ["Yes, please!", "No, thank you"]);
       await say([['mo', pick ? "More for me! But where's all this heat coming from?" : "Here you go! Hey, where's all this heat coming from, anyway?"]]);
     }});
-  cls.hint = () => {
-    if (!cls.found.size) return "Pip has the binoculars, Theo found something hissing, and Mo smells like marshmallows. Go see!";
-    return cls.done(2) ? "Back to the bus, {name}! I want to show you where that melted rock comes from." : "Keep looking, {name}! Somebody is still waving you over.";
-  };
+  cls.hint = () => cls.saw('row') ? "Back to the bus whenever you're ready, {name}! Or go see anyone still waving." :
+    "Pip has the binoculars, Basil found something hissing, and Mo smells like marshmallows. Go see!";
 
   // ---------- the place's scenes, run by the trip's script ----------
   return {world:w, bus, cls,
@@ -193,12 +190,13 @@ export function buildRim(t){
       t.goal('Visit anyone who waves!');
     },
     async explore(){
-      await t.until(() => cls.done(2) && !game.cutscene);
+      await t.until(() => cls.saw('row') && !game.cutscene);
       await t.wait(.6);
-      await say([['sparks', "Steam, warm ground, melted rock. The heat comes from deep inside the Earth!"],
-                 ['sparks', "Let's follow the melted rock down. Back to the bus when you're ready!"]]);
+      await say([['sparks', cls.saw('vent') || cls.saw('toast') ? "Steam, warm ground, melted rock. The heat comes from deep inside the Earth!" :
+                              "Rock so hot it melts and glows! That heat comes from deep inside the Earth."],
+                 ['sparks', "Let's follow the melted rock down. Back to the bus when you're ready!"], ...cls.stillWaving()]);
       cls.gather([bus.root.position.x - .6, bus.root.position.z - 2.2, 0]);
-      await bus.boarding(t);
+      await cls.board(bus);
     },
     // up over the crater, a drill grows from the nose, and the bus dives into the lava
     async depart(){

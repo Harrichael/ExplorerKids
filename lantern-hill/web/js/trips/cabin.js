@@ -10,22 +10,21 @@
 // The cabin runs along x with the windshield at +x, like the bus outside.
 
 import * as THREE from 'three';
-import { C, T, XF, add, bAdd, bFlush, box, rrect, tex } from '../core/kit.js';
+import { C, T, XF, add, bAdd, bFlush, box, grp, outline, rrect, tex } from '../core/kit.js';
 import { inWorld } from '../core/world.js';
 import { hero } from '../player.js';
 import { game } from '../state.js';
-import { spawnNPC, tripWorld } from './stop-kit.js';
+import { puffs, spawnNPC, tripWorld } from './stop-kit.js';
 
 // [x, z] for each seat, facing the front; the explorer has their own
-const SEATS = {pip:[1.25, -.72], juniper:[1.25, .72], theo:[0, -.72], mo:[-1.25, .72]}, MINE = [0, .72];
+const SEATS = {pip:[1.25, -.72], juniper:[1.25, .72], basil:[0, -.72], mo:[-1.25, .72]}, MINE = [0, .72];
 const FACE = Math.PI/2;
 // each view is a tileable painting and the way it streams past: +x out the back, +y up past the glass
 const VIEWS = {
   sky:    {flow:[.12, 0], light:0xffd8b8, draw: (c, w, h) => { grad(c, w, h, ['#3a3a7a', '#a46a9a', '#f2a67a']); clouds(c, w, h, .35, 'rgba(255,236,220,.85)'); }},
   sea:    {flow:[.07, 0], light:0xcfe0ff, draw: (c, w, h) => { grad(c, w, h*.55, ['#4a4a8a', '#c88aa0', '#ffc69a']); clouds(c, w, h*.5, .25, 'rgba(255,236,220,.8)');
             const g = c.createLinearGradient(0, h*.55, 0, h); g.addColorStop(0, '#3a7aa0'); g.addColorStop(1, '#1e3a62'); c.fillStyle = g; c.fillRect(0, h*.55, w, h*.45);
-            c.fillStyle = 'rgba(255,240,210,.7)'; for (let i = 0; i < 70; i++) c.fillRect(rnd(w), h*.58 + rnd(h*.4), 6 + rnd(18), 2);
-            island(c, w*.3, h*.56, .6); island(c, w*.78, h*.56, .35); }},
+            c.fillStyle = 'rgba(255,240,210,.7)'; for (let i = 0; i < 70; i++) c.fillRect(rnd(w), h*.58 + rnd(h*.4), 6 + rnd(18), 2); }},
   rock:   {flow:[0, -1.6], light:0xffa070, draw: (c, w, h) => strata(c, w, h, ['#6b4430', '#5a3826', '#7a5038', '#4e3020'], 'rgba(255,200,140,.5)')},
   magma:  {flow:[0, -1.1], light:0xff7a3a, draw: (c, w, h) => { grad(c, w, h, ['#ff9a3a', '#e0502a', '#ffb050', '#e0502a', '#ff9a3a']); blobs(c, w, h, 'rgba(255,230,140,.6)', 26); }},
   mantle: {flow:[0, -.5], light:0xff8a5a, draw: (c, w, h) => strata(c, w, h, ['#7a2c1e', '#8a3624', '#6a2418', '#943c26'], 'rgba(255,150,90,.35)')},
@@ -41,14 +40,6 @@ function clouds(c, w, h, n, col){ c.fillStyle = col; for (let i = 0; i < 9; i++)
 function strata(c, w, h, cols, fleck){ for (let y = 0, i = 0; y < h; i++) { const bh = 14 + rnd(30); c.fillStyle = cols[i % cols.length]; c.fillRect(0, y, w, bh); y += bh; }
   c.fillStyle = fleck; for (let i = 0; i < 160; i++) { const x = rnd(w), y = rnd(h); c.beginPath(); c.arc(x, y, 2 + rnd(5), 0, 7); c.fill(); } }
 function blobs(c, w, h, col, n){ c.fillStyle = col; for (let i = 0; i < n; i++) { const x = rnd(w), y = rnd(h), r = 8 + rnd(26); c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); } }
-// a smoking volcano island on the horizon, the one the class is flying to
-function island(c, x, y, s){
-  c.lineJoin = 'round'; c.lineWidth = 4; c.strokeStyle = '#1a1320';
-  c.fillStyle = '#4e7a4e'; c.beginPath(); c.ellipse(x, y, 170*s, 16*s, 0, Math.PI, 0); c.fill(); c.stroke();
-  c.fillStyle = '#6a4462'; c.beginPath(); c.moveTo(x - 130*s, y); c.quadraticCurveTo(x - 50*s, y - 40*s, x - 22*s, y - 110*s); c.lineTo(x + 22*s, y - 110*s); c.quadraticCurveTo(x + 50*s, y - 40*s, x + 130*s, y); c.closePath(); c.fill(); c.stroke();
-  c.fillStyle = '#ff8a3a'; c.beginPath(); c.ellipse(x, y - 110*s, 20*s, 6*s, 0, 0, 7); c.fill();
-  c.fillStyle = 'rgba(230,220,235,.85)'; for (let k = 0; k < 5; k++) { c.beginPath(); c.arc(x + k*14*s, y - (130 + k*26)*s, (14 + k*6)*s, 0, 7); c.fill(); }
-}
 function rings(c, w, h, n){ c.strokeStyle = 'rgba(210,240,255,.8)'; c.lineWidth = 3; for (let i = 0; i < n; i++) { const x = rnd(w), y = rnd(h), r = 4 + rnd(14); c.beginPath(); c.arc(x, y, r, 0, 7); c.stroke(); } }
 
 export function cabin(){
@@ -56,6 +47,7 @@ export function cabin(){
   w.area = () => 'On board';
   w.spawn = [MINE[0], MINE[1], FACE];
   const views = {}, panes = [];
+  let isle;
   const light = new THREE.PointLight(0xffd8b8, .9, 9, 1.5); light.position.set(0, 1.6, 0); w.scene.add(light);
   inWorld(w, () => {
     const gold = T(C.gold), wood = T(C.woodLt);
@@ -106,10 +98,19 @@ export function cabin(){
       const t = tex(1024, 512, v.draw); t.wrapS = t.wrapT = THREE.RepeatWrapping; views[name] = {t, ...v};
     }
     for (const [x, z, ry, wd] of [[0, -2.6, 0, 9], [0, 2.6, Math.PI, 9], [4.6, 0, -Math.PI/2, 5], [-4.4, 0, Math.PI/2, 5]]) {
-      const m = new THREE.MeshBasicMaterial({map:views.sky.t.clone(), fog:false}); m.map.needsUpdate = true;
-      const pane = add(new THREE.PlaneGeometry(wd, 4), m, x, 1.5, z, null, false); pane.rotation.y = ry; panes.push({pane, dir: ry === Math.PI ? -1 : 1});
+      // drawn first and leaving no depth, so the painting is a backdrop that the island out there stands in front of
+      const m = new THREE.MeshBasicMaterial({map:views.sky.t.clone(), fog:false, depthWrite:false}); m.map.needsUpdate = true;
+      const pane = add(new THREE.PlaneGeometry(wd, 4), m, x, 1.5, z, null, false); pane.rotation.y = ry; pane.renderOrder = -1; panes.push({pane, dir: ry === Math.PI ? -1 : 1});
     }
+    // the volcano island the class is flying to, a real one out past the glass, framed by the window shot
+    isle = grp(-5.9, .3, -15.1);
+    add(new THREE.SphereGeometry(1, 20, 10), T(0x3e7a40), 0, 0, 0, isle, false).scale.set(4.2, .45, 3.4);
+    const cone = [[2.9, 0], [2.2, .7], [1.3, 1.8], [.75, 2.7], [.55, 2.85]].map(([r, y]) => new THREE.Vector2(r, y));
+    outline(add(new THREE.LatheGeometry(cone, 24), T(0x5a3428), 0, .2, 0, isle, false), 1.02);
+    add(new THREE.CircleGeometry(.56, 20), T(0xff8a3a, {emissive:0xff6a1a, emissiveIntensity:.9}), 0, 3.03, 0, isle, false).rotation.x = -Math.PI/2;
+    isle.scale.setScalar(.55); isle.visible = false;
   });
+  const smoke = puffs(w, -5.9, 2.1, -15.1, {rate:0, rise:.35, size:.8, color:0xc8bccc, opacity:.85, spread:.6, life:4});
   // the class, sat down and facing the front, and Dr. Sparks standing by the windshield facing them
   const kids = {};
   for (const [id, [x, z]] of Object.entries(SEATS)) { const n = kids[id] = spawnNPC(w, id, x + .05, z, FACE); n.pose = 'sit'; n.range = 0; n.label.visible = false; }
@@ -130,10 +131,12 @@ export function cabin(){
     class:   (pos, look) => { pos.set(4.4, 1.6 + sway, .3); look.set(-3, .6, .7); },
     // over the class's heads, so nothing stands between the explorer and Dr. Sparks
     teacher: (pos, look) => { pos.set(-.5, 2.2 + sway, 0); look.set(3.0, 1.5, -1.25); },
-    window:  (pos, look) => { pos.set(-1.1, 1.7 + sway, 0); look.set(-1.5, 1.35, -1.4); },
+    // on a short screen the talk box covers the lower half, so look lower and the island rides up above it
+    window:  (pos, look) => { pos.set(-1.1, 1.5 + sway, .2); look.set(-1.6, innerHeight < 500 ? 1.22 : 1.45, -1.4); },
   };
   return {world:w, kids, sparks,
-    view(name){ cur = views[name]; scroll = 0; for (const {pane} of panes) { pane.material.map = cur.t.clone(); pane.material.map.needsUpdate = true; pane.material.needsUpdate = true; } light.color.setHex(cur.light); },
+    view(name){ cur = views[name]; scroll = 0; for (const {pane} of panes) { pane.material.map = cur.t.clone(); pane.material.map.needsUpdate = true; pane.material.needsUpdate = true; } light.color.setHex(cur.light);
+      isle.visible = name === 'sea'; smoke.rate = isle.visible ? 1.6 : 0; },
     shot: name => SHOTS[name],
   };
 }

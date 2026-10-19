@@ -47,7 +47,7 @@ const ray = new THREE.Raycaster();
 const SUN_FROM = new THREE.Vector3(-9, 16, 7);
 const areaEl = $('area'); let areaName = '';
 let lastNearest = null;
-const inReach = u => Math.hypot(player.x - u.x, player.z - u.z) < u.range && Math.abs(player.y - (u.y || 0)) < 1;
+const inReach = u => Math.hypot(player.x - u.x, player.z - u.z) < u.range && Math.abs(player.y - (u.y || 0)) < 1 && (!u.when || u.when());
 
 function update(dt){
   game.elapsed += dt;
@@ -127,7 +127,11 @@ function update(dt){
       // someone with somewhere to be walks there, even while a cutscene watches them go
       if (n.goal) {
         const ddx = n.goal.x - n.x, ddz = n.goal.z - n.z, dd = Math.hypot(ddx, ddz), st = Math.min(dd, (n.goal.run ? 4.6 : 2.6)*dt);
-        if (dd > .03) { n.x += ddx/dd*st; n.z += ddz/dd*st; lookA = Math.atan2(ddx, ddz); n.walk += dt*(n.goal.run ? 13 : 9.5); }
+        if (dd > .03) {
+          // a straight line can cross ground nobody walks on (a crater, say), so turn along its edge instead
+          let a = Math.atan2(ddx, ddz); const ok = a2 => b(n.x + Math.sin(a2)*st, n.z + Math.cos(a2)*st), b = game.world.bounds;
+          if (b && b(n.x, n.z) && b(n.goal.x, n.goal.z) && !ok(a)) for (let k = .25; k < 3; k += .25) { if (ok(a + k)) { a += k; break; } if (ok(a - k)) { a -= k; break; } }
+          n.x += Math.sin(a)*st; n.z += Math.cos(a)*st; lookA = a; n.walk += dt*(n.goal.run ? 13 : 9.5); }
         else { const g = n.goal; n.goal = null; if (g.angle !== undefined) n.baseAngle = g.angle; if (g.then) g.then(); }
         n.y = n.gy = game.world.ground(n.x, n.z); m.root.position.set(n.x, n.y, n.z);
       }

@@ -3,14 +3,15 @@
 // Nobody follows the explorer around: the explorer goes to them.
 //
 //   const cls = classmates(w, t, [busX, busZ]);
-//   cls.find('juniper', {at:[x, z, facing], pose:'crouch', call:"Come feel this!", core:true,
+//   cls.find('juniper', {name:'rock', at:[x, z, facing], pose:'crouch', call:"Come feel this!",
 //     scene: async () => { ... }, after:["Still warm!"]});
 //   cls.hint = () => "...";                    // what Dr. Sparks says if asked
 //   cls.arrive();                              // everyone runs to their spots
-//   await t.until(() => cls.done(2));          // two core finds made
+//   await t.until(() => cls.saw('rock'));      // the find the place can't be left without
 //
-// When Dr. Sparks calls everyone back to the bus, anyone with a find not yet seen stays and keeps
-// calling, and heads for the bus once the explorer has been to see it.
+// A place needs only its key find seen; the rest are the explorer's to choose. When Dr. Sparks calls
+// everyone back to the bus, anyone with a find not yet seen stays and keeps calling, and heads for
+// the bus once the explorer has been to see it, or the explorer can just climb aboard.
 
 import * as THREE from 'three';
 import { tex } from '../core/kit.js';
@@ -21,7 +22,7 @@ import { game } from '../state.js';
 import { convo } from '../ui/dialogue.js';
 import { spawnNPC } from './stop-kit.js';
 
-export const CLASS = ['sparks', 'pip', 'juniper', 'theo', 'mo'];
+export const CLASS = ['sparks', 'pip', 'juniper', 'basil', 'mo'];
 const bang = tex(128, 128, (c, w, h) => {
   c.fillStyle = '#efe0bf'; c.strokeStyle = '#1a1320'; c.lineWidth = 8;
   c.beginPath(); c.arc(64, 56, 44, 0, 7); c.moveTo(48, 92); c.lineTo(40, 120); c.lineTo(72, 96); c.fill(); c.stroke();
@@ -38,8 +39,15 @@ export function classmates(w, t, door){
   const cls = {n, found, hint: () => "Look around, {name}! Somebody's sure to find something.",
     find(id, f){ f.id = id; f.who = n[id]; f.mark = new THREE.Sprite(new THREE.SpriteMaterial({map:bang, transparent:true, depthWrite:false}));
       f.mark.scale.set(.6, .6, 1); f.mark.visible = false; w.scene.add(f.mark); finds.push(f); return f; },
-    // how many core finds have been made, or whether at least `k` have
-    done: k => [...found].filter(f => f.core).length >= k,
+    saw: name => [...found].some(f => f.name === name),
+    tally: () => ({seen:found.size, of:finds.length}),
+    // what Dr. Sparks adds when she calls everyone back, if some still have something to show
+    stillWaving(or = 'hop on the bus'){
+      const who = [...new Set(finds.filter(f => !found.has(f) && (!f.when || f.when())).map(f => f.who.name))];
+      if (!who.length) return [];
+      const names = who.length > 1 ? who.slice(0, -1).join(', ') + ' and ' + who.at(-1) : who[0];
+      return [['sparks', `${names} ${who.length > 1 ? 'still want' : 'still wants'} to show you something. Go and see, or ${or}!`]];
+    },
     // off the bus, everyone to their spot: the first find of each kid, or where they were told to stand
     arrive(spots = {}){
       CLASS.forEach((id, i) => {
@@ -51,6 +59,8 @@ export function classmates(w, t, door){
     },
     // everyone back to the bus door to wait for the explorer
     gather(at){ bus = at; },
+    // until the explorer climbs aboard; never in the middle of a find, whose scene would be left running
+    board: b => b.boarding(t, () => !running),
   };
   let bus = null;
   const ready = f => !found.has(f) && !f.who.goal && game.elapsed > (f.who.spotted || 0) && (!f.when || f.when());
