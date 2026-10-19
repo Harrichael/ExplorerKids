@@ -1,7 +1,7 @@
 // The Library Nook reader: the explorer settles down with a storybook open in front of them, on their
-// tummy on the floor wherever they are or cross-legged in the window seat, and the camera looks down at
-// the pages, which curl as they turn. Everything happens in the world itself. Loaded the first time
-// someone reads a book from their backpack.
+// tummy on the floor wherever they are, cross-legged in the window seat or back in an armchair, and the
+// camera looks down at the pages, which curl as they turn. Everything happens in the world itself. Loaded
+// the first time someone reads a book from their backpack.
 
 import * as THREE from 'three';
 import { ease } from '../core/kit.js';
@@ -225,8 +225,20 @@ $r('rClose').addEventListener('click', () => close());
 // where: 'window' for the window seat, otherwise the floor where they stand
 export function openReader(id, where) {
   const b = BOOKS.find(x => x.id === id), pl = where === 'window' ? WINDOW : onTheFloor();
-  if (!b || !b.pages || !sitDown({x: pl.x, z: pl.z, angle: pl.angle, pose: pl.pose, seated: () => { game.cutCam = readCam; el.hidden = false; }})) return;
-  at = pl; fwd.set(Math.sin(at.angle), 0, Math.cos(at.angle));
+  if (!b || !b.pages || !sitDown({x: pl.x, z: pl.z, angle: pl.angle, pose: pl.pose, seated: show})) return;
+  begin(b, pl, standUp);
+}
+// For someone already sat down somewhere else, an armchair say: the book opens at place, laid out as a place
+// above is, and closing it hands them back to done rather than standing them up
+export function readSeated(id, place, done) {
+  const b = BOOKS.find(x => x.id === id);
+  if (!b || !b.pages) return false;
+  begin(b, place, done); show(); return true;
+}
+const show = () => { game.cutCam = readCam; el.hidden = false; };
+let after = standUp;
+function begin(b, pl, then) {
+  at = pl; after = then; fwd.set(Math.sin(at.angle), 0, Math.cos(at.angle));
   B.root.scale.setScalar(at.scale); B.root.rotation.y = at.angle + Math.PI; B.root.position.set(...at.book);
   closeDialog(); for (const k in keys) keys[k] = false; open = true;
   B.root.visible = true; document.documentElement.classList.add('reading-book');
@@ -236,7 +248,7 @@ export function openReader(id, where) {
 function close() {
   if (!open) return;
   open = false; el.hidden = true; document.documentElement.classList.remove('reading-book');
-  game.cutCam = null; B.root.visible = false; standUp();
+  game.cutCam = null; B.root.visible = false; after();
   Sound.duck(false);
 }
 function key(e) {

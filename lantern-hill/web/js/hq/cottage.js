@@ -1,7 +1,7 @@
 // The cottage: interior x -10..10, z -7..7, door on the east wall.
 
 import * as THREE from 'three';
-import { C, T, add, box, col, cyl, glowM, grad, grp, occluder, outline, rand, rr, rrect, sph, tex } from '../core/kit.js';
+import { C, T, add, box, col, cyl, glowM, glowTex, grad, grp, occluder, outline, rand, rr, rrect, sph, tex } from '../core/kit.js';
 import { Sound } from '../core/sound.js';
 import { player } from '../player.js';
 import { dressing } from '../ui/wardrobe.js';
@@ -137,17 +137,33 @@ const stoneTex = tex(256,256,(g,w,h)=>{ g.fillStyle='#4e4656'; g.fillRect(0,0,w,
     g.fillStyle = ['#7d7486','#8a8090','#6f6678','#94899a'][Math.floor(rand()*4)]; rrect(g, x, y, 50, 38, 10); g.fill(); } }, 1.4, 1.2);
 const stoneMat = T(0xffffff, {map:stoneTex});
 const fire = grp(0, 0, -6.55);
+// where the flames burn, for anyone who wants to look at them
+export const FIRE = {x:0, y:.7, z:-6.15};
 box(3.4, 2.8, .9, stoneMat, 0, 1.4, 0, fire);
-box(1.8, 1.35, .3, T(0x1c1014), 0, .75, .35, fire, false);
+box(1.8, 1.35, .04, T(0x1c1014), 0, .75, .47, fire, false);
 add(new THREE.SphereGeometry(.9,16,8,0,Math.PI,0,Math.PI/2), stoneMat, 0, 1.42, .3, fire).scale.set(1,.35,.25);
 box(3.9, .12, 1.5, stoneMat, 0, .06, .55, fire);
 box(3.9, .18, 1.1, T(C.wood), 0, 2.15, .15, fire);
-for (const [lx,lr] of [[-.25,.3],[.25,-.3],[0,0]]) { const lg = cyl(.11,.11,1.1,T(C.woodDk),lx,.22,.35,fire,8); lg.rotation.z = Math.PI/2; lg.rotation.y = lr; }
+// The fire is laid on the hearth in front of the sooty back. The firelight on the soot and the embers'
+// glow pulse with the flames, and the flames are lit by nothing but themselves, so they stay fire-coloured.
+const sootGlow = add(new THREE.PlaneGeometry(1.8, 1.35), new THREE.MeshBasicMaterial({map:tex(128,96,(g,w,h)=>{
+  const gr = g.createRadialGradient(w/2,h,4,w/2,h,h*1.1); gr.addColorStop(0,'rgba(255,140,50,.85)'); gr.addColorStop(.45,'rgba(200,70,20,.35)'); gr.addColorStop(1,'rgba(120,30,10,0)');
+  g.fillStyle = gr; g.fillRect(0,0,w,h); }), transparent:true, depthWrite:false, blending:THREE.AdditiveBlending}), 0, .75, .495, fire, false);
+const embers = add(new THREE.CylinderGeometry(.55, .62, .07, 14), new THREE.MeshBasicMaterial({color:0xff5a1f}), 0, .155, .7, fire, false);
+embers.scale.z = .45;
+for (const [lx,lr] of [[-.25,.3],[.25,-.3],[0,0]]) { const lg = cyl(.11,.11,1.1,T(C.woodDk),lx,.25,.7,fire,8); lg.rotation.z = Math.PI/2; lg.rotation.y = lr; }
 const flames = [];
-for (const [fx,fs,fc] of [[0,1,0xff8a3d],[-.25,.7,0xffb347],[.27,.75,0xffb347],[0,.55,0xffe08a]]) {
-  const f = add(new THREE.ConeGeometry(.2*fs,.75*fs,7), glowM(fc, 1.3), fx, .4 + .36*fs, .4, fire, false);
-  flames.push({m:f, ph:rand()*6});
+// a tongue of flame: a smooth teardrop, wide near its foot and drawn up to a point
+const tongue = new THREE.LatheGeometry([[0,0],[.55,.12],[.62,.32],[.46,.58],[.22,.84],[0,1]].map(([x,y]) => new THREE.Vector2(x,y)), 12);
+const flameM = c => new THREE.MeshBasicMaterial({color:c, transparent:true, opacity:.92, depthWrite:false});
+// [x, z, height, width, colour]: the big orange ones at the back, yellow and white-hot in front, blue at the feet
+for (const [fx,fz,fh,fw,fc,i] of [[0,.66,1,.2,0xff7a2a,0],[-.27,.68,.72,.17,0xff8a30,1],[.3,.68,.78,.16,0xff8a30,2],[0,.72,.6,.13,0xffe08a,3],
+    [-.14,.74,.5,.12,0xffc04a],[.16,.74,.46,.12,0xffc04a],[-.42,.7,.42,.1,0xff7a2a],[.45,.7,.4,.1,0xff7a2a],[0,.78,.3,.08,0xfff4d0],[-.08,.8,.1,.09,0x6f8cff],[.1,.8,.09,.08,0x6f8cff]]) {
+  const f = add(tongue, flameM(fc), fx, .2, fz, fire, false); f.scale.set(fw, fh*.8, fw);
+  flames.push({m:f, h:fh*.8, ph:i === undefined ? fx*7 + fh*11 : rand()*6});
 }
+const fireGlow = new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex, color:0xff9a40, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.55}));
+fireGlow.scale.set(2.2, 1.6, 1); fireGlow.position.set(0, .6, .75); fire.add(fireGlow);
 const fireLight = new THREE.PointLight(0xff8a3d, 1.6, 11, 1.6); fireLight.position.set(0, 1.0, -5.5); scene.add(fireLight);
 col(-1.95, 1.95, -7, -5.75, -5, .2);
 col(-1.7, 1.7, -7, -6.05);
@@ -181,7 +197,9 @@ function armchair(x, z, ry, c){
   for (let i=0;i<3;i++) sph(.035,T(C.gold),-.35+i*.35,1.2,-.26,g,6,false);
   return g;
 }
-armchair(-1.9, -3.4, Math.PI - .6, C.forest); armchair(1.9, -3.4, -(Math.PI - .6), C.rust);
+// each turned to face the fire; ry turns the chair's front (its +z) round to face that way
+export const ARMCHAIRS = [{x:-1.9, z:-3.4, ry:Math.PI - .6, c:C.forest}, {x:1.9, z:-3.4, ry:-(Math.PI - .6), c:C.rust}];
+for (const a of ARMCHAIRS) armchair(a.x, a.z, a.ry, a.c);
 col(-2.6, -1.2, -4.1, -2.7, -5, 1.4); col(1.2, 2.6, -4.1, -2.7, -5, 1.4);
 const tea = grp(0, 0, -2.5);
 cyl(.45,.45,.06,T(C.wood),0,.55,0,tea,18); cyl(.06,.1,.52,T(C.woodDk),0,.27,0,tea,8); cyl(.25,.3,.04,T(C.woodDk),0,.02,0,tea,10);
@@ -366,8 +384,12 @@ hqAnims.push((dt, t) => {
   doorOpen += ((dressing ? 1 : 0) - doorOpen) * Math.min(1, dt * 5);
   doors.forEach(d => d.hinge.rotation.y = d.sx * 1.35 * doorOpen);
   flames.forEach(f => { if (f.candle) { f.m.scale.set(1, 1.6 + Math.sin(t * 13 + f.ph) * .25, 1); return; }
-    const s = 1 + Math.sin(t * 9 + f.ph) * .12 + Math.sin(t * 23 + f.ph) * .06; f.m.scale.set(1, s, 1); f.m.rotation.y = t * 1.5 + f.ph; });
-  fireLight.intensity = 1.5 + Math.sin(t * 11) * .15 + Math.sin(t * 27) * .1;
+    const s = 1 + Math.sin(t * 9 + f.ph) * .14 + Math.sin(t * 23 + f.ph * 1.7) * .07 + Math.sin(t * 37 + f.ph) * .03;
+    f.m.scale.y = f.h * s; f.m.rotation.z = Math.sin(t * 3.1 + f.ph) * .08 + Math.sin(t * 7.3 + f.ph) * .04; f.m.rotation.x = Math.sin(t * 2.3 + f.ph * 1.3) * .06; });
+  const flick = Math.sin(t * 11) * .5 + Math.sin(t * 27) * .33 + Math.sin(t * 4.3) * .17;
+  fireLight.intensity = 1.5 + flick * .25;
+  fireGlow.material.opacity = .5 + flick * .08; sootGlow.material.opacity = .85 + flick * .15;
+  embers.material.color.setRGB(1, .33 + Math.sin(t * 1.7) * .06 + flick * .03, .1);
   deskFlame.scale.y = 1.6 + Math.sin(t * 14) * .3;
   const fd = Math.hypot(player.x, player.z + 5.8);
   if (fd < 7 && Math.random() < dt * 6) Sound.crackle(.05 * (1 - fd / 7));
