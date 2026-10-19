@@ -2,20 +2,26 @@
 """Builds web/sky/, the small real-sky data the treehouse telescope ships with.
 
 The sky imagery itself streams from CDS at play time (far too big to ship). What lives here
-is what lets a kid read that sky: the named stars, the nebulae and galaxies, and maps of where
-Hubble and Webb have taken pictures. Everything is fetched fresh from its source, so rerunning
-this picks up catalog updates.
+is what lets a kid read that sky: the named stars, the nebulae and galaxies, and Hubble's and
+Webb's pictures: each one's title and the four corners it covers on the sky, from the picture's
+own page at ESA/Hubble or ESA/Webb (its centre, its size and which way north points in it).
+Hubble's are the ones CDS's index lists; Webb's are every one filed under one of its cameras. Everything is fetched fresh from its source, so rerunning this
+picks up catalog updates and new pictures.
 
-    python3 tools/sky_data.py        # from lantern-hill/
+    python3 tools/sky_data.py            # from lantern-hill/
+    python3 tools/sky_data.py pictures   # just the ones named
 """
 
-import csv, io, json, os, re, sys, urllib.parse, urllib.request
+import csv, html, io, json, math, os, re, sys, urllib.parse, urllib.request
+from concurrent.futures import ThreadPoolExecutor
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'web', 'sky')
 HYG = 'https://raw.githubusercontent.com/astronexus/HYG-Database/main/hyg/CURRENT/hygdata_v41.csv'
 MESSIER = 'https://raw.githubusercontent.com/ofrohn/d3-celestial/master/data/messier.json'
 MOC = 'https://alasky.cds.unistra.fr/MocServer/query?ID={}&get=moc&order=9&fmt=json'
 SESAME = 'https://cds.unistra.fr/cgi-bin/nph-sesame/-oI/SNV?'
+HUBBLE_INDEX = 'https://alasky.cds.unistra.fr/HST-outreach/CDS_P_HST_EPO/HpxFinder/Norder3/Dir0/Npix{}'
+WEBB_CAMERA = 'https://esawebb.org/images/archive/category/{}/{}'
 
 CONSTELLATIONS = dict(
     And='Andromeda', Ant='Antlia', Aps='Apus', Aqr='Aquarius', Aql='Aquila', Ara='Ara', Ari='Aries', Aur='Auriga',
@@ -61,8 +67,16 @@ MESSIER_KIND = {'gc': 'globular', 'oc': 'cluster', 'pos': 'cluster', 's': 'galax
 
 
 def get(url):
-    with urllib.request.urlopen(url, timeout=120) as r:
+    # ESA's sites turn away Python's default user agent
+    with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (lantern-hill-sky-data)'}), timeout=120) as r:
         return r.read()
+
+
+def page(url):
+    try:
+        return get(url).decode()
+    except Exception:
+        return ''
 
 
 def stars():
@@ -102,6 +116,60 @@ def deep_sky():
     return out
 
 
+def hubble_names(moc):
+    cells = sorted({n >> 2*(int(k) - 3) for k, ns in moc.items() for n in ns if int(k) >= 3})
+    with ThreadPoolExecutor(8) as pool:
+        lines = [l.strip().rstrip(',') for text in pool.map(lambda n: page(HUBBLE_INDEX.format(n)), cells) for l in text.splitlines()]
+    return sorted({json.loads(l)['name'] for l in lines if l.startswith('{')})
+
+
+def webb_names():
+    names = set()
+    for camera in ('nircam', 'miri', 'niriss', 'nirspec'):
+        for n in range(1, 100):
+            found = set(re.findall(r'href="/images/([a-z0-9]+)/"', page(WEBB_CAMERA.format(camera, f'page/{n}/' if n > 1 else '')))) - {'potm'}
+            if n > 1 and not found - names:
+                break
+            names |= found
+    return sorted(names)
+
+
+def field(text, name):
+    m = re.search(re.escape(name) + r':\s*([^:]*?)\s+(?:Position|Field of view|Orientation|Name|Type|Distance|compass_src|$)', text)
+    return m.group(1).strip() if m else None
+
+
+def picture(site, name):
+    """{n: name, t: title, c: corners} from the picture's page, or None if it isn't of the sky.
+    The corners run top-left, top-right, bottom-right, bottom-left, as the picture is drawn."""
+    raw = page(f'https://{site}/images/{name}/')
+    text = html.unescape(re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', raw)))
+    ra, dec, fov, north = (field(text, k) for k in ('Position (RA)', 'Position (Dec)', 'Field of view', 'Orientation'))
+    title = re.search(r'<title>\s*(.*?)\s*\|', raw, re.S)
+    if not (ra and dec and fov and north and title):
+        return None
+    h, m, s = (float(x) for x in ra.split()[:3])
+    d = [float(x) for x in re.findall(r'[\d.]+', dec)[:3]]
+    ra0, de0 = math.radians(15*(h + m/60 + s/3600)), math.radians((-1 if dec.startswith('-') else 1)*(d[0] + d[1]/60 + d[2]/3600))
+    unit = 1/60 if 'arcmin' in fov else 1/3600 if 'arcsec' in fov else 1
+    w, hh = (math.radians(float(x)*unit/2) for x in re.findall(r'[\d.]+', fov)[:2])
+    # "North is 22.3° right of vertical": the picture's up is north turned that far toward east
+    th = math.radians(float(re.findall(r'[\d.]+', north)[0])*(1 if 'right' in north else -1))
+    up, right = (math.sin(th), math.cos(th)), (-math.cos(th), math.sin(th))
+    corners = []
+    for sx, sy in ((-1, 1), (1, 1), (1, -1), (-1, -1)):
+        xi, eta = sx*w*right[0] + sy*hh*up[0], sx*w*right[1] + sy*hh*up[1]
+        den = math.cos(de0) - eta*math.sin(de0)
+        corners += [round(math.degrees(ra0 + math.atan2(xi, den)) % 360, 5),
+                    round(math.degrees(math.atan2(math.sin(de0) + eta*math.cos(de0), math.hypot(xi, den))), 5)]
+    return {'n': name, 't': html.unescape(title.group(1).strip()), 'c': corners}
+
+
+def pictures(site, names):
+    with ThreadPoolExecutor(8) as pool:
+        return [p for p in pool.map(lambda n: picture(site, n), names) if p]
+
+
 def write(name, data):
     with open(os.path.join(OUT, name), 'w') as f:
         json.dump(data, f, separators=(',', ':'), ensure_ascii=False)
@@ -109,7 +177,10 @@ def write(name, data):
 
 
 os.makedirs(OUT, exist_ok=True)
-write('stars.json', stars())
-write('deep-sky.json', deep_sky())
-write('hubble-moc.json', json.loads(get(MOC.format('CDS/P/HST/EPO'))))
-write('webb-moc.json', json.loads(get(MOC.format('CDS/P/JWST/EPO'))))
+want = set(sys.argv[1:]) or {'stars', 'deep-sky', 'pictures'}
+if 'stars' in want: write('stars.json', stars())
+if 'deep-sky' in want: write('deep-sky.json', deep_sky())
+if 'pictures' in want:
+    # where Hubble's pictures cover the sky says which cells of CDS's index to read
+    write('hubble-pictures.json', pictures('esahubble.org', hubble_names(json.loads(get(MOC.format('CDS/P/HST/EPO'))))))
+    write('webb-pictures.json', pictures('esawebb.org', webb_names()))
