@@ -1,11 +1,11 @@
 // Pip's telescope, on the treehouse deck: tonight's real sky over wherever the treehouse is, from
 // what your eyes see, down into Hubble's and Webb's pictures, and out across light no eye can see;
-// and the Moon and planets, each where it really is tonight and, up close, a real world to fly
-// round. No tour and no goals; the kid turns, zooms and taps whatever catches their eye.
+// and the Moon and planets, each where it really is tonight and, up close, the face it turns to
+// Earth. No tour and no goals; the kid turns, zooms and taps whatever catches their eye.
 //
 // It steers like a telescope on a tripod: turning round and tipping up and down, the horizon level
-// and the ground below it, and it tracks, so whatever it points at stays put as the Earth turns.
-// Aladin only paints the sky; where it looks, and how it is turned, comes from here.
+// and the ground below it. Aladin only paints the sky; where it looks, and how it is turned, comes
+// from here.
 //
 // The imagery is far too big to ship, so it streams as HiPS tiles (all-sky image pyramids) from
 // CDS Strasbourg, drawn by CDS's own viewer, Aladin Lite. What ships with the game is in web/sky/,
@@ -232,7 +232,8 @@ async function boot(){
     return false;
   }
   // stereographic, as planetariums draw it: zoomed out, you look around from inside the sphere, not at a ball
-  aladin = A.aladin(skyEl, {fov:view.fov, target:`${aim.ra} ${aim.dec}`, cooFrame:'ICRS', projection:'STG', backgroundColor:'rgb(5,4,10)',
+  const c = centre();
+  aladin = A.aladin(skyEl, {fov:view.fov, target:`${c.ra} ${c.dec}`, cooFrame:'ICRS', projection:'STG', backgroundColor:'rgb(5,4,10)',
     showReticle:false, showZoomControl:false, showLayersControl:false, showGotoControl:false, showFrame:false, showCooLocation:false,
     showFov:false, showProjectionControl:false, showFullscreenControl:false, showSettingsControl:false, showShareControl:false,
     showSimbadPointerControl:false, showStatusBar:false, showContextMenu:false, showCooGrid:false});
@@ -336,7 +337,7 @@ function bodyCard(b, closer){
   const s = sight(b, skyNow(), place), lines = [status(b, skyNow()), ...(closer ? b.facts.slice(0, 1) : b.facts), travelled(s)];
   const kind = b.id === 'moon' ? 'Our Moon' : b.around ? 'Moon of Jupiter' : 'Planet';
   card.innerHTML = `<em>${kind}</em><h3></h3>${lines.map(t => `<p>${t}</p>`).join('')}
-    <div class="row">${closer ? `<button class="sb" data-go>${b.around && bodyShown() ? `Visit ${b.name}` : 'Look closer'}</button>` : ''}<button class="sb ghost" data-x>OK</button></div>`;
+    <div class="row">${closer ? `<button class="sb" data-go>Look closer</button>` : ''}<button class="sb ghost" data-x>OK</button></div>`;
   card.querySelector('h3').textContent = b.name;
   card.querySelector('[data-go]')?.addEventListener('click', () => setMode(b.id === 'moon' ? 'moon' : 'planets', b.id));
   card.querySelector('[data-x]').addEventListener('click', () => { card.hidden = true; });
@@ -357,16 +358,24 @@ $s('sFind').addEventListener('click', () => {
 
 // ---------- tonight, from here ----------
 // The sky shows tonight over wherever the treehouse is: now if it's dark there, else the coming
-// nightfall. Its clock then runs in real time, so the stars rise and set while you watch.
+// nightfall, held at that moment while the telescope is open. A real sky turns, and a view kept level
+// with the horizon must spin to follow it, fastest overhead, so a turning sky slides away under a
+// kid's hand all by itself.
 const R = Math.PI/180;
-let place = where(), t0 = 0, opened = 0;
-const skyNow = () => t0 + Date.now() - opened;
-const lstNow = () => siderealTime(skyNow(), place.lon);
-// the telescope tracks: it holds a spot among the stars, and only a kid's hand moves it
-const aim = {ra:0, dec:0};
-const facing = () => toHorizon(aim.ra, aim.dec, place.lat, lstNow());
-const clampAlt = a => Math.max(-8, Math.min(89.9, a));
-function look(alt, az){ Object.assign(aim, toSky(clampAlt(alt), az, place.lat, lstNow())); }
+let place = where(), t0 = 0, lst = 0;
+const skyNow = () => t0;
+// where the telescope points, as a direction from the deck; only a kid's hand moves it
+const aim = {alt:35, az:180};
+const facing = () => aim;
+const centre = () => toSky(aim.alt, aim.az, place.lat, lst);
+// Tipping down stops with the skyline two thirds of the way down the view, and tipping up stops with
+// the point overhead a little way below the top. Centred, that point is where a level view has to
+// spin round on the spot to turn at all.
+const tall = () => 4*Math.atan(Math.tan(view.fov*R/4)*el.clientHeight/(el.clientWidth || 1))/R;
+function look(alt, az){
+  aim.alt = Math.max(.2*tall(), Math.min(89.5, 90 - .3*tall(), alt));
+  aim.az = (az % 360 + 360) % 360;
+}
 // the hills along the skyline, a degree or two high
 const hill = az => { const a = az*R; return 1.4 + .9*Math.sin(3*a + .7) + .5*Math.sin(7*a + 2.1) + .25*Math.sin(17*a); };
 const COMPASS = [[0, 'North'], [90, 'East'], [180, 'South'], [270, 'West']];
@@ -516,10 +525,12 @@ function tap(x, y){
 // ---------- steering: drag to turn, pinch or scroll to zoom, tap to ask what something is ----------
 let wantFov = view.fov, fly = null;
 const zoom = k => { if (bodyShown()) { upClose.zoom(k); return; } fly = null; wantFov = Math.min(150, Math.max(.002, wantFov*k)); };
-// a drag across the screen turns the telescope by about the width of what it sees
+// A drag across the screen turns the telescope by about the width of what it sees. Looking high, a
+// sideways turn swings round the point overhead, and following the finger exactly would whirl it,
+// so up there it turns slower than the finger.
 function turn(dx, dy){
-  const here = facing(), k = view.fov/el.clientWidth;
-  look(here.alt + dy*k, here.az - dx*k/Math.max(.2, Math.cos(here.alt*R)));
+  const k = view.fov/el.clientWidth;
+  look(aim.alt + dy*k, aim.az - dx*k/Math.max(.5, Math.cos(aim.alt*R)));
 }
 function flyTo(ra, dec, fov){
   fly = {ra, dec, fov};
@@ -527,11 +538,11 @@ function flyTo(ra, dec, fov){
 }
 // swing round to the target first, then zoom in once it's on screen
 function flying(dt){
-  const lst = lstNow(), at = toHorizon(aim.ra, aim.dec, place.lat, lst), to = toHorizon(fly.ra, fly.dec, place.lat, lst), k = Math.min(1, dt*3);
-  const daz = ((to.az - at.az + 540) % 360) - 180, left = Math.hypot(daz*Math.cos(at.alt*R), to.alt - at.alt);
+  const to = toHorizon(fly.ra, fly.dec, place.lat, lst), k = Math.min(1, dt*3), alt = Math.min(89.5, to.alt);
+  const daz = ((to.az - aim.az + 540) % 360) - 180, left = Math.hypot(daz*Math.cos(aim.alt*R), alt - aim.alt);
   if (left < view.fov*.3) wantFov = fly.fov;
-  if (left < .0005 && Math.abs(Math.log(view.fov/fly.fov)) < .01) { Object.assign(aim, {ra:fly.ra, dec:fly.dec}); fly = null; return; }
-  look(at.alt + (to.alt - at.alt)*k, at.az + daz*k);
+  if (left < .0005 && Math.abs(Math.log(view.fov/fly.fov)) < .01) { look(alt, to.az); fly = null; return; }
+  look(aim.alt + (alt - aim.alt)*k, aim.az + daz*k);
 }
 
 const pointers = new Map();
@@ -550,7 +561,7 @@ glass.addEventListener('pointermove', e => {
     else wantFov = view.fov = Math.min(150, Math.max(.002, drag.fov*drag.span/span()));
     return;
   }
-  if (bodyShown()) upClose.orbit(dx, dy); else if (aladin) turn(dx, dy);
+  if (bodyShown()) upClose.pan(dx, dy); else if (aladin) turn(dx, dy);
 });
 const lift = e => {
   if (!pointers.delete(e.pointerId)) return;
@@ -559,7 +570,27 @@ const lift = e => {
   else drag = {moved:99, span:span(), fov:wantFov};
 };
 glass.addEventListener('pointerup', lift); glass.addEventListener('pointercancel', lift);
-glass.addEventListener('wheel', e => { e.preventDefault(); zoom(e.deltaY > 0 ? 1.15 : 1/1.15); }, {passive:false});
+// A mouse wheel zooms. A trackpad speaks in wheel events too: two fingers sliding turn the telescope
+// the way a drag does, and a pinch, which browsers send as a wheel with Ctrl held, zooms with the
+// fingers. A wheel clicks in big even steps straight up and down; a trackpad glides in small ones.
+let pad = -1e9, pinched = -1e9;
+glass.addEventListener('wheel', e => {
+  e.preventDefault(); fly = null;
+  const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? el.clientHeight : 1, dx = e.deltaX*unit, dy = e.deltaY*unit;
+  if (e.ctrlKey) { pinched = e.timeStamp; zoom(Math.exp(dy*.01)); return; }
+  if (e.deltaMode === 0 && (dx || !Number.isInteger(dy) || Math.abs(dy) < 50)) pad = e.timeStamp;
+  if (e.timeStamp - pad < 400) { if (bodyShown()) upClose.pan(-dx, -dy); else if (aladin) turn(-dx, -dy); return; }
+  zoom(dy > 0 ? 1.15 : 1/1.15);
+}, {passive:false});
+// Safari tells of a trackpad pinch with its own gesture events instead; a touch screen's pinch is
+// already handled by the pointers above
+let gesture = 1;
+glass.addEventListener('gesturestart', e => { e.preventDefault(); gesture = 1; });
+glass.addEventListener('gesturechange', e => {
+  e.preventDefault();
+  if (pointers.size < 2 && e.timeStamp - pinched > 300) zoom(gesture/e.scale);
+  gesture = e.scale;
+});
 
 $s('sIn').addEventListener('click', () => zoom(.5)); $s('sOut').addEventListener('click', () => zoom(2));
 $s('sNames').addEventListener('click', () => { view.names = !view.names; $s('sNames').setAttribute('aria-pressed', view.names); upClose.refresh(); });
@@ -578,6 +609,7 @@ function loop(now){
   if (game.activity !== 'telescope') return;
   const dt = Math.min(.1, (now - last)/1000 || 0); last = now;
   const ms = skyNow(), b = bodyShown();
+  steer(b, dt);
   if (b) closeUp(b, ms, dt); else if (aladin) starsUp(ms, dt);
   const shown = localTime(place, ms);
   if (shown !== clockShown) { clockShown = shown; $s('sWhere').textContent = `Tonight · ${place.name} · ${shown}`; }
@@ -595,22 +627,35 @@ function closeUp(b, ms, dt){
     const s = sight(b, ms, place); $s('sFind').hidden = !(s.alt > hill(s.az));
   }
 }
+// arrows glide while held, about a third of a view a second, easing in and out
+const held = new Set(), glide = {x:0, y:0};
+function steer(b, dt){
+  let x = 0, y = 0;
+  for (const k of held) { x += TURN[k][0]; y += TURN[k][1]; }
+  const k = Math.min(1, dt*6); glide.x += (x - glide.x)*k; glide.y += (y - glide.y)*k;
+  if (Math.abs(glide.x) + Math.abs(glide.y) < 1e-3) return;
+  if (b) upClose.pan(-glide.x*el.clientHeight*.7*dt, -glide.y*el.clientHeight*.7*dt);
+  else if (aladin) turn(-glide.x*el.clientWidth*.35*dt, -glide.y*el.clientWidth*.35*dt);
+}
 function starsUp(ms, dt){
   if (fly) flying(dt);
   if (Math.abs(Math.log(wantFov/view.fov)) > .001) { view.fov *= Math.pow(wantFov/view.fov, Math.min(1, dt*8)); aladin.setFoV(view.fov); zoomed(); }
-  const lst = lstNow();
-  const to = `${aim.ra},${aim.dec}`;
-  if (to !== sent) { sent = to; aladin.gotoRaDec(aim.ra, aim.dec); }
-  // keep the way up to the zenith pointing up the screen; Aladin refuses a rotation of exactly 0
-  aladin.setRotation(-parallactic(aim.ra, aim.dec, place.lat, lst) || 1e-6);
+  // zooming out raises the floor, and the view rises with it
+  look(aim.alt, aim.az);
+  const c = centre(), to = `${c.ra},${c.dec}`;
+  if (to !== sent) {
+    sent = to; aladin.gotoRaDec(c.ra, c.dec);
+    // keep the way up to the zenith pointing up the screen; Aladin refuses a rotation of exactly 0
+    aladin.setRotation(-parallactic(c.ra, c.dec, place.lat, lst) || 1e-6);
+  }
   fade(dt);
-  const at = [aim.ra, aim.dec, view.fov, view.names, el.clientWidth, el.clientHeight, lst.toFixed(2), upClose.maps].join();
+  const at = [to, view.fov, view.names, el.clientWidth, el.clientHeight, upClose.maps].join();
   if (at !== drawn) { drawn = at; drawOverlay(lst, sunAltitude(ms, place.lat, place.lon), ms); }
 }
 let since = 0;
 function keep(){
   const n = Date.now(); view.seconds += (n - since)/1000; since = n;
-  if (aladin) Object.assign(view, facing());
+  Object.assign(view, aim);
   save('telescope', view);
 }
 // a sky the Sun never leaves is worth a word, or the kid wonders where the stars went
@@ -627,7 +672,7 @@ export async function openTelescope(){
   document.documentElement.classList.add('stargazing'); el.hidden = false; card.hidden = true;
   el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
   $s('sNames').setAttribute('aria-pressed', view.names);
-  place = where(); opened = since = Date.now(); t0 = tonight(place, opened); fly = null; wantFov = view.fov;
+  place = where(); since = Date.now(); t0 = tonight(place, since); lst = siderealTime(t0, place.lon); fly = null; wantFov = view.fov;
   look(view.alt, view.az); nightNote(); clockShown = '';
   Sound.duck(true); [392, 523, 659].forEach((f, i) => Sound.tone(f, {type:'sine', t:i*.12, dur:.5, vol:.05}));
   lenses(); setMode(view.mode);
@@ -641,7 +686,7 @@ function close(){
   if (game.activity !== 'telescope') return;
   keep(); if (aladin) park();
   game.activity = null; el.hidden = true; document.documentElement.classList.remove('stargazing'); cancelAnimationFrame(raf);
-  pointers.clear(); drag = null; glass.classList.remove('dragging');
+  pointers.clear(); drag = null; glass.classList.remove('dragging'); held.clear();
   Sound.duck(false); clock.getDelta();
 }
 const TURN = {ArrowLeft:[-1, 0], ArrowRight:[1, 0], ArrowUp:[0, -1], ArrowDown:[0, 1]};
@@ -652,11 +697,11 @@ addEventListener('keydown', e => {
   else if (e.key === 'Escape') { if (!card.hidden) card.hidden = true; else close(); }
   else if (e.key === '+' || e.key === '=') zoom(.5);
   else if (e.key === '-' || e.key === '_') zoom(2);
-  // arrows turn the telescope a fifth of a screen
-  else if (TURN[e.key] && bodyShown()) { e.preventDefault(); upClose.orbit(-TURN[e.key][0]*el.clientHeight/8, -TURN[e.key][1]*el.clientHeight/8); }
-  else if (TURN[e.key] && aladin) { e.preventDefault(); fly = null; turn(-TURN[e.key][0]*el.clientWidth/5, -TURN[e.key][1]*el.clientWidth/5); }
+  else if (TURN[e.key]) { e.preventDefault(); fly = null; held.add(e.key); }
 }, true);
 addEventListener('keyup', e => {
+  held.delete(e.key);
   if (game.activity !== 'telescope' || !e.target.hold || (e.key !== ' ' && e.key !== 'Enter')) return;
   e.preventDefault(); e.target.hold.stop();
 }, true);
+addEventListener('blur', () => held.clear());
