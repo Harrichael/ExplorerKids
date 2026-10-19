@@ -24,6 +24,39 @@ const shade = c => { const p = chem.ph(c); return p < 5.5 ? 'pink' : p > 8.5 ? '
 // a color counts once the juice has really changed; staying purple only counts after plenty went in
 const settledShade = (c, added, plenty) => { const sh = shade(c); return sh !== 'purple' || added > plenty ? sh : null; };
 const COLORS = [{id:'pink', label:'Pink', swatch:'#e2457f'}, {id:'purple', label:'Stays purple', swatch:'#6e45a8'}, {id:'green', label:'Green', swatch:'#5cb83a'}];
+const MIXES = [{id:'orange', label:'Orange', swatch:'#ef8a2c'}, {id:'green', label:'Green', swatch:'#4fa23a'}, {id:'purple', label:'Purple', swatch:'#7a4aa8'}];
+const DYES = ['red', 'yellow', 'blue'];
+function hue(col){
+  const r = (col >> 16 & 255)/255, g = (col >> 8 & 255)/255, b = (col & 255)/255, hi = Math.max(r, g, b), d = hi - Math.min(r, g, b);
+  if (d < .08) return -1;
+  return ((hi === r ? (g - b)/d : hi === g ? (b - r)/d + 2 : (r - g)/d + 4)*60 + 360) % 360;
+}
+// the color a cup of exactly these two dyes has come out, once there's enough of each to tell
+function mixed(a, b){
+  for (const v of wet()) {
+    const l = v.c.l; if (!(l[a] >= 1.5 && l[b] >= 1.5) || DYES.some(k => k !== a && k !== b && l[k] > .2)) continue;
+    const h = hue(chem.look(v.c).col);
+    const name = h >= 3 && h < 50 ? 'orange' : h >= 60 && h < 175 ? 'green' : h >= 240 && h < 335 ? 'purple' : null;
+    if (name) return name;
+  }
+  return null;
+}
+// a cup is full of a powder when no more of it will dissolve, and some is left lying on the bottom
+const full = (v, k) => (v.c.p[k] || 0) > 1 && chem.SUB[k].sol*chem.waterVol(v.c) - (v.c.l[k] || 0) < .3;
+// what a penny is soaking in, if it's one of the baths being compared
+function bath(c){
+  const wv = chem.waterVol(c); if (wv < 20) return null;
+  const p = chem.ph(c), salt = (c.l.salt || 0)/wv, salty = salt > .01, plain = salt < .003;
+  return p < 4 ? (salty ? 'salty' : plain ? 'vinegar' : null) : p > 6.5 ? (salty ? 'saltwater' : plain ? 'water' : null) : null;
+}
+const pennies = () => desk.items.filter(it => !it.gone && it.tarnish !== undefined);
+const SHINY = .25;
+const clips = () => desk.items.filter(it => !it.gone && it.type === 'paperclip');
+const apart = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+// what the test strip read in a cup that had just one thing poured in (plain water counts as one, and
+// a powder needs water to be tested in), once it had finished dissolving and fizzing
+const TESTS = ['lemon', 'vinegar', 'water', 'soap', 'soda'];
+const PH_BIN = p => p < 6.5 ? 'acid' : p > 7.5 ? 'base' : 'neutral';
 
 export const EXPERIMENTS = [
   {id:'sinkfloat', after:[], title:'Sink or Float?', grade:'K–1', blurb:'Which treasures float in a tub of water?',
@@ -40,6 +73,25 @@ export const EXPERIMENTS = [
         duck:"The duck is hollow and full of air, so it floats."}}],
     explain:[S("Things that are heavy for their size sink. Things that are light for their size float."), S("Scientists call how heavy something is for its size its density. You just tested it!")]},
 
+  {id:'colors', after:['sinkfloat'], title:'Color Mixer', grade:'K–1', blurb:'What new colors can you make?',
+    setup:[['c1', 'cup', -.4, .1, {fill:{water:80}}], ['c2', 'cup', 0, .1, {fill:{water:80}}], ['c3', 'cup', .4, .1, {fill:{water:80}}],
+           ['red', 'red', -.2, -.32], ['yellow', 'yellow', 0, -.34], ['blue', 'blue', .2, -.32]],
+    rounds:[
+      {q:"What color will red and yellow make?", ask:[S("Three cups of water and three colors, {name}: red, yellow and blue."), S("What color will you get if you mix red and yellow?")],
+        choose:MIXES, test:[S("Drip some red and some yellow into the same cup and see!")],
+        hints:[[S("Tip the red dropper over a cup for a few drops. Then the yellow, into the same cup.")], [S("Still mostly one color? Add a drop more of the other.")]],
+        observe: () => mixed('red', 'yellow'), say:{orange:"Orange! Red and yellow make orange."}},
+      {q:"What color will blue and yellow make?", ask:[S("Now a fresh cup. What will blue and yellow make?")],
+        choose:MIXES, test:[S("Drip blue and yellow into a cup that's still clear.")],
+        hints:[[S("Use a clear cup, so the red doesn't join in.")], [S("Still mostly one color? Add a drop more of the other.")]],
+        observe: () => mixed('blue', 'yellow'), say:{green:"Green! Blue and yellow make green."}},
+      {q:"What color will red and blue make?", ask:[S("Last one. What will red and blue make?")],
+        choose:MIXES, test:[S("Drip red and blue into the last clear cup.")],
+        hints:[[S("Use the cup that's still clear.")], [S("No clear cups left? Press Start over for fresh water.")]],
+        observe: () => mixed('red', 'blue'), say:{purple:"Purple! Red and blue make purple."}}],
+    explain:[S("Red, yellow and blue are called primary colors. Mix any two and you get a brand new color."),
+             S("Each color in the water soaks up some of the light. What's left over for your eyes is the new color!")]},
+
   {id:'magnets', after:['sinkfloat'], title:'Magnet Hunt', grade:'1', blurb:'What will a magnet pick up?',
     setup:[['yes', 'tray', -.46, .34, {label:'STICKS?', color:0xd8303a}], ['no', 'tray', -.1, .34, {label:'NOPE?', color:0x34406b}], ['magnet', 'magnet', .6, .3],
            ['paperclip', 'paperclip', -.62, -.25], ['nail', 'nail', -.4, -.36], ['key', 'key', -.18, -.28], ['coin', 'coin', .02, -.38],
@@ -54,6 +106,32 @@ export const EXPERIMENTS = [
         coin:"The coin is metal, but it isn't iron, so the magnet doesn't care about it.", foil:"Foil is aluminum. Shiny and metal, but magnets don't pull on it!",
         crayon:"Crayons are wax. No pull at all.", button:"Plastic buttons don't feel a magnet.", cork:"Cork comes from a tree. Nothing magnetic there."}}],
     explain:[S("Magnets pull on things made with iron, like steel paperclips, nails and keys."), S("Lots of other things, even metals like coins and foil, don't feel a magnet's pull at all.")]},
+
+  {id:'makemagnet', after:['magnets'], title:'Make a Magnet', grade:'2–3', blurb:'Turn a plain nail into a magnet.',
+    setup:[['bar', 'bar', 0, -.05, {rot:Math.PI/2}], ['nail', 'nail', -.45, .25], ['pc1', 'paperclip', .42, .26], ['pc2', 'paperclip', .56, .33], ['pc3', 'paperclip', .52, .15]],
+    rounds:[
+      {q:"Will a plain nail pick up a paperclip?", ask:[S("Here's a plain steel nail, {name}, and a bar magnet. Magnets pull on steel, remember?"), S("But can the nail pick up a paperclip all by itself?")],
+        choose:[{id:'yes', label:'Yes, it picks one up', icon:'📎'}, {id:'no', label:"No, it can't", icon:'🚫'}],
+        test:[S("Pick up the nail and hold it right over the paperclips.")], hints:[[S("Carry the nail over a paperclip and hold it there for a moment.")]],
+        observe: run => {
+          const n = find('nail'); if (!n) return null;
+          if (clips().some(c => c.clingTo === n)) return 'yes';
+          const near = desk.held === n && clips().some(c => apart(c.body.translation(), n.body.translation()) < .05);
+          run.near = near ? (run.near || 0) + desk.t - (run.at || desk.t) : 0; run.at = desk.t;
+          return run.near > 2 ? 'no' : null;
+        },
+        say:{no:"Nothing at all. The nail is steel, so a magnet pulls on it. But on its own, the nail isn't a magnet.", yes:"It picked one up! This nail must already be a little bit magnetic."}},
+      {q:"What happens if we stroke the nail along the magnet, again and again?", ask:[S("Now a trick. We'll slide the nail across one end of the magnet, the same way, over and over."), S("What do you think will happen to the nail?")],
+        choose:[{id:'magnet', label:'It becomes a magnet!', icon:'🧲'}, {id:'nothing', label:'Nothing changes', icon:'😶'}, {id:'stuck', label:'It sticks to the magnet for good', icon:'🔒'}],
+        test:[S("Try it! Slide the nail across one end of the magnet, lift it away, and come back around to the start. At least ten times, always the same way!")],
+        hints:[[S("Slide the nail from one side to the other, right across one end of the bar magnet.")], [S("Always go the same way! Back and forth undoes it. Swing around the side to start again.")],
+               [S("After ten or more strokes, touch the point of the nail to a paperclip.")]],
+        baseline: () => Object.fromEntries(clips().map(c => [c.id, {...c.body.translation()}])),
+        observe: r => { const n = find('nail'); return n && clips().some(c => c.clingTo === n && r.base[c.id] && apart(c.body.translation(), r.base[c.id]) > .06) ? 'magnet' : null; },
+        say:{magnet:"It's a magnet now! It carried a paperclip away. Stroking lined up the steel's tiny magnetic bits, all pointing the same way."}}],
+    explain:[S("Steel is full of tiny magnetic regions called domains. Usually they point every which way, so they cancel out."),
+             S("Stroking with a magnet, always the same way, lines them up. Rubbing back and forth mixes them up again, so it barely works."),
+             S("Your nail magnet is weaker than the real one, because only some of its domains lined up.")]},
 
   {id:'volcano', after:['sinkfloat'], title:'Fizzy Volcano', grade:'1–2', blurb:'What happens when vinegar meets baking soda?',
     setup:[['volcano', 'volcano', 0, -.08], ['soda', 'soda', -.55, -.25], ['vinegar', 'vinegar', .55, -.22], ['soap', 'soap', .45, .2], ['red', 'red', -.5, .24]],
@@ -80,6 +158,24 @@ export const EXPERIMENTS = [
       baseline: () => count('bursts'), observe: r => count('bursts') > r.base ? 'zoom' : null,
       say:{zoom:"Whoa! Milk has a stretchy skin on top called surface tension. Soap breaks it and chases the fat around, pushing the colors along for the ride."}}],
     explain:[S("Soap grabs onto fat. Every time you poke, the soap races out across the milk and the colors swirl. Try another poke!")]},
+
+  {id:'pepper', after:['rainbow'], title:'Pepper Run-Away', grade:'2', blurb:'What does soap do to pepper on water?',
+    setup:[['dish', 'dish', 0, .02, {fill:{water:110}}], ['pepper', 'pepper', -.5, -.25], ['saucer', 'saucer', .5, .2], ['swab', 'swab', .36, .32]],
+    rounds:[{
+      prep:{do:'Shake pepper onto the water', say:[S("First, shake lots of pepper onto the water.")],
+        done: () => { const d = find('dish'); return d && desk.fx.hasFilm(d) && desk.fx.film(d).flakes.length > 25; }},
+      q:"What will the pepper do when a soapy swab touches the water?", ask:[S("Look at all those flakes, floating on top! What will the pepper do when a soapy swab touches the water?")],
+      choose:[{id:'sink', label:'It sinks', icon:'⬇️'}, {id:'edges', label:'It rushes to the edges!', icon:'💨'}, {id:'stick', label:'It sticks to the swab', icon:'🪄'}],
+      test:[S("Try it! Dip the swab in the soap, then touch it to the middle of the water.")],
+      hints:[[S("Dip the cotton swab in the soap dish so its tip gets soapy.")], [S("Now touch the soapy tip to the water, right in the middle.")]],
+      observe: () => {
+        const d = find('dish'); if (!d || !desk.fx.hasFilm(d)) return null;
+        const f = desk.fx.film(d); if (!f.soaps || f.flakes.length < 10) return null;
+        return f.flakes.reduce((s, p) => s + Math.hypot(p.x, p.y), 0)/f.flakes.length > .7 ? 'edges' : null;
+      },
+      say:{edges:"Whoosh! Water has a stretchy skin on top called surface tension. Soap weakens the skin where it touches, and the stronger skin all around pulls the pepper away."}}],
+    explain:[S("The pepper isn't scared of soap. The water's skin pulled it to the edges!"),
+             S("Poke again and it barely moves: once the soap has spread, the skin is weak everywhere. Fresh water makes it work again.")]},
 
   {id:'egg', after:['sinkfloat'], title:'The Floating Egg', grade:'2–3', blurb:'Can salt make an egg float?',
     setup:[['jar', 'jar', 0, -.02, {fill:{water:170}}], ['egg', 'egg', -.42, .22], ['salt', 'salt', .4, -.26], ['spoon', 'spoon', .45, .22]],
@@ -120,6 +216,25 @@ export const EXPERIMENTS = [
         oil:"The oil breaks into drops, then floats back to the top. Oil and water won't mix!"}}],
     explain:[S("When something dissolves, it spreads through the water so well you can't see it anymore. That's called a solution."), S("Sand and oil don't dissolve. They make a mixture, and you can still see every bit.")]},
 
+  {id:'saturate', after:['dissolve'], title:'How Much Dissolves?', grade:'3', blurb:'Can water hold salt forever?',
+    setup:[['c1', 'cup', -.22, .05, {fill:{water:60}}], ['c2', 'cup', .22, .05, {fill:{water:60}}], ['saltbox', 'saltbox', -.55, -.28], ['sugar', 'sugar', .55, -.28], ['spoon', 'spoon', 0, -.3]],
+    rounds:[
+      {q:"Will salt keep dissolving forever?", ask:[S("A little cup of water and a box of salt, {name}. We'll stir in one spoonful at a time."), S("Will the salt keep disappearing forever?")],
+        choose:[{id:'one', label:'Only one spoonful', icon:'1️⃣'}, {id:'few', label:'A few, then it stops', icon:'🧂'}, {id:'forever', label:'It vanishes forever', icon:'♾️'}],
+        test:[S("Let's find out! Dip the spoon in the salt box, then into a cup, and stir until it vanishes. Then another!")],
+        hints:[[S("Hold the spoon over the salt box. It scoops up a spoonful by itself.")], [S("Carry it to a cup and stir round and round.")],
+               [S("Keep going, one spoonful at a time, until some salt won't vanish however much you stir.")]],
+        observe: run => { for (const v of wet()) if (full(v, 'salt') && v.stats.spoons.salt) { run.salt = v.stats.spoons.salt; return run.salt > 1 ? 'few' : 'one'; } return null; },
+        say:{few:"It stopped! Some salt stays on the bottom however much you stir. The water is holding all the salt it can: we say it's saturated.", one:"Just one! The water is holding all the salt it can: we say it's saturated."}},
+      {q:"Will more spoonfuls of sugar dissolve, or fewer?", ask:[S("Now sugar, in the other cup. Will more spoonfuls of sugar dissolve than salt, or fewer?")],
+        choose:[{id:'fewer', label:'Fewer than salt', icon:'⬇️'}, {id:'same', label:'The same', icon:'🟰'}, {id:'more', label:'More than salt', icon:'⬆️'}],
+        test:[S("Scoop sugar into the other cup, one spoonful at a time, and stir. Count as you go!")],
+        hints:[[S("The sugar box is the white one. Use the cup with no salt in it.")], [S("Keep adding and stirring. Has it passed the salt yet?")]],
+        observe: run => { for (const v of wet()) if (!chem.amount(v.c, 'salt') && (v.stats.spoons.sugar || 0) > (run.salt || 4) && !(v.c.p.sugar > .3)) return 'more'; return null; },
+        say:{more:"Still vanishing! Water holds far more sugar than salt. This little cup could take more than twenty spoonfuls."}}],
+    explain:[S("Water can only hold so much of something dissolved in it, and how much depends on what it is."),
+             S("Warm water holds even more sugar. That's how syrup is made!")]},
+
   {id:'balloon', after:['volcano'], title:'Balloon Blow-Up', grade:'3–4', blurb:'Blow up a balloon without blowing.',
     setup:[['bottle', 'bottle', 0, 0], ['balloon', 'balloon', -.4, .26], ['soda', 'soda', -.55, -.26], ['vinegar', 'vinegar', .46, -.22]],
     rounds:[{
@@ -131,6 +246,20 @@ export const EXPERIMENTS = [
       observe: () => { const b = find('balloon'); return b && b.inflate >= .5 ? 'inflate' : null; },
       say:{inflate:"It blew itself up! The fizzing made carbon dioxide gas, and the gas needed somewhere to go."}}],
     explain:[S("Gas takes up space, even though you can't see it. Enough gas can fill a whole balloon!")]},
+
+  {id:'cork', after:['balloon'], title:'Pop the Cork', grade:'3–4', blurb:'What happens when gas has nowhere to go?',
+    setup:[['bottle', 'bottle', 0, 0, {fill:{water:40}}], ['cork', 'cork', -.36, .26], ['t1', 'tablet', .4, .2], ['t2', 'tablet', .52, .28]],
+    rounds:[{
+      q:"What will happen when the gas has nowhere to go?", ask:[S("A fizzy tablet goes in this bottle of water, {name}. Then we push a cork in the top, quick!"), S("The fizz makes gas. What will happen when the gas has nowhere to go?")],
+      choose:[{id:'stop', label:'Nothing, it just stops', icon:'😶'}, {id:'pop', label:'The cork pops off!', icon:'🍾'}, {id:'leak', label:'It leaks out slowly', icon:'💧'}],
+      test:[S("Let's find out! Drop a tablet in the bottle, then push the cork into the neck.")],
+      hints:[[S("Carry a fizzy tablet, the white disc, over the bottle and let go.")], [S("Now grab the cork and let go of it right on top of the bottle's neck.")],
+             [S("Did the fizzing finish first? Drop in the other tablet and be quicker with the cork.")]],
+      observe: () => { const c = find('cork'); return c && c.popped ? 'pop' : null; },
+      say:{pop:"POP! The gas piled up in the bottle with nowhere to go. It pushed harder and harder on the cork, until the cork couldn't hold on."}}],
+    explain:[S("A fizzy tablet is baking soda and a dry acid pressed together. Water lets them meet, and they make gas."),
+             S("Gas squeezed into a small space pushes on everything around it. That push is called pressure."),
+             S("Pressure pops corks, blows up balloons, and makes a soda bottle hiss when you open it.")]},
 
   {id:'lava', after:['dissolve', 'volcano'], title:'Lava Lamp', grade:'4', blurb:'Oil, water and a fizzy surprise.',
     setup:[['jar', 'jar', 0, 0, {fill:{water:90}}], ['oil', 'oil', .42, -.3], ['blue', 'blue', -.46, .26], ['red', 'red', -.34, .34], ['t1', 'tablet', .42, .22], ['t2', 'tablet', .55, .3]],
@@ -149,7 +278,70 @@ export const EXPERIMENTS = [
         say:{blobs:"Far out! The tablet makes bubbles of gas. Each bubble grabs a blob of colored water and floats it up through the oil, then the blob sinks back down."}}],
     explain:[S("Oil floats, water sinks, and gas bubbles carry the water up for a ride. That's a lava lamp!")]},
 
-  {id:'cabbage', after:['volcano'], title:'Cabbage Color Detective', grade:'5', blurb:'A purple juice that changes color.',
+  {id:'fizztest', after:['volcano'], title:'Fizz Test', grade:'2–3', blurb:'Which liquids fizz with baking soda?',
+    setup:[['s1', 'cup', -.5, .02, {fill:{soda:12}}], ['s2', 'cup', -.2, .02, {fill:{soda:12}}], ['s3', 'cup', .1, .02, {fill:{soda:12}}], ['s4', 'cup', .4, .02, {fill:{soda:12}}],
+           ['vinegar', 'vinegar', -.62, -.33], ['lemon', 'lemon', -.4, -.34], ['soap', 'soap', -.2, -.33], ['water', 'cup', .05, -.34, {fill:{water:70}}],
+           ['fizz', 'tray', -.44, .35, {label:'FIZZES?', color:0xb5552f}], ['none', 'tray', -.08, .35, {label:'NO FIZZ?', color:0x34406b}]],
+    rounds:[{
+      q:"Which liquids will fizz with baking soda?", ask:[S("Each of these cups has a spoonful of baking soda, {name}. Vinegar fizzes with it. What about the others?"), S("Put each liquid in the tray for your guess.")],
+      sort:{bins:{fizz:'Fizzes', none:'No fizz'}, things:{vinegar:'Vinegar', lemon:'Lemon juice', soap:'Soap', water:'Water'}},
+      test:[S("Now test them! Pour each liquid into its own cup of baking soda.")],
+      hints:[[S("Pour a little of one liquid into a cup of baking soda, and watch.")], [S("Use a different cup for each liquid, so you know which one did it.")]],
+      // a cup counts for the one liquid poured into it: fizz soon, or a few quiet seconds
+      observe: () => {
+        const r = {};
+        for (const v of containers()) {
+          if (!v.full.soda) continue;
+          const got = ['vinegar', 'lemon', 'soap', 'water'].filter(k => v.stats.got[k] !== undefined);
+          if (got.length !== 1) continue;
+          if (v.stats.gas > 1) r[got[0]] = 'fizz'; else if (desk.t - v.stats.got[got[0]] > 3) r[got[0]] = 'none';
+        }
+        return r;
+      },
+      why:{vinegar:"Vinegar fizzes! It's an acid, and acids fizz with baking soda.", lemon:"Lemon juice fizzes too. It's an acid, just like vinegar.",
+        soap:"No fizz from soap. Soap is a base, like baking soda itself, so they don't react.", water:"Water doesn't fizz. It's neutral: not an acid, and not a base."}}],
+    explain:[S("Baking soda is an acid detector! The common things that fizz with it are acids."), S("Acids and bases are opposites. When they meet, they react, and baking soda's reaction makes bubbles of gas.")]},
+
+  {id:'pennies', after:['fizztest'], title:'Shiny Pennies', grade:'2–3', blurb:'What makes an old penny shine?',
+    setup:[['d1', 'dish', -.5, .02, {fill:{water:90}}], ['d2', 'dish', 0, .02, {fill:{vinegar:90}}], ['d3', 'dish', .5, .02, {fill:{vinegar:90}}],
+           ['p1', 'coin', -.2, .34, {tarnish:1}], ['p2', 'coin', -.07, .38, {tarnish:1}], ['p3', 'coin', .07, .38, {tarnish:1}], ['p4', 'coin', .2, .34, {tarnish:1}],
+           ['vinegar', 'vinegar', -.55, -.3], ['saltbox', 'saltbox', .5, -.3], ['spoon', 'spoon', .25, -.32]],
+    rounds:[
+      {q:"Which will make a dull penny shiny fastest?", ask:[S("These old pennies are dull and brown, {name}. Let's make them shiny again!"), S("Here's plain water, vinegar, and more vinegar we can add salt to. Which will make a penny shiny fastest?")],
+        choose:[{id:'water', label:'Plain water', icon:'💧'}, {id:'vinegar', label:'Vinegar', icon:'🫙'}, {id:'salty', label:'Vinegar and salt', icon:'🧂'}],
+        test:[S("Let's race them! Stir a spoonful of salt into one vinegar dish. Then drop a penny in each dish.")],
+        hints:[[S("Hold the spoon over the salt box to scoop up a spoonful. Then stir it into one of the vinegar dishes.")], [S("Now give every dish a penny: water, vinegar, and salty vinegar.")],
+               [S("Watch closely. Which penny turns bright first?")]],
+        // the race is on once every bath has a penny in it; the brightest one leads
+        observe: () => {
+          const by = {};
+          for (const p of pennies()) { const b = p.soakIn && bath(p.soakIn.c); if (b && (!by[b] || p.tarnish < by[b].tarnish)) by[b] = p; }
+          if (!by.water || !by.vinegar || !by.salty) return null;
+          const lead = ['water', 'vinegar', 'salty'].reduce((a, k) => by[k].tarnish < by[a].tarnish ? k : a);
+          return by[lead].tarnish < SHINY ? lead : null;
+        },
+        say:{salty:"Vinegar and salt wins! The acid in vinegar dissolves the dull coating, and the salt speeds it way up.", vinegar:"Plain vinegar got there first this time! Its acid dissolves the dull coating, just slowly.",
+             water:"The water penny shone first? Plain water can't dissolve the coating. Look closely at that dish!"}},
+      {q:"Will salt in plain water make a penny shiny?", ask:[S("So is it the salt that does the cleaning? What if we put salt in plain water, with no vinegar?")],
+        choose:[{id:'shiny', label:'Yes, it shines', icon:'✨'}, {id:'dull', label:'No, it stays dull', icon:'🟤'}],
+        test:[S("Stir a spoonful of salt into the dish of plain water. Is there a dull penny in it? Watch it for a little while.")],
+        hints:[[S("Scoop a spoonful of salt from the box and stir it into the water dish.")], [S("Make sure a dull penny is lying in the salty water. Then wait.")]],
+        observe: run => {
+          run.soaks = run.soaks || new Map();
+          for (const p of pennies()) {
+            if (!(p.soakIn && bath(p.soakIn.c) === 'saltwater')) { run.soaks.delete(p); continue; }
+            if (!run.soaks.has(p)) run.soaks.set(p, {t:desk.t, was:p.tarnish});
+            const s = run.soaks.get(p);
+            if (s.was > .5 && desk.t - s.t > 12) return s.was - p.tarnish > .3 ? 'shiny' : 'dull';
+          }
+          return null;
+        },
+        say:{dull:"Still dull! Salt can't do it alone. It takes an acid, like vinegar, to dissolve the coating. The salt just helps the acid along.", shiny:"It's shining! Is there some vinegar in that dish?"}}],
+    explain:[S("The brown on an old penny is copper oxide: copper that has joined up with oxygen from the air."),
+             S("Acids like vinegar dissolve copper oxide, so the bright copper underneath shows through. Salt makes the acid work much faster."),
+             S("Plain water and salt water can't dissolve it, so those pennies stay dull.")]},
+
+  {id:'cabbage', after:['fizztest'], title:'Cabbage Color Detective', grade:'5', blurb:'A purple juice that changes color.',
     setup:[['k1', 'cup', -.4, .2, {fill:{cabbage:110}}], ['k2', 'cup', 0, .2, {fill:{cabbage:110}}], ['k3', 'cup', .4, .2, {fill:{cabbage:110}}],
            ['lemon', 'lemon', -.52, -.3], ['pitcher', 'pitcher', 0, -.32], ['soda', 'soda', .52, -.3]],
     rounds:[
@@ -165,7 +357,39 @@ export const EXPERIMENTS = [
         choose:COLORS, test:[S("Pour some plain water into the last purple cup.")], hints:[[S("The water pitcher is in the back. Pick the cup that's still purple.")], [S("No purple cups left? Press Start over for fresh ones.")]],
         observe: () => { const v = containers().find(v => v.c.l.cabbage && (v.c.l.water || 0) > 30 && !v.c.l.lemon && !chem.amount(v.c, 'soda')); return v ? shade(v.c) : null; },
         say:{purple:"It stays purple. Water is neutral: not an acid, not a base. A cup like that is called the control."}}],
-    explain:[S("Acids like lemon juice and vinegar turn it pink. Bases like baking soda and soap turn it green."), S("Here's a challenge: add baking soda to your pink cup and watch what happens!")]}
+    explain:[S("Acids like lemon juice and vinegar turn it pink. Bases like baking soda and soap turn it green."), S("Here's a challenge: add baking soda to your pink cup and watch what happens!")]},
+
+  {id:'ph', after:['cabbage'], title:'pH Test Kit', grade:'4–5', blurb:'Measure acids and bases with a test strip.',
+    setup:[['acid', 'tray', -.52, .35, {label:'ACID?', color:0xb5552f}], ['neutral', 'tray', -.2, .35, {label:'NEUTRAL?', color:0x2f8f4a}], ['base', 'tray', .12, .35, {label:'BASE?', color:0x34406b}], ['chart', 'chart', .56, .36],
+           ['c1', 'cup', -.56, .02], ['c2', 'cup', -.28, .02], ['c3', 'cup', 0, .02], ['c4', 'cup', .28, .02], ['c5', 'cup', .56, .02],
+           ['lemon', 'lemon', -.62, -.33], ['vinegar', 'vinegar', -.42, -.33], ['water', 'cup', -.18, -.33, {fill:{water:150}}], ['soap', 'soap', .06, -.33], ['soda', 'soda', .3, -.32], ['strip', 'strip', .4, .19]],
+    rounds:[
+      {q:"Which are acids, which are bases, and which is neutral?", ask:[S("Scientists measure acids and bases with a number called pH, {name}. Below 7 is an acid, 7 is neutral, and above 7 is a base."),
+          S("Which of these are acids, which are bases, and which is neutral? Sort them into the trays.")],
+        sort:{bins:{acid:'Acid', neutral:'Neutral', base:'Base'}, things:{lemon:'Lemon juice', vinegar:'Vinegar', water:'Water', soap:'Soap', soda:'Baking soda'}},
+        test:[S("Now test them! Pour each one into its own cup, dip the test strip in, and match its color to the chart.")],
+        hints:[[S("Pour a little of one liquid into an empty cup. Then dip the tip of the strip in.")], [S("Baking soda is a powder. Pour water into a cup first, then tip some baking soda in.")],
+               [S("Match the strip's color to the chart. Red and orange are acids, green is neutral, blue and purple are bases.")]],
+        observe: () => {
+          const r = {};
+          for (const v of containers()) {
+            const d = v.stats.dip; if (!d || !d.steady) continue;
+            const got = TESTS.filter(k => v.stats.got[k] !== undefined), other = got.filter(k => k !== 'water');
+            const thing = other.length === 1 ? other[0] : got.length && !other.length ? 'water' : null;
+            if (thing) r[thing] = PH_BIN(d.ph);
+          }
+          return r;
+        },
+        why:{lemon:"Lemon juice is about pH 2. A very sour acid!", vinegar:"Vinegar is between 2 and 3. It's an acid too.", water:"Pure water is 7, right in the middle. Neutral!",
+          soap:"Soap is about 10, a base. Bases feel slippery.", soda:"Baking soda water is about 9. A gentle base."}},
+      {q:"What will baking soda do to lemon juice's pH?", ask:[S("Here's a puzzle. Lemon juice is an acid, and baking soda is a base. What will happen to the lemon juice's pH if we add baking soda?")],
+        choose:[{id:'up', label:'The number goes up', icon:'⬆️'}, {id:'down', label:'The number goes down', icon:'⬇️'}, {id:'same', label:'It stays the same', icon:'🟰'}],
+        test:[S("Tip baking soda into your cup of lemon juice. When the fizzing stops, test it with the strip!")],
+        hints:[[S("Pour baking soda into the cup with lemon juice in it.")], [S("Wait for the fizzing to stop, then dip the strip.")], [S("Still red? Add more baking soda and test again.")]],
+        observe: () => { for (const v of containers()) { const g = v.stats.got, d = v.stats.dip; if (g.lemon !== undefined && g.soda !== undefined && d && d.steady && d.t > g.soda && d.ph > 4.5) return 'up'; } return null; },
+        say:{up:"Up it goes! A base cancels out an acid. That fizz was the lemon juice and the baking soda using each other up. Scientists call it neutralizing."}}],
+    explain:[S("Acids are below 7, bases are above 7, and pure water sits right at 7."),
+             S("Each step on the pH scale is ten times stronger. Lemon juice at 2 is about a hundred thousand times more acidic than water!")]}
 ];
 
 export const opened = (e, done) => done.has(e.id) || e.after.every(id => done.has(id));

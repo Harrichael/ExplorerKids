@@ -19,6 +19,7 @@ import { clearDesk, desk, initDesk, isVessel, restingIn, setupDesk, totalGas, up
 import { EXPERIMENTS, FREE, opened, stocked } from './experiments.js';
 import { handsOff, handsOn, setTipButton, setTipKey, updateHands } from './hands.js';
 import { ready } from './physics.js';
+import { labSound } from './sounds.js';
 import { ITEMS } from './stuff.js';
 
 const FREE_AFTER = 1, HINT_AFTER = 35;
@@ -194,7 +195,7 @@ function openBook(){
   }
   book.hidden = false; link();
   (firstNew || foot.lastElementChild || tree.querySelector('.lb-card')).focus({preventScroll:true});
-  Sound.open();
+  labSound.book();
 }
 // measured from layout, not the screen: the page is still popping in, scaled, when this runs
 function link(){
@@ -220,7 +221,7 @@ async function startRun(exp, quiet){
   hud.hidden = false; chooseEl.hidden = lockBtn.hidden = true;
   setupDesk(exp.setup, {endless: !!exp.free}); closeCabinet(); handsOn(root, exp.free ? reach : null);
   lab.phase = 'run'; lab.run = {exp, r:-1, notes:[]};
-  exp.setup.forEach((s, i) => Sound.tone(523*Math.pow(2, (i % 6)/12*2), {type:'triangle', t:i*.05 + .05, dur:.12, vol:.045}));
+  labSound.setup(exp.setup.length);
   $('lhReset').textContent = exp.free ? 'Clean up' : 'Start over';
   $('lhSub').textContent = `Experiment · Grade ${exp.grade}`;
   $('lhTitle').textContent = exp.title; $('lhAfter').hidden = true;
@@ -264,7 +265,7 @@ function predict(guess){
   const run = lab.run;
   run.guess = guess; run.phase = 'test'; run.base = run.rd.baseline ? run.rd.baseline() : null; run.idle = 0;
   chooseEl.hidden = lockBtn.hidden = true;
-  [659, 880].forEach((f, i) => Sound.tone(f, {type:'triangle', t:i*.08, dur:.18, vol:.06}));
+  labSound.predict();
   if (convo) endConvo(false);
   story(run.rd.test);
   drawHud();
@@ -291,7 +292,7 @@ function runStep(dt){
     else {
       const got = rd.observe(run) || {};
       for (const id in got) if (rd.sort.things[id] && !run.result[id]) {
-        run.result[id] = got[id]; run.idle = 0;
+        run.result[id] = got[id]; run.idle = 0; labSound.tested(run.guess[id] === got[id]);
         // say what each one did as it happens, and whether that matched the guess
         story([['sparks', rd.why[id] + (run.guess[id] === got[id] ? ' You called it!' : ' Did that surprise you?')]]);
       }
@@ -303,7 +304,7 @@ function runStep(dt){
 }
 function giveHint(){
   const run = lab && lab.run; if (!run || !run.rd || run.hintI >= run.rd.hints.length) return;
-  story(run.rd.hints[run.hintI++]); drawHud();
+  story(run.rd.hints[run.hintI++]); labSound.hint(); drawHud();
 }
 function compare(result){
   const run = lab.run, rd = run.rd;
@@ -319,7 +320,7 @@ function compare(result){
     lines = [['sparks', right === total ? `You got all ${total} right! What a scientist.` : `You predicted ${right} out of ${total} right. The surprises are the best part!`]];
   }
   run.notes.push({right, total});
-  [784, 988, 1319].forEach((f, i) => Sound.tone(f, {type:'triangle', t:i*.09, dur:.25, vol:.07}));
+  if (right === total) labSound.right(); else labSound.surprise();
   story(lines, () => { if (lab && lab.run === run) nextRound(); });
   drawHud();
 }
@@ -329,9 +330,10 @@ function finish(){
   run.phase = 'done'; run.rd = null; done.add(exp.id);
   const right = run.notes.reduce((s, n) => s + n.right, 0), total = run.notes.reduce((s, n) => s + n.total, 0);
   save('lab', {done:[...done], notes:Object.assign({}, rec.notes, {[exp.id]: {right, total}})});
-  [523, 659, 784, 1046, 1319].forEach((f, i) => Sound.tone(f, {type:'triangle', t:i*.1, dur:.35, vol:.08}));
+  labSound.complete();
   const fresh = EXPERIMENTS.filter(e => opened(e, done) && !opened(e, before)), had = stocked(before), now = stocked(done);
   const got = [...now].filter(t => !had.has(t)), freeNow = before.size < FREE_AFTER && done.size >= FREE_AFTER, extra = [];
+  if (fresh.length) labSound.unlock(1.5);
   stockCabinet(now);
   toast('Experiment complete!', fresh.length ? `New in the book: ${list(fresh.map(e => e.title))}` : got.length ? 'New supplies in your cabinet!' : exp.title);
   if (fresh.length) extra.push(['sparks', `You've opened up ${fresh.length > 1 ? 'new experiments' : 'a new experiment'} in my book: ${list(fresh.map(e => e.title))}!`]);
@@ -383,7 +385,7 @@ function toast(big, small){
 hintBtn.addEventListener('click', giveHint);
 lockBtn.addEventListener('click', () => lab && lab.run && lab.run.phase === 'predict' && lockSort());
 $('lhBook').addEventListener('click', () => lab && openBook());
-$('lhReset').addEventListener('click', () => { if (lab && lab.run) { startRun(lab.run.exp, true); Sound.hiss({dur:.3, vol:.06, type:'bandpass', freq:2000}); } });
+$('lhReset').addEventListener('click', () => { if (lab && lab.run) { startRun(lab.run.exp, true); labSound.reset(); } });
 $('lhLeave').addEventListener('click', leave);
 $('lbLeave').addEventListener('click', leave);
 const tipOn = e => { e.preventDefault(); tipBtn.setPointerCapture(e.pointerId); tipBtn.classList.add('on'); setTipButton(true); };

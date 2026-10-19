@@ -7,17 +7,17 @@
 
 import * as THREE from 'three';
 import { clamp01, grad } from '../core/kit.js';
-import { Sound } from '../core/sound.js';
 import * as chem from './chem.js';
 import { makeFluid, spread } from './fluid.js';
 import { makeFx } from './fx.js';
 import { P, STEP, THING, ghost, makeBody, makeWorld, retire, rot, toLocal, toWorld, upOf } from './physics.js';
+import { labSound } from './sounds.js';
 import { ITEMS, UNITS_PER_M3, capacity } from './stuff.js';
 
 const BOUNDS = {x:.8, z:.52};
-const MAX_TIP = 2.5;
+const MAX_TIP = 2.5, SPOONFUL = 5;
 
-export const desk = {root:null, fx:null, fluid:null, items:[], held:null, ray:null, tip:false, endless:false};
+export const desk = {root:null, fx:null, fluid:null, items:[], held:null, ray:null, tip:false, endless:false, t:0};
 export const isVessel = it => it.def.kind === 'vessel';
 export const find = id => desk.items.find(it => it.id === id && !it.gone);
 const live = () => desk.items.filter(it => !it.gone);
@@ -41,6 +41,9 @@ function within(v, l, pad = 0){
   return l.y > v.def.floor - .006 && l.y < o.y + pad && Math.hypot(l.x, l.z) < r;
 }
 const balloonOn = v => desk.items.find(b => !b.gone && b.attached === v);
+const corkIn = v => desk.items.find(c => !c.gone && c.plugged === v);
+// what closes a container's mouth, so nothing gets in and its gas can't get out
+const capOn = v => balloonOn(v) || corkIn(v);
 
 // what a drop or grain flying through (x, y, z) has fallen into; the containers that can catch are
 // worked out once a frame, since every drop asks
@@ -56,6 +59,7 @@ function catches(x, y, z, d){
 function deliver(v, out, x, z, settled){
   const f = desk.fx, l = toLocal(v.body, x, v.body.translation().y, z, _l), u = l.x/v.def.ri, w = l.z/v.def.ri, wet = chem.liquidVol(v.c) > 2;
   out = {l:Object.assign({}, out.l), p:Object.assign({}, out.p)}; v.hit = {x:l.x, z:l.z};
+  for (const b of [out.l, out.p]) for (const k in b) if (b[k] > .3 && v.stats.got[k] === undefined) v.stats.got[k] = desk.t;
   if (out.p.pepper && wet) { f.film(v).pepper(u, w, Math.ceil(out.p.pepper*14)); delete out.p.pepper; }
   for (const k of ['red', 'yellow', 'blue']) {
     if (!out.l[k]) continue;
@@ -65,6 +69,7 @@ function deliver(v, out, x, z, settled){
   }
   if (out.l.soap && f.hasFilm(v) && f.film(v).soap(u, w)) v.stats.bursts++;
   chem.merge(v.c, out);
+  if (chem.liquidVol(out) > .05) labSound.fill(v, x, v.def.open.y - top(v)); else if (chem.pileVol(out) > .05) labSound.grains(v, x);
   if (!chem.liquidVol(v.c)) f.dropFilm(v);
 }
 
@@ -85,12 +90,12 @@ function aimTarget(v, p){
   }
   return best;
 }
-// a free bottle neck near the balloon's mouth
+// a free bottle neck near a balloon's mouth or a cork's bottom
 function neckFor(b){
-  const m = toWorld(b.body, 0, b.def.open.y, 0, {});
+  const m = toWorld(b.body, 0, b.def.balloon ? b.def.open.y : 0, 0, {});
   let best = null, bd = .08;
   for (const v of vessels()) {
-    if (!v.def.neck || balloonOn(v) || uprightness(v) < .8) continue;
+    if (!v.def.neck || capOn(v) || uprightness(v) < .8) continue;
     const o = toWorld(v.body, 0, v.def.open.y, 0, {}), d = Math.hypot(m.x - o.x, m.z - o.z);
     if (d < bd && m.y > o.y - .04) { bd = d; best = {v, m:o, r:v.def.open.r}; }
   }
@@ -102,6 +107,7 @@ function heldTarget(){
   const v = desk.held;
   if (!v || v.attached) return null;
   if (v.def.balloon) return neckFor(v);
+  if (v.def.stopper) { const n = neckFor(v); if (n) return n; }
   if (!isVessel(v)) {
     if (v.def.tool || !(v.def.r < .045)) return null;
     const t = aimTarget(v, v.body.translation());
@@ -136,7 +142,7 @@ export function initDesk(root){
   desk.fx = makeFx({frame: v => v.g, inside: v => !v.gone && uprightness(v) > .8, top, waterTop, oilTop,
     deliver: (v, p) => { const t = v.body.translation(); deliver(v, p, t.x, t.z, true); }});
   desk.fx.attach(root);
-  desk.fluid = makeFluid(root, {catches, deliver, fizz: (pool, gas, rate) => fizzSound(gas, rate)});
+  desk.fluid = makeFluid(root, {catches, deliver, fizz: (pool, gas, rate) => labSound.fizz(pool, pool.wx, rate, gas/rate)});
 }
 
 // ---------- building and clearing ----------
@@ -147,19 +153,21 @@ function liquidMesh(parent, geo, order){
 }
 function makeItem(id, type, x, z, o, i){
   const def = ITEMS[type], g = new THREE.Group(); desk.root.add(g);
-  const it = {id, type, def, g, pop:-i*.04, stats:{gas:0, stir:0, bursts:0, blobs:0, dye:new Set()}, vy:0, still:0, tilt:0, lastDir:{x:0, z:0}, shakeT:0};
+  // got: when each substance first arrived; spoons: spoonfuls of each powder put in
+  const it = {id, type, def, g, pop:-i*.04, stats:{gas:0, stir:0, bursts:0, blobs:0, dye:new Set(), got:{}, spoons:{}}, vy:0, still:0, tilt:0, lastDir:{x:0, z:0}, shakeT:0};
   it.refs = def.build(g, o) || {};
   it.body = makeBody(def, x, .002, z, it);
   if (o.rot) it.body.setRotation({x:0, y:Math.sin(o.rot/2), z:0, w:Math.cos(o.rot/2)}, false);
   it.grip = def.grip !== undefined ? def.grip : def.h*.7;
   if (isVessel(it)) {
     it.full = o.fill || def.fill || {}; it.c = chem.fill(it.full); it.cap = capacity(def);
-    it.foam = 0; it.head = 0; it.stir = 0; it.mass = -1;
+    it.foam = 0; it.head = 0; it.stir = 0; it.mass = -1; it.gas = 0;
     if (def.see) it.liq = {w: liquidMesh(g, UNIT_CYL, 1), o: liquidMesh(g, UNIT_CYL, 1), p: liquidMesh(g, HEMI, 1), f: liquidMesh(g, UNIT_CYL, 2)};
   }
   g.traverse(m => { if (m.isMesh) m.userData.item = it; });
   if (def.fizz) it.stock = def.fizz;
   if (def.balloon) it.inflate = 0;
+  if (o.tarnish !== undefined) it.tarnish = it.drawnT = o.tarnish;
   return it;
 }
 export function setupDesk(layout, {endless=false}={}){
@@ -237,15 +245,17 @@ export function grab(it){
   if (desk.held) release();
   desk.held = it; it.tilt = 0;
   if (it.attached) { it.raised = true; return; }
+  if (it.plugged) unplug(it);
   it.body.setGravityScale(0, true); it.body.wakeUp();
-  if (it.def.tool === 'spoon' || it.def.tool === 'swab') { ghost(it.body, 'held'); it.resting = null; }
-  Sound.tone(660 + Math.random()*80, {type:'triangle', dur:.06, vol:.05});
+  if (it.def.dips) { ghost(it.body, 'held'); it.resting = null; }
+  labSound.lift(it, it.body.translation().x);
 }
 export function release(){
   const it = desk.held; if (!it) return;
   const into = heldTarget(); desk.held = null;
   if (it.attached) { it.raised = false; return; }
   if (into && it.def.balloon) { attach(it, into.v); return; }
+  if (into && it.def.stopper && into.v.def.neck) { plug(it, into.v); return; }
   if (into && !isVessel(it)) {
     // over the mouth, it drops straight down the middle
     const t = it.body.translation();
@@ -253,7 +263,7 @@ export function release(){
     it.body.setLinvel({x:0, y:0, z:0}, true); it.body.setAngvel({x:0, y:0, z:0}, true);
   }
   it.body.setGravityScale(1, true);
-  if (it.def.tool === 'spoon' || it.def.tool === 'swab') { it.resting = vessels().find(v => insideOf(v, it)) || null; ghost(it.body, it.resting ? 'resting' : false); }
+  if (it.def.dips) { it.resting = vessels().find(v => insideOf(v, it)) || null; ghost(it.body, it.resting ? 'resting' : false); }
   const v = it.body.linvel(), s = Math.hypot(v.x, v.y, v.z);
   if (s > 1.2) it.body.setLinvel({x:v.x/s*1.2, y:v.y/s*1.2, z:v.z/s*1.2}, true);
   if (desk.endless && it.def.supply) it.refill = true;
@@ -262,10 +272,11 @@ export function release(){
 // what's inside the held thing doesn't count as something to carry it over
 const insideOf = (v, it) => it !== v && !it.gone && isVessel(v) && within(v, localOf(v, it.body.worldCom()), .02);
 // Carry things at one steady height, just over the tallest thing on the desk, so they never bob up
-// and down while the hand moves and always clear a cup's rim instead of shoving its wall. Spoons and
-// swabs dip into the container they're over; a magnet goes low over what's near it, to reach it.
+// and down while the hand moves and always clear a cup's rim instead of shoving its wall. Spoons, swabs
+// and test strips dip into the container they're over; a magnet goes low over what's near it, to reach
+// it, and so does steel brought to a magnet, to stroke it.
 function carryHeight(it, x, z){
-  if (it.def.tool === 'spoon' || it.def.tool === 'swab') {
+  if (it.def.dips) {
     for (const v of vessels()) {
       if (v === it || uprightness(v) < .8) continue;
       const vt = v.body.translation();
@@ -275,20 +286,20 @@ function carryHeight(it, x, z){
       return tl.y > v.def.open.y - .02 && Math.hypot(tl.x, tl.z) < r - .006 || within(v, tl) ? vt.y + v.def.floor + .004 : vt.y + v.def.open.y + .02;
     }
   }
-  const t = it.body.translation();
+  const t = it.body.translation(), low = pulls(it) || it.def.magnetic && live().some(m => m !== it && pulls(m) && Math.hypot(m.body.translation().x - x, m.body.translation().z - z) < it.def.r + m.def.r + .07);
   let y = 0;
   for (const o of live()) {
     if (o === it || insideOf(it, o)) continue;
     const ot = o.body.translation();
     // things clinging to the magnet travel with it, so they're no obstacle
-    if (it.def.tool === 'magnet' && o.stuck && Math.hypot(ot.x - t.x, ot.y - t.y, ot.z - t.z) < .09) continue;
+    if (low && (o.clingTo === it || it.def.tool === 'magnet' && o.stuck && Math.hypot(ot.x - t.x, ot.y - t.y, ot.z - t.z) < .09)) continue;
     const reach = it.def.r + Math.max(o.def.r, (o.def.w || 0)/2) + .015;
-    if (it.def.tool === 'magnet' && Math.hypot(x - ot.x, z - ot.z) > reach && Math.hypot(t.x - ot.x, t.z - ot.z) > reach) continue;
+    if (low && Math.hypot(x - ot.x, z - ot.z) > reach && Math.hypot(t.x - ot.x, t.z - ot.z) > reach) continue;
     // how tall it stands right now: its height upright, its width once it's tipped over
     const c = Math.min(1, Math.abs(uprightness(o))), sn = Math.sqrt(1 - c*c);
     y = Math.max(y, ot.y + o.def.h*c + Math.min(o.def.r, .06)*sn);
   }
-  return y + (it.def.tool === 'magnet' ? .006 : .025);
+  return y + (low ? .006 : .025);
 }
 const qa = new THREE.Quaternion(), qb = new THREE.Quaternion(), qe = new THREE.Quaternion(), ZAX = new THREE.Vector3(0, 0, 1);
 // spin a body toward a target orientation
@@ -326,12 +337,12 @@ function attach(b, v){
   b.attached = v; b.raised = false; b.up = 0;
   b.body.setBodyType(P.R.RigidBodyType.KinematicPositionBased, true);
   reshapeBalloon(b);
-  Sound.tone(300, {type:'triangle', dur:.12, vol:.08, f2:520});
+  labSound.cap(v.body.translation().x, 'rubber');
 }
 function detach(b, burst){
   b.attached = null; b.raised = false;
   b.body.setBodyType(P.R.RigidBodyType.Dynamic, true); b.body.setGravityScale(desk.held === b ? 0 : 1, true);
-  if (burst && b.inflate > .1) { Sound.hiss({dur:.8, vol:.12, type:'bandpass', freq:900, q:2}); Sound.tone(500, {type:'sawtooth', dur:.7, vol:.04, f2:200, cut:1200}); }
+  if (burst && b.inflate > .1) labSound.deflate(b.body.translation().x);
   b.inflate = 0; reshapeBalloon(b);
 }
 function seat(b, dt){
@@ -354,14 +365,57 @@ function reshapeBalloon(b){
   if (!flat) { b.ball.setRadius(.036*s); b.ball.setTranslationWrtParent({x:0, y:b.def.open.y - .055*sy, z:0}); }
 }
 
+// ---------- pressure ----------
+// Gas made in a container with its mouth closed stays in and presses on whatever closes it. Pressure
+// here is how far over the room's it is: the room the gas would take up at the room's pressure, over
+// the room it has. A balloon stretches until its rubber pushes back as hard; a cork holds until the
+// push beats its grip, then flies, and the bottle kicks back the other way.
+const GAS_ROOM = 8, CORK_GRIP = 1.4;
+const rubber = i => .12 + .3*i;
+const balloonRoom = b => UNITS_PER_M3*4/3*Math.PI*.036**3*((1 + 1.6*b.inflate)**3 - 1);
+function pressure(v){
+  const b = balloonOn(v), room = Math.max(v.cap*.05, v.cap - chem.liquidVol(v.c) - chem.pileVol(v.c)) + (b ? balloonRoom(b) : 0);
+  return v.gas/room;
+}
+function plug(c, v){
+  c.plugged = v; c.body.setBodyType(P.R.RigidBodyType.KinematicPositionBased, true);
+  for (let i = 0; i < c.body.numColliders(); i++) c.body.collider(i).setEnabled(false);
+  stopper(c);
+  labSound.cap(v.body.translation().x, 'wood');
+}
+function unplug(c){
+  const v = c.plugged; c.plugged = null;
+  c.body.setBodyType(P.R.RigidBodyType.Dynamic, true); c.body.setGravityScale(desk.held === c ? 0 : 1, true);
+  for (let i = 0; i < c.body.numColliders(); i++) c.body.collider(i).setEnabled(true);
+  if (pressure(v) > .15) labSound.uncork(v.body.translation().x, pressure(v));
+  return v;
+}
+// seated in its neck, moving with the bottle, until the gas pushes it out
+function stopper(c){
+  const v = c.plugged, q = v.body.rotation(), p = toWorld(v.body, 0, v.def.open.y - c.def.h*.65, 0, {});
+  c.body.setNextKinematicTranslation(p); c.body.setNextKinematicRotation(q);
+  const press = pressure(v);
+  if (press < CORK_GRIP) return;
+  const up = rot(q, {x:0, y:1, z:0}), speed = Math.min(2.6, 1 + press*.9), bv = v.body.linvel();
+  unplug(c); c.popped = true;
+  c.body.setTranslation({x:p.x + up.x*.03, y:p.y + up.y*.03, z:p.z + up.z*.03}, true);
+  c.body.setLinvel({x:bv.x + up.x*speed, y:bv.y + up.y*speed, z:bv.z + up.z*speed}, true);
+  c.body.setAngvel({x:(Math.random() - .5)*30, y:(Math.random() - .5)*10, z:(Math.random() - .5)*30}, true);
+  const k = c.body.mass()*speed*6;
+  if (v !== desk.held) v.body.applyImpulse({x:-up.x*k, y:-up.y*k, z:-up.z*k}, true);
+  labSound.pop(p.x, press);
+}
+
 // ---------- forces: floating, magnets, stirring, balloons ----------
 function overlap(a0, a1, b0, b1){ return Math.max(0, Math.min(a1, b1) - Math.max(a0, b0)); }
 function volumeOf(it){
   if (it.def.kind === 'solid') return it.body.mass()/(it.def.density*1000);
   return Math.PI*it.def.r*it.def.r*it.def.h*(it.def.shape[0][0].startsWith('hollow') ? 1 : .8);
 }
+// what a thing is lying in the liquid of, and for how long
+function soak(it, v){ if (it.soakIn !== v) { it.soakIn = v; it.soakT = 0; } else if (v) it.soakT += STEP; }
 function buoyancy(it){
-  if (it === desk.held && !it.attached) { it.still = 0; return; }
+  if (it === desk.held && !it.attached) { it.still = 0; soak(it, null); return; }
   const com = it.body.worldCom();
   for (const v of vessels()) {
     if (v === it || uprightness(v) < .6 || !chem.liquidVol(v.c)) continue;
@@ -370,7 +424,9 @@ function buoyancy(it){
     // h is how tall a thing looks, which can reach below its collider and so through the floor; that
     // part is still under water, or an egg on the bottom loses a tenth of its lift and never comes up
     const fw = overlap(lo, hi, lo, wt)/(hi - lo), fo = overlap(lo, hi, wt, ot)/(hi - lo), f = fw + fo;
-    if (f <= 0) return;
+    if (f <= 0) { it.wet = false; soak(it, null); return; }
+    soak(it, fw > .5 ? v : null);
+    if (!it.wet) { it.wet = true; if (it.body.linvel().y < -.15) labSound.plop(com.x, it.def.r); }
     // water drags on what it pushes aside, so a light cork is slowed as much as a heavy rock of its size
     const m = it.body.mass(), displaced = (chem.density(v.c)*fw + chem.OIL_DENSITY*fo)*1000*volumeOf(it);
     const lift = displaced*9.81*STEP, lv = it.body.linvel(), drag = (displaced + m)*7*STEP;
@@ -385,25 +441,53 @@ function buoyancy(it){
     if (it.still > .6) it.settled = {v, floating};
     return;
   }
-  it.still = 0;
+  it.still = 0; soak(it, null);
 }
-const POLES = [{x:-.03, y:.004, z:0}, {x:.03, y:.004, z:0}];
+// an acid a tarnished penny lies in eats the dull oxide away
+const SHINY = .25;
+function polish(it){
+  const was = it.tarnish; it.tarnish = Math.max(0, was - chem.polish(it.soakIn.c)*STEP);
+  if (was >= SHINY && it.tarnish < SHINY) labSound.shine(it.body.translation().x);
+}
+// A magnet pulls steel toward its nearest pole, hard up close. Steel stroked along a pole becomes a
+// magnet itself, weaker than a real one; its poles are at its two ends (see POLES in stuff.js).
+const STEEL = .3, STROKE = .02;
+const strength = m => m.def.tool === 'magnet' ? m.def.pull || 1 : STEEL*Math.abs(m.mag || 0);
+const pulls = m => m.def.tool === 'magnet' || Math.abs(m.mag || 0) > .05;
+const _ax = {};
 function magnetism(m){
+  const s = strength(m), held = desk.held, flip = m.mag < 0 ? -1 : 1;
   for (const o of live()) {
     if (o === m) continue;
     const c = o.body.worldCom();
     let best = null, bd = 1;
-    for (const pl of POLES) { const w = toWorld(m.body, pl.x, pl.y, pl.z, _w), d = Math.hypot(w.x - c.x, w.y - c.y, w.z - c.z); if (d < bd) { bd = d; best = {x:w.x, y:w.y, z:w.z}; } }
-    if (!o.def.magnetic) { if (bd < .07 && m === desk.held) o.snubbed = true; continue; }
+    for (const pl of m.def.poles) { const w = toWorld(m.body, pl.x, pl.y, pl.z, _w), d = Math.hypot(w.x - c.x, w.y - c.y, w.z - c.z); if (d < bd) { bd = d; best = {x:w.x, y:w.y, z:w.z, n:pl.n*flip}; } }
+    if (!o.def.magnetic) { if (bd < .07 && m === held) o.snubbed = true; continue; }
     if (bd > .15) continue;
-    // the pull grows fast up close, and something touching a pole moves with the magnet
-    const mass = o.body.mass(), touching = bd < .035, a = Math.min(touching ? 150 : 40, .06/(bd*bd)), k = mass*a*STEP/bd;
+    if (o.def.poles) stroke(m, o, best, s);
+    // the pull grows fast up close; something touching a pole moves with the magnet, if the pull can hold its weight
+    const mass = o.body.mass(), touching = bd < .035, a = s*Math.min(touching ? 150 : 40, .06/(bd*bd)), k = mass*a*STEP/bd, holds = touching && a > 9.81;
     let ix = (best.x - c.x)*k, iy = (best.y - c.y)*k, iz = (best.z - c.z)*k;
-    if (touching) { const mv = m.body.linvel(), ov = o.body.linvel(); ix += (mv.x - ov.x)*mass*.6; iy += (mv.y - ov.y)*mass*.6; iz += (mv.z - ov.z)*mass*.6; }
+    // the hand is far stronger than any magnet here: what it holds stays put, and the magnet feels the pull instead
+    if (o === held) { if (m !== held) m.body.applyImpulse({x:-ix, y:-iy, z:-iz}, true); continue; }
+    if (holds) { const mv = m.body.linvel(), ov = o.body.linvel(); ix += (mv.x - ov.x)*mass*.6; iy += (mv.y - ov.y)*mass*.6; iz += (mv.z - ov.z)*mass*.6; o.clingTo = m; }
     o.body.applyImpulse({x:ix, y:iy, z:iz}, true);
-    if (m !== desk.held) m.body.applyImpulse({x:-ix, y:-iy, z:-iz}, true);
-    if (bd < .03 && !o.stuck) { o.stuck = true; Sound.tone(1500, {type:'square', dur:.04, vol:.04, cut:3000}); Sound.tone(900, {type:'triangle', t:.03, dur:.06, vol:.05}); }
+    if (m !== held) m.body.applyImpulse({x:-ix, y:-iy, z:-iz}, true);
+    if (holds && bd < .03 && !o.stuck) { o.stuck = true; labSound.magnet(c.x); }
   }
+}
+// A pole sliding along steel turns its tiny magnetic domains to line up one way round, a little more
+// with every stroke the same way. Stroking back the other way turns them back, so rubbing to and fro
+// hardly works.
+function stroke(m, o, pole, s){
+  const end = o.def.poles[0], half = Math.abs(end.x), l = toLocal(o.body, pole.x, pole.y, pole.z, _l);
+  if (Math.hypot(Math.max(0, Math.abs(l.x) - half), l.y - end.y, l.z) > .03) return;
+  const mv = m.body.linvel(), ov = o.body.linvel(); _ax.x = 1; _ax.y = 0; _ax.z = 0; rot(o.body.rotation(), _ax);
+  const va = (mv.x - ov.x)*_ax.x + (mv.y - ov.y)*_ax.y + (mv.z - ov.z)*_ax.z;
+  if (Math.abs(va) < .02) return;
+  const was = o.mag || 0;
+  o.mag = was + (pole.n*Math.sign(va) - was)*Math.min(1, STROKE*s*Math.abs(va)*STEP/(2*half));
+  labSound.stroke(o, o.body.translation().x, Math.abs(o.mag));
 }
 function tools(it, dt){
   const lv = it.body.linvel(), speed = Math.hypot(lv.x, lv.z);
@@ -412,10 +496,20 @@ function tools(it, dt){
     for (const v of vessels()) {
       if (v === it || !within(v, localOf(v, bowl))) continue;
       const wet = chem.liquidVol(v.c) > 2;
+      // dipped in a dry box of powder, the bowl comes up full; dipped anywhere else, it empties there
+      if (!wet && !it.scoop && chem.pileVol(v.c) > SPOONFUL) {
+        it.scoop = chem.take(v.c, SPOONFUL); it.from = v;
+        it.refs.heap.material.color.setHex(chem.pileColor(it.scoop)); it.refs.heap.visible = true;
+        labSound.scoop(bowl.x);
+      } else if (it.scoop && v !== it.from) {
+        for (const k in it.scoop.p) v.stats.spoons[k] = (v.stats.spoons[k] || 0) + 1;
+        deliver(v, it.scoop, bowl.x, bowl.z, true); it.scoop = null; it.refs.heap.visible = false;
+        labSound.tipOut(bowl.x);
+      }
       v.stir = Math.max(v.stir, Math.min(1.2, speed*2)); if (wet) v.stats.stir += speed*dt;
       if (desk.fx.hasFilm(v)) desk.fx.film(v).swirl(Math.min(2, speed*6)*dt);
       if (chem.oilVol(v.c) > 3 && chem.waterVol(v.c) > 3 && speed > .15 && Math.random() < dt*30) desk.fx.oildrop(v);
-      if (speed > .1 && Math.random() < dt*4) Sound.tone(1900 + Math.random()*500, {type:'triangle', dur:.03, vol:.02});
+      if (wet) labSound.stir(v, bowl.x, speed);
     }
   } else if (it.def.tool === 'swab') {
     const tip = toWorld(it.body, 0, .009, 0, {});
@@ -434,6 +528,17 @@ function tools(it, dt){
     const pool = desk.fluid.poolAt(tip.x, tip.y, tip.z, .004);
     if (pool && (pool.c.l.soap || 0) > .3) setSoapy(it, true);
     it.dippedIn = dipped;
+  } else if (it.def.tool === 'strip') {
+    const tip = toWorld(it.body, 0, .01, 0, {});
+    let into = null;
+    for (const v of vessels()) { if (v === it) continue; const l = localOf(v, tip); if (within(v, l) && l.y < waterTop(v) && chem.waterVol(v.c) > 2) { into = v; break; } }
+    const pool = into ? null : desk.fluid.poolAt(tip.x, tip.y, tip.z, .004), c = into ? into.c : pool && chem.waterVol(pool.c) > .5 ? pool.c : null;
+    if (c) {
+      const p = chem.ph(c); it.reading = p; it.refs.pad.material.color.setHex(chem.universal(p));
+      if (into) into.stats.dip = {ph:p, steady:chem.steady(c), t:desk.t};
+      if (it.dippedIn !== (into || pool)) labSound.dip(tip.x);
+    }
+    it.dippedIn = c ? into || pool : null;
   }
 }
 function setSoapy(it, on){ if (it.soapy === on) return; it.soapy = on; it.refs.tip.material = new THREE.MeshToonMaterial({gradientMap:grad, color: on ? 0x9fe0a0 : 0xffffff}); it.refs.tip.userData.own = true; }
@@ -454,20 +559,22 @@ function balloons(b){
     // let go on or right by a bottle's neck, it stretches on: mouth over the neck, hanging off to the side
     const m = toWorld(b.body, 0, b.def.open.y, 0, {}), base = b.body.translation();
     for (const v of vessels()) {
-      if (!v.def.neck || balloonOn(v) || uprightness(v) < .8) continue;
+      if (!v.def.neck || capOn(v) || uprightness(v) < .8) continue;
       const o = toWorld(v.body, 0, v.def.open.y, 0, _w);
       if (Math.min(Math.hypot(m.x - o.x, m.y - o.y, m.z - o.z), Math.hypot(base.x - o.x, base.y - o.y, base.z - o.z)) > .05) continue;
       attach(b, v); return;
     }
     return;
   }
-  // gas in the bottle stretches the balloon until it stands up on its own
+  // the gas in the bottle stretches the balloon until it stands up on its own
+  const was = b.inflate;
+  b.inflate = Math.max(0, Math.min(1.6, b.inflate + (pressure(b.attached) - rubber(b.inflate))*1.5*STEP));
+  if (b.inflate > was + .0005) labSound.stretch(b, b.body.translation().x, b.inflate);
   if (Math.abs(b.inflate - (b.shapeAt || 0)) > .08) reshapeBalloon(b);
   seat(b, STEP);
 }
 
 // ---------- spilling and pouring ----------
-let pourSnd = 0;
 function pourAngle(v){
   const lv = chem.liquidVol(v.c), f = Math.min(1, (lv || chem.pileVol(v.c)*1.3)/v.cap), o = v.def.open;
   let a = o.r < v.def.ri*.6 ? .7 + (1 - f)*.9 : Math.atan2((1 - f)*v.def.hi, v.def.ri);
@@ -492,12 +599,12 @@ function spill(v, dt){
   if (flow === 'drops') {
     if (tilt < 1.8 || (v.drip = (v.drip || 0) - dt) > 0) return;
     v.drip = .38; const {p} = lowRim(v); p.y -= .006; const a = aimed(v, p, {x:lv.x, y:lv.y - .1, z:lv.z});
-    desk.fluid.emit(p.x, p.y, p.z, a.x, a.y, a.z, chem.take(v.c, 1), v.body); Sound.tone(1300, {dur:.06, vol:.04, f2:900});
+    desk.fluid.emit(p.x, p.y, p.z, a.x, a.y, a.z, chem.take(v.c, 1), v.body); labSound.drip(p.x);
     return;
   }
   if (flow === 'shake') {
     // each shake sprinkles over the swing back toward the middle, not all at the far end
-    if (v.shook) { v.shook = false; v.sprinkle = .12; Sound.hiss({dur:.06, vol:.07, type:'highpass', freq:3500}); }
+    if (v.shook) { v.shook = false; v.sprinkle = .12; labSound.shake(v.body.translation().x); }
     if (!(v.sprinkle > 0)) return;
     v.sprinkle -= dt;
     const {p} = lowRim(v), a = aimed(v, p, {x:lv.x*.3, y:lv.y - .2, z:lv.z*.3}); desk.fluid.emit(p.x, p.y, p.z, a.x, a.y, a.z, chem.take(v.c, 1.4*dt/.12), v.body);
@@ -511,7 +618,7 @@ function spill(v, dt){
   // a balloon on a bottle can only empty into the bottle; its mouth is wrapped round the neck
   if (v.attached) { const t = v.attached.body.translation(); deliver(v.attached, out, t.x, t.z); }
   else { const {p, out:o} = lowRim(v), a = aimed(v, p, {x:lv.x + o.x*.16, y:lv.y - .03, z:lv.z + o.z*.16}); desk.fluid.emit(p.x, p.y, p.z, a.x, a.y, a.z, out, v.body); }
-  if ((pourSnd -= dt) <= 0) { pourSnd = .07; if (chem.liquidVol(out)) Sound.hiss({dur:.13, vol:.025 + rate*.0003, type:'bandpass', freq:1200 + Math.random()*700, q:.9}); else Sound.hiss({dur:.12, vol:.03, type:'highpass', freq:2500 + Math.random()*1500}); }
+  labSound.pour(v.body.translation().x, rate, !chem.liquidVol(out));
 }
 function shaking(v){
   // a quick reversal of direction while upside down is a shake
@@ -524,15 +631,9 @@ function shaking(v){
 }
 
 // ---------- chemistry in every container ----------
-let fizzT = 0;
-let roarT = 0;
-function fizzSound(gas, rate){
-  if (rate > 40 && (roarT -= .016) <= 0) { roarT = .22; Sound.hiss({dur:.35, vol:Math.min(.16, .04 + rate*.0007), type:'bandpass', freq:500 + Math.random()*400, q:.7}); }
-  if ((fizzT -= .016) > 0) return; fizzT = .05; Sound.hiss({dur:.05 + Math.random()*.06, vol:Math.min(.09, .015 + gas*.2), type:'highpass', freq:4000 + Math.random()*3000});
-}
 function chemStep(v, dt){
   // liquid carries the fizz across a container much faster than it creeps through a dry pile
-  const gas = spread(v, v.c, dt, v.def.ri, chem.liquidVol(v.c) > 5 ? .08 : .03, v.stir); v.stir = Math.max(0, v.stir - dt*3);
+  let gas = spread(v, v.c, dt, v.def.ri, chem.liquidVol(v.c) > 5 ? .08 : .03, v.stir); v.stir = Math.max(0, v.stir - dt*3);
   if (desk.endless && v.refill && v !== desk.held && uprightness(v) > .8) {
     // Free Lab supplies top themselves back up with what they started with, keeping anything mixed in
     let short = false;
@@ -547,12 +648,17 @@ function chemStep(v, dt){
     const ixz = kg*(r*r/4 + h*h/12), iy = kg*r*r/2;
     v.body.setAdditionalMassProperties(kg, {x:0, y:v.def.floor + h/2, z:0}, {x:ixz, y:iy, z:ixz}, {x:0, y:0, z:0, w:1}, true);
   }
+  // gas sealed in builds pressure; once the mouth opens, what was held rushes out with what's still coming
+  const made = gas;
+  if (capOn(v)) { v.gas += made*GAS_ROOM; gas = 0; }
+  else if (v.gas > 0) { const out = v.gas > .5 ? v.gas*Math.min(1, dt*12) : v.gas; v.gas -= out; gas += out/GAS_ROOM; }
+  if (made > 0) {
+    v.stats.gas += made; labSound.fizz(v, v.body.translation().x, made/dt, dt);
+    if (Math.random() < Math.min(1, made/dt*.02)) for (let i = 0; i < Math.min(6, 1 + made/dt*.08); i++) desk.fx.bubble(v, v.front);
+  }
   if (!(gas > 0)) { v.head = Math.max(0, v.head - dt*.006); return; }
-  v.stats.gas += gas;
-  const rate = gas/dt; fizzSound(gas, rate);
-  const b = balloonOn(v), lk = chem.look(v.c);
-  if (b) b.inflate = Math.min(1.6, b.inflate + gas*.06);
-  else if (!(chem.oilVol(v.c) > 5)) {
+  const rate = gas/dt, lk = chem.look(v.c);
+  if (!(chem.oilVol(v.c) > 5)) {
     // oil on top lets the gas through as bubbles instead of froth
     const soapy = (v.c.l.soap || 0) > .5, o = v.def.open, up = rot(v.body.rotation(), {x:0, y:1, z:0});
     v.head = Math.min(.025, v.head + gas*.0012*(soapy ? 2 : 1));
@@ -566,8 +672,7 @@ function chemStep(v, dt){
     // a big rush of gas kicks the container about
     if (rate > 40 && v !== desk.held) { const k = Math.min(1, (rate - 40)/120)*.0006*dt*60; v.body.applyImpulse({x:(Math.random() - .5)*k, y:k*.6, z:(Math.random() - .5)*k}, true); }
   }
-  if (chem.oilVol(v.c) > 5 && lk) { v.blobAcc = (v.blobAcc || 0) + gas*.9; while (v.blobAcc >= 1) { v.blobAcc -= 1; desk.fx.blob(v, lk.col); v.stats.blobs++; } }
-  if (Math.random() < Math.min(1, rate*.02)) for (let i = 0; i < Math.min(6, 1 + rate*.08); i++) desk.fx.bubble(v, v.front);
+  if (chem.oilVol(v.c) > 5 && lk) { v.blobAcc = (v.blobAcc || 0) + gas*.9; while (v.blobAcc >= 1) { v.blobAcc -= 1; desk.fx.blob(v, lk.col); v.stats.blobs++; labSound.bloop(v, v.body.translation().x); } }
 }
 
 // ---------- drawing ----------
@@ -576,6 +681,7 @@ function draw(it, dt){
   else if (it.stock === undefined) it.g.scale.setScalar(1);
   const t = it.body.translation(), r = it.body.rotation();
   it.g.position.set(t.x, t.y, t.z); it.g.quaternion.set(r.x, r.y, r.z, r.w);
+  if (it.tarnish !== undefined && Math.abs(it.tarnish - it.drawnT) > .004) { it.def.shade(it.refs, it.tarnish); it.drawnT = it.tarnish; }
   if (it.liq) {
     const L = levels(it), lk = chem.look(it.c), ri = it.def.ri*.97, fl = it.def.floor, q = it.liq;
     q.w.visible = L.w > .0008 && !!lk;
@@ -590,14 +696,14 @@ function draw(it, dt){
 }
 function clack(it){
   const vy = it.body.linvel().y;
-  if (it.vy < -.45 && vy > -.1) { const k = Math.min(1, -it.vy/2); Sound.tone(820 + Math.random()*260, {type:'triangle', dur:.05, vol:.06*k}); Sound.tone(260, {dur:.05, vol:.04*k}); }
+  if (it.vy < -.45 && vy > -.1) labSound.land(it, it.body.translation().x, -it.vy/2);
   it.vy = vy;
 }
 
 let acc = 0;
 export function updateDesk(dt){
   if (!P.world || !desk.items.length) return;
-  acc = Math.min(acc + dt, STEP*3);
+  desk.t += dt; acc = Math.min(acc + dt, STEP*3);
   while (acc >= STEP) {
     acc -= STEP;
     const H = desk.held && !desk.held.gone ? desk.held : null;
@@ -605,12 +711,19 @@ export function updateDesk(dt){
     for (const it of live()) {
       buoyancy(it);
       if (it.def.balloon) balloons(it);
+      if (it.plugged) stopper(it);
       if (it.def.flow === 'shake') shaking(it);
-      // small things dropped from the hand would fall a container's floor-thickness in one step and
-      // pass straight through it (the engine's sweep misses thin, fast things), so they fall no faster
-      if (it !== H && !isVessel(it) && it.def.r < .035) { const lv = it.body.linvel(); if (lv.y < -1.1) it.body.setLinvel({x:lv.x, y:-1.1, z:lv.z}, true); }
+      // Small things dropped from the hand would fall a container's floor-thickness in one step and
+      // pass straight through it (the engine's sweep misses thin, fast things). A step that ends past
+      // the middle of a floor gets pushed out the far side, so inside a container they fall no faster
+      // than half a thin floor and half a thin thing per step.
+      if (it !== H && !isVessel(it) && it.def.r < .035) {
+        const lv = it.body.linvel(), c = it.body.worldCom(), most = vessels().some(v => within(v, localOf(v, c), .02)) ? .5 : 1.1;
+        if (lv.y < -most) it.body.setLinvel({x:lv.x, y:-most, z:lv.z}, true);
+      }
     }
-    for (const m of live()) if (m.def.tool === 'magnet') magnetism(m);
+    for (const it of live()) { it.clingTo = null; if (it.tarnish > 0 && it.soakIn) polish(it); }
+    for (const m of live()) if (pulls(m)) magnetism(m);
     while (leaving.length) retire(leaving.pop());
     P.world.step();
     for (const v of vessels()) spill(v, STEP);
@@ -626,7 +739,7 @@ export function updateDesk(dt){
     clack(it);
   }
   for (const v of vessels()) chemStep(v, dt);
-  catchers = vessels().filter(v => !v.attached && uprightness(v) >= .35).map(v => ({v, seal:balloonOn(v)}));
+  catchers = vessels().filter(v => !v.attached && uprightness(v) >= .35).map(v => ({v, seal:capOn(v)}));
   desk.fluid.step(dt);
   showAim();
   desk.fx.update(dt);

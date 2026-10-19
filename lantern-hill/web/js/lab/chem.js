@@ -7,16 +7,17 @@
 
 export const SUB = {
   water:   {liquid:true, d:1,    col:0x6fb8e0, tint:.7, cloud:.25},
-  vinegar: {liquid:true, d:1.01, col:0xf2ead0, tint:.5, acid:.25},
-  lemon:   {liquid:true, d:1.03, col:0xf5df5a, tint:.9, acid:.4, cloud:.4},
-  milk:    {liquid:true, d:1.03, col:0xfbf7ee, tint:0, cloud:2.5, fatty:true},
+  vinegar: {liquid:true, d:1.01, col:0xf2ead0, tint:.5, acid:.25, ph:2.5},
+  lemon:   {liquid:true, d:1.03, col:0xf5df5a, tint:.9, acid:.4, ph:2, cloud:.4},
+  milk:    {liquid:true, d:1.03, col:0xfbf7ee, tint:0, ph:6.5, cloud:2.5, fatty:true},
   cabbage: {liquid:true, d:1.0,  col:0x6e45a8, tint:1.2, cloud:.3, indicator:true},
-  soap:    {liquid:true, d:1.03, col:0x7fd08a, tint:.8, base:.03, soap:true, cloud:.3},
+  soap:    {liquid:true, d:1.03, col:0x7fd08a, tint:.8, ph:10, soap:true, cloud:.3},
   oil:     {liquid:true, d:.92,  col:0xf2c84b, oil:true},
-  red:     {liquid:true, d:1, col:0xe0303a, tint:30, dye:true},
-  yellow:  {liquid:true, d:1, col:0xf7d23a, tint:30, dye:true},
-  blue:    {liquid:true, d:1, col:0x2f6fe0, tint:30, dye:true},
-  soda:    {powder:true, col:0xf6f4ee, base:1, dissolve:.8, sol:.09, mass:.6},
+  red:     {liquid:true, d:1, col:0xe0303a, tint:22, dye:true},
+  yellow:  {liquid:true, d:1, col:0xf7d23a, tint:22, dye:true},
+  blue:    {liquid:true, d:1, col:0x2f6fe0, tint:22, dye:true},
+  // baking soda is a buffer: past a pinch per cup it holds the water near its own pH however much goes in
+  soda:    {powder:true, col:0xf6f4ee, ph:9, buffer:.01, dissolve:.8, sol:.09, mass:.6},
   salt:    {powder:true, col:0xffffff, dissolve:.04, sol:.36, mass:.7},
   sugar:   {powder:true, col:0xfbf3e0, dissolve:.03, sol:2, mass:.6},
   sand:    {powder:true, col:0xd9b67a},
@@ -88,11 +89,32 @@ export function density(c){
 }
 export const OIL_DENSITY = SUB.oil.d;
 
+// pH from the balance of acid and base in the water, on the log scale it really is: each thing pulls
+// by its share of the water toward its own pH when pure, and acid and base cancel.
 export function ph(c){
   const wv = waterVol(c); if (!wv) return 7;
-  let a = 0; for (const k in c.l) { const s = SUB[k]; a += c.l[k]*((s.acid || 0) - (s.base || 0)); }
-  return Math.max(1, Math.min(13, 7 - a/wv*60));
+  let h = 0;
+  for (const k in c.l) { const s = SUB[k]; if (s.ph === undefined) continue; h += Math.min(1, c.l[k]/wv/(s.buffer || 1))*(10**-s.ph - 10**(s.ph - 14)); }
+  return Math.max(0, Math.min(14, -Math.log10((h + Math.sqrt(h*h + 4e-14))/2)));
 }
+// nothing in it is still dissolving or fizzing, so what it reads now is what it will keep reading
+export function steady(c){
+  const wv = waterVol(c); if (!wv) return true;
+  for (const k in c.p) { const s = SUB[k]; if (s.dissolve && s.sol*wv - (c.l[k] || 0) > .3) return false; }
+  let acid = 0; for (const k in c.l) acid += c.l[k]*(SUB[k].acid || 0);
+  return !(acid > .01 && amount(c, 'soda') > .01);
+}
+// How much of a penny's dull copper oxide this scrubs off a second. Acid dissolves the oxide, slowly;
+// salt in the acid makes it many times faster, because chloride grabs the copper and carries it off.
+// Salt water with no acid does nothing.
+export function polish(c){
+  const wv = waterVol(c); if (!wv) return 0;
+  const acid = Math.max(0, Math.min(1, (5.5 - ph(c))/3)), salt = Math.min(1, (c.l.salt || 0)/wv/.04);
+  return acid*(1/200 + salt/7);
+}
+// universal indicator: red for strong acid, through orange, yellow and green at neutral, to blue and purple
+export const UNIVERSAL = [0xc81e2e, 0xd8262e, 0xe23a2c, 0xee6f2a, 0xf39a2c, 0xf3c62e, 0xe2d838, 0x4fae3e, 0x2b8fa8, 0x2f6fd0, 0x3456c0, 0x4a3aa8, 0x5a32a0, 0x66308f, 0x6a2a80];
+export function universal(p){ const i = Math.max(0, Math.min(13.999, p)), k = Math.floor(i); return lerpCol(UNIVERSAL[k], UNIVERSAL[k + 1], i - k); }
 const CAB = [[1,0xd01f3c],[3,0xe2457f],[5,0xb04aa8],[7,0x6e45a8],[8.5,0x3d5fc4],[10,0x239a8c],[12,0x5cb83a],[13,0xc8c040]];
 function cabbageColor(p){
   for (let i = 1; i < CAB.length; i++) if (p <= CAB[i][0]) { const [p0, a] = CAB[i-1], [p1, b] = CAB[i]; return lerpCol(a, b, (p - p0)/(p1 - p0)); }
@@ -104,20 +126,22 @@ export function lerpCol(a, b, t){
 }
 
 // The watery layer's color and cloudiness. Colors mix like paint (absorbance adds up), so blue and
-// yellow make green instead of the gray an RGB average would give.
+// yellow make green instead of the gray an RGB average would give. Water's own blue is only there so
+// clear water shows up; real water adds no color, so any food coloring takes it over.
 const absorb = (col, s) => -Math.log(Math.max(.03, ((col >> s) & 255)/255));
 export function look(c){
   const wv = waterVol(c); if (!wv) return null;
-  const p = c.l.cabbage ? ph(c) : 7; let ar = 0, ag = 0, ab = 0, cl = 0;
+  const p = c.l.cabbage ? ph(c) : 7; let ar = 0, ag = 0, ab = 0, cl = 0, dye = 0;
+  for (const k in c.l) if (SUB[k].dye) dye += c.l[k]/wv*SUB[k].tint;
   for (const k in c.l) {
     const s = SUB[k]; if (!s.liquid || s.oil) continue;
-    const col = s.indicator ? cabbageColor(p) : s.col, w = c.l[k]/wv*s.tint;
+    const col = s.indicator ? cabbageColor(p) : s.col, w = c.l[k]/wv*s.tint/(s.dye ? 1 : 1 + dye*6);
     ar += absorb(col, 16)*w; ag += absorb(col, 8)*w; ab += absorb(col, 0)*w; cl += c.l[k]/wv*(s.cloud || 0);
   }
   const ch = a => Math.round(255*Math.exp(-a)), dark = (ar + ag + ab)/3;
   let col = (ch(ar) << 16) | (ch(ag) << 8) | ch(ab);
   if (c.l.milk) col = lerpCol(col, SUB.milk.col, Math.min(1, c.l.milk/wv*1.4));
-  return {col, op: .4 + .55*Math.min(1, cl + dark*.35)};
+  return {col, op: .4 + .55*Math.min(1, cl + dark*.35 + dye*.8)};
 }
 export function pileColor(c){
   let w = 0, r = 0, g = 0, b = 0;
