@@ -1,6 +1,6 @@
 // The world model against places a child might tap, Hoot's riddles against the map, the food webs
-// against the rules every web must keep, and the geography globe's wonders against the map. Runs on
-// the built data:
+// against the rules every web must keep, and the geography globe's wonders and landforms against the
+// map. Runs on the built data:
 //   node --test tools/earth/*.test.mjs   (from lantern-hill/)
 
 import assert from 'node:assert/strict';
@@ -8,9 +8,11 @@ import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { BIOMES, WEBS, visit } from '../../web/js/earth/biomes.js';
 import { makeGeography } from '../../web/js/earth/geography.js';
+import { LANDFORMS, LANDMARKS, landformBy, landformOf } from '../../web/js/earth/landforms.js';
 import { arc, makeEarth } from '../../web/js/earth/model.js';
 import { WONDERS } from '../../web/js/earth/wonders.js';
-import { eatenBy, hunter, whatIf } from '../../web/js/globe/food-web.js';
+import { arrivals, asked, eatenBy, makers, whatIf } from '../../web/js/globe/food-web.js';
+import { choices } from '../../web/js/globe/landform-quiz.js';
 import { oddOneOut } from '../../web/js/globe/photos.js';
 import { judge } from '../../web/js/globe/wonder-hunt.js';
 
@@ -114,8 +116,14 @@ test("Hoot's riddles point the right way: most of each biome lies in the band of
 
 test("every food web can carry Hoot's lessons", () => {
   for (const w of WEBS) {
-    const h = hunter(w);
-    assert.ok(h && h.eats.length > 1, `${w.id} has no hunter that eats more than one thing`);
+    // built a piece at a time: the makers, then every animal once, each after everything it eats
+    const order = [...makers(w), ...arrivals(w).map(s => s.name)];
+    assert.deepEqual([...order].sort(), w.species.map(s => s.name).sort(), `${w.id}: someone never arrives`);
+    for (const s of arrivals(w)) for (const f of s.eats) assert.ok(order.indexOf(f) < order.indexOf(s.name), `${w.id}: ${s.name} arrives before ${f}`);
+    // Hoot asks about a handful of them, mostly hunters; plant eaters that only eat plants are easy and samey
+    const ask = [...asked(w)].map(n => w.species.find(s => s.name === n)), grazers = ask.filter(s => s.eats.every(f => makers(w).includes(f)));
+    assert.ok(ask.length >= 5 && ask.length <= 6, `${w.id} asks about ${ask.length}`);
+    assert.ok(grazers.length <= 2, `${w.id} asks about ${grazers.length} plant eaters`);
     const q = whatIf(w);
     assert.ok(q, `${w.id} has nothing to make disappear`);
     assert.ok(q.gone.eats.includes(q.food.name), `${w.id}: ${q.gone.name} doesn't eat ${q.food.name}`);
@@ -170,4 +178,48 @@ test("Hoot's odd one out is never an animal really seen here", () => {
   }
   assert.equal(oddOneOut(here.slice(0, 2), far), null, 'too few animals here to ask');
   assert.equal(oddOneOut(here, [animal(1)]), null, 'nothing from far away that is not also here');
+});
+
+test("every kind of landform in Hoot's notebook can be found on the globe, with a real photo", () => {
+  // a name shows once the globe leans in far enough: Natural Earth's zoom 8 is about as close as it goes
+  const names = [...geo.places, ...LANDMARKS, ...geo.rivers.map(r => ({...r, kind: 'river'}))].filter(p => p.min <= 8);
+  for (const lf of LANDFORMS) {
+    const all = names.filter(p => landformOf(p.kind) === lf);
+    assert.ok(all.length, `no ${lf.name.toLowerCase()} on the globe`);
+    if (lf.id !== 'river') assert.ok(all.some(p => p.wiki), `no ${lf.name.toLowerCase()} with an article`);
+  }
+  const named = name => landformOf(geo.places.find(p => p.name === name).kind)?.id;
+  assert.deepEqual(['Mount Fuji', 'Grand Canyon', 'Lake Victoria', 'Caspian Sea', 'Hudson Bay', 'English Channel', 'Nile Delta', 'Iberian Peninsula'].map(named),
+    ['volcano', 'canyon', 'lake', 'lake', 'bay', 'strait', 'delta', 'peninsula']);
+  // Natural Earth calls the Punjab's farmland a desert; the notebook doesn't
+  assert.equal(named('Punjab'), undefined);
+  for (const w of WONDERS) if (w.landform) assert.ok(landformBy(w.landform), `${w.id}: no landform ${w.landform}`);
+});
+
+test("Hoot's hand-picked landforms are where he says: on land, in their country, or a fjord on its coast", () => {
+  for (const p of LANDMARKS) {
+    const lf = landformOf(p.kind);
+    assert.ok(lf && p.wiki, p.name);
+    // a fjord is finer than the map's coastline, so the map can have it as land or as open sea, but
+    // its country is right beside it
+    const near = p.kind !== 'fjord' ? [p.at] : [[0, 0], ...[0, 1, 2, 3, 4, 5, 6, 7].map(k => [Math.cos(k*Math.PI/4)*.2, Math.sin(k*Math.PI/4)*.4])].map(([n, e]) => [p.at[0] + n, p.at[1] + e]);
+    if (p.country) assert.ok(near.some(at => geo.countryAt(...at)?.name === p.country), `${p.name} is not in ${p.country}`);
+    if (p.kind !== 'fjord') assert.ok(!earth.placeAt(...p.at).biome.water, `${p.name} is in the ${earth.placeAt(...p.at).name}`);
+  }
+  assert.equal(new Set(LANDMARKS.map(p => p.name)).size, LANDMARKS.length);
+});
+
+test("Hoot asks what kind of landform it is from three: the right one, and two it isn't", () => {
+  for (const lf of LANDFORMS) {
+    assert.ok(lf.like.length >= 2 && !lf.like.includes(lf.id), lf.id);
+    for (const id of lf.like) assert.ok(landformBy(id), `${lf.id} is like unknown ${id}`);
+    for (let i = 0; i < 20; i++) {
+      const c = choices(lf);
+      assert.equal(c.length, 3); assert.equal(new Set(c).size, 3);
+      assert.ok(c.includes(lf) && c.every(o => o === lf || lf.like.includes(o.id)), lf.id);
+    }
+  }
+  // never something it also is: a volcano is a mountain too, and a canyon is a valley
+  const offers = (id, other) => landformBy(id).like.includes(other);
+  assert.ok(!offers('volcano', 'peak') && !offers('volcano', 'mountains') && !offers('canyon', 'valley') && !offers('bay', 'gulf') && !offers('gulf', 'bay'));
 });

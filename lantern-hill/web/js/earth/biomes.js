@@ -5,7 +5,7 @@
 // Its `hunt` is Hoot's riddle for finding it on the globe: a `clue` to guess from, the band of
 // latitude (north or south of the equator) where most of it lies, and a `hint` for a second try.
 // A food web belongs to a place and lists who lives there as 'Name emoji' or 'Name emoji eats A, B',
-// naming its food by name; plants and algae eat nothing. Animals differ from continent to continent
+// naming its food by name ('eat' for a group, as in 'Insects 🐜 eat Leaves'); plants and algae eat nothing. Animals differ from continent to continent
 // even within one biome, so each web is tied to the realm and spot it was drawn from, and the globe
 // says where a web comes from whenever it shows one from somewhere else.
 
@@ -471,7 +471,7 @@ const WEB_LIST = [
 function parseWeb(w){
   const species = w.web.map(line => {
     const [who, food] = line.split(/ eats? /), sp = who.lastIndexOf(' ');
-    return {name: who.slice(0, sp), icon: who.slice(sp + 1), eats: food ? food.split(', ') : []};
+    return {name: who.slice(0, sp), icon: who.slice(sp + 1), eats: food ? food.split(', ') : [], many: / eat /.test(line)};
   });
   const names = new Set(species.map(s => s.name));
   for (const s of species) for (const f of s.eats) if (!names.has(f)) throw new Error(`${w.id}: ${s.name} eats unknown "${f}"`);

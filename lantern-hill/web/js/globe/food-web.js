@@ -22,14 +22,28 @@ export function layout(species){
 }
 const mean = v => v.length ? v.reduce((a, b) => a + b, 0)/v.length : 0;
 
-// the hunter to guess the menu of: as far up the web as there is one that eats more than one thing
-export function hunter(web){
-  const {rows} = layout(web.species);
-  for (let k = rows.length - 1; k > 0; k--) {
-    const pick = rows[k].filter(s => s.eats.length > 1).sort((a, b) => b.eats.length - a.eats.length)[0];
-    if (pick) return pick;
+// The order animals join the web as it's built. Everything they eat is always there before them,
+// and next comes whoever eats the newest arrival, so hunters follow close behind their prey and the
+// web grows outward instead of filling up one row at a time.
+export function arrivals(web){
+  const order = layout(web.species).rows.flat(), at = new Map(makers(web).map((n, i) => [n, i])), out = [];
+  for (let left = order.filter(s => s.eats.length); left.length; ) {
+    const ready = left.filter(s => s.eats.every(f => at.has(f))), newest = s => Math.max(...s.eats.map(f => at.get(f)));
+    const next = ready.reduce((a, b) => newest(b) > newest(a) ? b : a);
+    at.set(next.name, at.size); out.push(next); left = left.filter(s => s !== next);
   }
-  return null;
+  return out;
+}
+
+// The animals Hoot asks about as the web is built; the rest walk on by themselves. A few plant
+// eaters make an easy start, but they mostly just eat plants, so the questions go to the hunters,
+// first the ones with the most on their menu.
+export function asked(web){
+  const order = arrivals(web), plantEater = s => s.eats.every(f => !order.some(a => a.name === f));
+  const most = list => [...list].sort((a, b) => b.eats.length - a.eats.length || order.indexOf(a) - order.indexOf(b));
+  const hunters = most(order.filter(s => !plantEater(s))).slice(0, 4);
+  const grazers = most(order.filter(plantEater)).slice(0, Math.max(2, 5 - hunters.length));
+  return new Set([...grazers, ...hunters].map(s => s.name));
 }
 
 // "What if every ___ disappeared?" A plant eater that is also food makes the clearest case, and of

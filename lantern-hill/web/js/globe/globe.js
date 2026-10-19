@@ -23,8 +23,8 @@ import { blob, hero } from '../player.js';
 import { load, save } from '../save.js';
 import { game } from '../state.js';
 import { closeDialog, convo, endConvo, story } from '../ui/dialogue.js';
-import { clearMarks, dioramaSize, growArrows, hideDiorama, markAnimal, pickAnimal, restore, selectAnimal, showDiorama, spotlight, updateDiorama, vanish } from './diorama.js';
-import { eatenBy, hunter, makers, whatIf } from './food-web.js';
+import { clearMarks, dioramaSize, enter, growArrows, hideDiorama, markAnimal, pickAnimal, restore, selectAnimal, showDiorama, spotlight, updateDiorama, vanish } from './diorama.js';
+import { arrivals, asked, eatenBy, makers, whatIf } from './food-web.js';
 import { earthMap, paintGlow } from './paint.js';
 import { makeRealEarth } from './real-earth.js';
 
@@ -72,6 +72,7 @@ css.textContent = `
 .gstrip button.guess{box-shadow:0 0 0 3px #d9a441}
 .gstrip button.right{box-shadow:0 0 0 3px #3e9b54}.gstrip button.wrong{box-shadow:0 0 0 3px #c4473a}.gstrip button.missed{box-shadow:0 0 0 3px #e0802e}
 .gstrip button.gone{opacity:.25}
+.gstrip button.wait{opacity:.35}
 .gsay{font-weight:800;font-size:15px;line-height:1.45;min-height:2.9em}
 .gsay .eats{color:#2f7a3a}.gsay .by{color:#b5552f}
 .gwho{display:flow-root}
@@ -119,9 +120,9 @@ const $g = id => hud.querySelector('#' + id), card = $g('gCard');
 const stored = load('globe') || {}, list = v => Array.isArray(v) ? v : [];
 const found = new Set(list(stored.found)), learned = new Set(list(stored.webs));
 let met = !!stored.met;
-// what the geography globe keeps: the wonders found, its lens, and which globe was picked last
-const store = {wonders: new Set(list(stored.wonders)), lens: stored.lens, metGeo: !!stored.metGeo, mode: stored.mode === 'geo' ? 'geo' : 'biomes'};
-const keep = () => save('globe', {found: [...found], webs: [...learned], met, wonders: [...store.wonders], lens: store.lens, metGeo: store.metGeo, mode: store.mode});
+// what the geography globe keeps: the wonders and landforms found, its lens, and which globe was picked last
+const store = {wonders: new Set(list(stored.wonders)), landforms: new Set(list(stored.landforms)), lens: stored.lens, metGeo: !!stored.metGeo, mode: stored.mode === 'geo' ? 'geo' : 'biomes'};
+const keep = () => save('globe', {found: [...found], webs: [...learned], met, wonders: [...store.wonders], landforms: [...store.landforms], lens: store.lens, metGeo: store.metGeo, mode: store.mode});
 const ALL = Object.keys(BIOMES);
 const H = text => ['hoot', text];
 const tune = (notes, o = {}) => notes.forEach((f, i) => Sound.tone(f, {type: 'triangle', t: i*(o.gap || .08), dur: o.dur || .2, vol: o.vol || .06}));
@@ -214,7 +215,7 @@ function drawPick(){
   const tile = (m, title, words) => `<button data-m="${m}" class="${store.mode === m ? 'last' : ''}"><b>${title}</b><span>${words}</span></button>`;
   card.innerHTML = `<div class="gtop"><span class="gicon" aria-hidden="true">🦉</span><div><div class="gkind">Professor Hoot asks</div><h3>Which globe today?</h3></div></div>
     <div class="gpick">${tile('biomes', '🌿 Biomes', 'Who lives where, and who eats whom. Riddles and pop-up food webs.')}
-      ${tile('geo', '🗺️ Geography', 'The real Earth from space: countries, mountains and rivers, wonders of the world, and real photos of the animals that live there.')}</div>`;
+      ${tile('geo', '🗺️ Geography', 'The real Earth from space: mountains, rivers and volcanoes for Hoot\'s notebook, wonders of the world, and real photos of the animals that live there.')}</div>`;
   card.querySelectorAll('.gpick button').forEach(b => b.addEventListener('click', () => pick(b.dataset.m)));
 }
 function leave(){
@@ -242,7 +243,7 @@ function openArea(){
 }
 function aimCamera(){
   const web = G.mode === 'web' && dioramaSize(), a = openArea(), geo = G.kind === 'geo' && !G.picking;
-  const el = web ? .62 : .1, turn = web ? view.orbit : 0;
+  const el = web ? 1.15 : .1, turn = web ? view.orbit : 0;
   if (web) camAt.set(GLOBE.x, .7 + web.top*.42, GLOBE.z); else camAt.copy(center);
   const rho = web ? web.radius*1.02*view.zoom : geo ? .5 : .5*view.zoom;
   const mag = geo ? view.mag : 1;
@@ -252,7 +253,7 @@ function aimCamera(){
   // far enough back that it fits the open area, and shifted so it sits in the middle of it; seen
   // from above, the diorama is wider than it is tall on screen. Leaning in on the geography globe
   // narrows the lens and leaves the camera standing where the whole globe fits.
-  const tan0 = Math.tan(camera.fov*RAD/2), tanH = tan0/mag, dist = rho*innerHeight/(Math.min(a.r - a.l, (a.b - a.t)/(web ? .78 : 1))*.94*tan0);
+  const tan0 = Math.tan(camera.fov*RAD/2), tanH = tan0/mag, dist = rho*innerHeight/(Math.min(a.r - a.l, (a.b - a.t)/(web ? .9 : 1))*.94*tan0);
   const nx = (a.l + a.r)/innerWidth - 1, ny = 1 - (a.t + a.b)/innerHeight, halfH = dist*tanH, halfW = halfH*camera.aspect;
   camLook.copy(camAt).addScaledVector(right, -nx*halfW).addScaledVector(up, -ny*halfH);
   camPos.copy(camLook).addScaledVector(back, dist);
@@ -381,11 +382,14 @@ function openWeb(){
   const web = here.web;
   showDiorama(scene, new THREE.Vector3(GLOBE.x, .7, GLOBE.z), web, here.biomeId);
   tune([523, 784], {dur: .14}); [880, 1175, 1568].forEach((f, i) => Sound.tone(f, {type: 'sine', t: .25 + i*.06, dur: .3, vol: .035}));
-  if (learned.has(web.id)) { G.lesson = {step: 'explore'}; growArrows(); }
+  if (learned.has(web.id)) { G.lesson = {step: 'explore'}; enter(web.species.map(s => s.name)); growArrows(); }
   else {
-    G.lesson = {step: 'makers', guesses: new Set()};
-    story([H(`Welcome to ${web.place}! Every step up this little hill is one more step away from the sunlight.`),
-      H('First guess: which of these make their own food from sunlight? Tap them, then press Check.')]);
+    // the web is built a piece at a time: first the makers, then the animals, each one arriving after
+    // everything it eats is already there. The ones Hoot asks about are guessed before they're shown;
+    // the rest walk on by themselves alongside them.
+    G.lesson = {step: 'makers', guesses: new Set(), placed: new Set(), queue: arrivals(web), ask: asked(web), first: true};
+    story([H(`Welcome to ${web.place}! Let's build its food web together, one living thing at a time.`),
+      H('Everything here starts with sunlight. First guess: which of these make their own food from it? Tap them on the card, then press Check.')]);
   }
   draw();
 }
@@ -398,17 +402,18 @@ function backToGlobe(){
 }
 
 function drawWeb(){
-  const L = G.lesson, web = here.web, b = here.biome, quiz = L.step === 'makers' || L.step === 'hunter', what = L.step === 'whatif' || L.step === 'whatif-done';
+  const L = G.lesson, web = here.web, b = here.biome, quiz = L.step === 'makers' || L.step === 'eats', what = L.step === 'whatif' || L.step === 'whatif-done';
   card.style.setProperty('--c', b.color);
   let ask;
-  if (L.step === 'makers') ask = 'Which ones make their own food from sunlight? Tap your guesses.';
-  else if (L.step === 'hunter') ask = `What do you think the ${L.hunter.name.toLowerCase()} ${L.hunter.icon} eats? Tap your guesses.`;
+  if (L.step === 'makers') ask = 'Which ones make their own food from sunlight? Tap your guesses, then press Check.';
+  else if (L.step === 'eats') { const w = L.who, n = L.ask.size, k = n - L.queue.filter(s => L.ask.has(s.name)).length;
+    ask = `<span class="gfrom">Guess ${k} of ${n}${L.joined.length ? ` · the ${and(lower(L.joined))} joined in too` : ''}</span><br>Here ${w.many ? 'come' : 'comes'} the ${w.name.toLowerCase()} ${w.icon}! What ${w.many ? 'do they' : 'does it'} eat? Tap ${w.many ? 'their' : 'its'} food.`; }
   else if (L.step === 'checked') ask = L.said;
   else if (what) ask = `What if there were no more ${L.q.gone.name.toLowerCase()} ${L.q.gone.icon}? Predict first!`;
   else ask = 'Arrows point from food to the one that eats it, carrying energy up from the sun. Tap anyone to follow their arrows.';
   const row = (k, s) => `<div class="gwhat"><span>${s.icon} ${s.name}</span>${['more', 'fewer'].map(v => `<button data-k="${k}" data-v="${v}" class="${L.answers[k] === v ? 'on' : ''}" aria-pressed="${L.answers[k] === v}" ${L.step === 'whatif-done' ? 'disabled' : ''}>${v === 'more' ? '⬆ More' : '⬇ Fewer'}</button>`).join('')}
     ${L.step === 'whatif-done' ? (L.answers[k] === L.truth[k] ? '<b class="ok">✓ You predicted it!</b>' : `<b class="no">✗ There would be ${L.truth[k]}.</b>`) : ''}</div>`;
-  const btns = quiz ? btn('gCheck', 'Check') + btn('gSkip', 'Just show me', 'gb ghost')
+  const btns = quiz ? btn('gCheck', 'Check') + btn('gSkip', L.step === 'eats' ? 'Show me the rest' : 'Just show me', 'gb ghost')
     : L.step === 'checked' ? btn('gNext', 'Next →')
     : L.step === 'whatif' ? btn('gRun', 'See what happens') + btn('gWhatBack', 'Never mind', 'gb ghost')
     : L.step === 'whatif-done' ? btn('gRestore', 'Bring them back')
@@ -421,15 +426,17 @@ function drawWeb(){
     <div class="gbtns">${btns}</div>`;
   card.querySelectorAll('.gstrip button').forEach(b => b.addEventListener('click', () => tapAnimal(web.species[+b.dataset.i].name)));
   card.querySelectorAll('.gwhat button').forEach(b => b.addEventListener('click', () => { L.answers[b.dataset.k] = b.dataset.v; Sound.tone(880, {type: 'triangle', dur: .06, vol: .05}); draw(); }));
-  if (quiz) { $g('gCheck').disabled = !L.guesses.size; on('gCheck', check); on('gSkip', () => reveal(true)); }
+  if (quiz) { $g('gCheck').disabled = !L.guesses.size; on('gCheck', check); on('gSkip', () => finish(true)); }
   if (L.step === 'whatif') { $g('gRun').disabled = !(L.answers.food && L.answers.eater); on('gRun', runWhatIf); }
   on('gNext', L.next); on('gWhat', startWhatIf); on('gWhatBack', endWhatIf); on('gRestore', endWhatIf);
 }
 const cap = s => s[0].toUpperCase() + s.slice(1);
 function stripClass(s){
-  const L = G.lesson, cls = [s.eats.length ? '' : 'maker'];
+  const L = G.lesson, cls = [];
+  // which are makers is the first guess, so the strip keeps it quiet until then
+  if (L.step !== 'makers') { if (!s.eats.length) cls.push('maker'); if (L.placed && !L.placed.has(s.name)) cls.push('wait'); }
   if (L.marks && L.marks[s.name]) cls.push(L.marks[s.name]); else if (L.guesses && L.guesses.has(s.name)) cls.push('guess');
-  if (L.sel === s.name) cls.push('sel'); if (L.gone === s.name) cls.push('gone');
+  if (L.sel === s.name || (L.who && L.who.name === s.name)) cls.push('sel'); if (L.gone === s.name) cls.push('gone');
   return cls.join(' ');
 }
 function sayFor(name){
@@ -454,8 +461,9 @@ function photoFor(name){
 
 function tapAnimal(name){
   const L = G.lesson; if (!L) return;
-  if (L.step === 'makers' || L.step === 'hunter') {
-    if (L.step === 'hunter' && name === L.hunter.name) return;
+  if (L.step === 'makers' || L.step === 'eats') {
+    // an animal's food is already on the island; it can't eat itself, or anyone still to come
+    if (L.step === 'eats' && (name === L.who.name || !L.placed.has(name))) return;
     if (L.guesses.has(name)) { L.guesses.delete(name); markAnimal(name, null); } else { L.guesses.add(name); markAnimal(name, 'guess'); }
     Sound.tone(L.guesses.has(name) ? 880 : 660, {type: 'triangle', dur: .07, vol: .05});
   } else if (L.step === 'explore') {
@@ -470,49 +478,56 @@ function tapAnimal(name){
 
 // predict, then check: right guesses get a tick, wrong ones a cross, and the ones missed a "!"
 function check(){
-  const L = G.lesson, web = here.web, truth = new Set(L.step === 'makers' ? makers(web) : L.hunter.eats);
+  const L = G.lesson, web = here.web, w = L.who, truth = new Set(L.step === 'makers' ? makers(web) : w.eats);
   L.marks = {};
+  if (L.step === 'makers') { enter(truth); truth.forEach(n => L.placed.add(n)); }
   for (const s of web.species) {
     const g = L.guesses.has(s.name), t = truth.has(s.name), mark = g && t ? 'right' : g ? 'wrong' : t ? 'missed' : null;
     if (mark) { L.marks[s.name] = mark; markAnimal(s.name, mark); }
   }
   const right = [...L.guesses].filter(n => truth.has(n)).length, all = right === truth.size && right === L.guesses.size;
   tune(all ? [659, 784, 1046] : [523, 659], {vol: .06});
-  let lines;
   if (L.step === 'makers') {
-    lines = [(all ? 'Exactly right! ' : right ? 'Good thinking! ' : 'Not quite! ') + `The ${and(lower([...truth]))} ${truth.size > 1 ? 'are' : 'is'} the makers here.`,
-      'Plants and algae turn sunlight into food. Every animal here eats them, or eats something that did.'];
+    const lines = [(all ? 'Exactly right! ' : right ? 'Good thinking! ' : 'Not quite! ') + `The ${and(lower([...truth]))} ${truth.size > 1 ? 'are' : 'is'} the makers here.`,
+      'They turn sunlight into food. Every animal here eats them, or eats something that did.'];
     growArrows(e => e.food === 'Sun');
-    L.next = askHunter;
+    L.said = lines.join(' '); story(lines.map(H));
   } else {
+    // Hoot keeps quiet for each animal, so the web builds at the pace of tapping; the card says how it went
     const wrong = [...L.guesses].filter(n => !truth.has(n));
-    lines = [(all ? 'Yes! ' : right ? 'Close! ' : 'Good guess, but no. ') + `The ${L.hunter.name.toLowerCase()} eats ${and(lower(L.hunter.eats))}.`];
-    if (wrong.length) lines.push(`It doesn't eat ${and(lower(wrong))} here.`);
-    growArrows(e => e.eater === L.hunter.name);
-    L.next = () => reveal(false);
+    L.said = (all ? 'Yes! ' : right ? 'Close! ' : 'Good guess, but no. ') + `The ${w.name.toLowerCase()} ${w.many ? 'eat' : 'eats'} ${and(lower(w.eats))}.`
+      + (wrong.length ? ` ${w.many ? "They don't" : "It doesn't"} eat ${and(lower(wrong))} here.` : '');
+    growArrows(e => e.eater === w.name); selectAnimal(w.name);
   }
-  L.said = lines.join(' '); L.step = 'checked';
-  story(lines.map(H)); draw();
+  L.next = L.queue.some(s => L.ask.has(s.name)) ? arrive : () => finish(false);
+  L.step = 'checked'; draw();
 }
-function askHunter(){
-  const L = G.lesson, h = hunter(here.web);
-  if (convo) endConvo(false);
-  clearMarks(); L.marks = null; L.guesses = new Set();
-  if (!h) return reveal(false);
-  L.step = 'hunter'; L.hunter = h; spotlight(h.name);
-  story([H(`Next: what do you think the ${h.name.toLowerCase()} eats? Tap your guesses, then press Check.`)]);
-  draw();
-}
-function reveal(skipped){
+function arrive(){
   const L = G.lesson;
   if (convo) endConvo(false);
-  clearMarks(); spotlight(null); selectAnimal(null); Object.assign(L, {step: 'explore', marks: null, guesses: null, sel: null});
+  clearMarks(); selectAnimal(null); L.marks = null; L.guesses = new Set();
+  const walkers = [];
+  while (!L.ask.has(L.queue[0].name)) walkers.push(L.queue.shift());
+  const w = L.who = L.queue.shift(); L.joined = walkers.map(s => s.name);
+  for (const s of [...walkers, w]) L.placed.add(s.name);
+  enter([...L.joined, w.name]); growArrows(e => L.joined.includes(e.eater)); spotlight(w.name); L.step = 'eats';
+  tune([784, 988], {gap: .06, dur: .1, vol: .05});
+  if (L.first) { L.first = false;
+    story([H(`Now the animals start to arrive. Here ${w.many ? 'come' : 'comes'} the ${w.name.toLowerCase()}! What do you think ${w.many ? 'they eat' : 'it eats'}? Tap ${w.many ? 'their' : 'its'} food, then press Check.`)]); }
+  draw();
+}
+function finish(skipped){
+  const L = G.lesson, all = here.web.species.map(s => s.name), started = L.placed && L.placed.size, rest = (L.queue || []).map(s => s.name);
+  if (convo) endConvo(false);
+  clearMarks(); spotlight(null); selectAnimal(null); enter(all);
+  Object.assign(L, {step: 'explore', placed: new Set(all), queue: [], who: null, marks: null, guesses: null, sel: null});
   learned.add(here.web.id); keep();
   growArrows();
   tune([523, 659, 784, 1046, 1319], {gap: .12, dur: .3, vol: .05});
-  story([H(skipped ? 'Here comes the whole web!' : 'Now watch the whole web grow in!'),
-    H('Every arrow points from food to the one that eats it. That is the way energy moves, starting with the sun.'),
-    H('See how the steps get smaller as they go up? Most of the energy gets used up at every step, so there is only room for a few hunters at the top.')]);
+  story([H(skipped ? (started ? 'Here comes everyone else!' : 'Here comes the whole web!')
+      : (rest.length ? `And here come the ${and(lower(rest))}. ` : '') + `That's the whole food web of ${here.web.place}!`),
+    H('See how many arrows there are? Most animals eat more than one thing, and more than one thing eats them. That is why it is called a web, not a chain.'),
+    H('Tap anyone to follow their arrows. Then press "What if…?" to see what happens when one of them disappears.')]);
   draw();
 }
 
@@ -547,7 +562,7 @@ const real = makeRealEarth({card, hud, globeBall, R, surface, store, view, keep,
   credit: text => { $g('gCredit').textContent = text; },
   setColor: c => c ? card.style.setProperty('--c', c) : card.style.removeProperty('--c'),
   dropPin, hidePin: () => { pin.visible = false; }, flyTo,
-  found: text => { $g('gFound').textContent = text; }, chips: showChips, redraw: () => draw(),
+  chips: showChips, redraw: () => draw(),
   // the geography globe's way into a food web: over to the biome globe, at the same spot
   openWebAt: p => { pick('biomes'); here = p; dropPin(p.lat, p.lon); openWeb(); }});
 

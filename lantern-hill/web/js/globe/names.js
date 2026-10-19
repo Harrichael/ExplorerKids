@@ -14,11 +14,12 @@ const STYLE = {
   land: {font: 'italic 800 12px', color: '#f3dca6'},
   mountains: {font: 'italic 800 12px', color: '#f0c9a0', mark: '⛰'},
   peak: {font: '800 12px', color: '#f7dcc0', mark: '▲'},
+  volcano: {font: '800 12px', color: '#ffc29a', mark: '🌋'},
   river: {font: 'italic 800 11px', color: '#a8dcff'},
   island: {font: 'italic 700 11px', color: '#f4f4f4'},
   waterfall: {font: '800 12px', color: '#c4ecff', mark: '💧'},
 };
-const LOOK = {gulf: 'sea', bay: 'sea', strait: 'sea', channel: 'sea', sound: 'sea', lowest: 'peak', islands: 'island',
+const LOOK = {gulf: 'sea', bay: 'sea', strait: 'sea', channel: 'sea', sound: 'sea', lake: 'sea', fjord: 'sea', lowest: 'peak', islands: 'island', glacier: 'island',
   desert: 'land', plateau: 'land', basin: 'land', plain: 'land', tundra: 'land', delta: 'land', peninsula: 'land', valley: 'land', gorge: 'land', wetland: 'land', region: 'land', isthmus: 'land'};
 const look = kind => STYLE[kind] || STYLE[LOOK[kind]] || STYLE.land;
 
