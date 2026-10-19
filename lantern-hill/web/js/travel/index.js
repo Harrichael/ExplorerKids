@@ -1,5 +1,5 @@
-// Pip's treehouse magic: once an explorer has spent half an hour at the telescope, Pip lets them in on
-// a secret. Step into the treehouse hut, make a wish, and it whisks off to anywhere in the world,
+// Pip's treehouse magic: once an explorer has spent twelve minutes at Pip's telescope, Pip lets them
+// in on a secret. Step into the treehouse hut, make a wish, and it whisks off to anywhere in the world,
 // where the telescope shows that place's sky. This much is all HQ loads up front; the trip itself
 // loads when someone says yes.
 
@@ -8,7 +8,7 @@ import { load } from '../save.js';
 import { where } from '../sky/observer.js';
 import { story } from '../ui/dialogue.js';
 
-const UNLOCK = 30*60;   // seconds at the telescope
+const UNLOCK = 12*60;   // seconds at the telescope
 const unlocked = () => ((load('telescope') || {}).seconds || 0) >= UNLOCK;
 
 const go = () => import('./whisk.js').then(m => m.whisk());
@@ -19,9 +19,9 @@ export function pipTalk(){
   if (!unlocked()) return null;
   const pip = PERSONA.pip, here = where(), first = !load('travel');
   const lines = first ? [
-    "{name}, you've been looking through that telescope for SO long. I think you're ready for our biggest secret...",
+    "{name}, you've been looking through my telescope for SO long. I think you're ready for our biggest secret...",
     "This treehouse is a little bit magic! If we step inside the hut and make a wish, it can whisk us anywhere in the whole world.",
-    "And wherever we land, the telescope shows the sky from THERE. Different stars and everything! Want to try it?"
+    "And wherever we land, my telescope shows the sky from THERE. Different stars and everything! Want to try it?"
   ] : here.home ? [
     "Ready for another magic trip, {name}? Pick any spot on the globe and the treehouse will take us there!"
   ] : [
