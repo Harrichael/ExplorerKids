@@ -15,6 +15,18 @@ const MAX_DROPS = 900, MAX_FOAM = 1400, MAX_POOLS = 60;
 const share = (c, f) => { const o = chem.empty(); for (const k in c.l) o.l[k] = c.l[k]*f; for (const k in c.p) o.p[k] = c.p[k]*f; return o; };
 const lookCol = c => chem.liquidVol(c) ? (c.l.oil && chem.waterVol(c) < .01 ? chem.SUB.oil.col : (chem.look(c) || {col:0xc8e6f2}).col) : chem.pileColor(c);
 
+// The fizz starts where acid and baking soda first meet and spreads out from there, so only the part
+// it has reached reacts and foams. `s` carries {hit, front, quiet}: hit is where something last landed,
+// front {x, z, r} the spreading patch, both in whatever flat frame the caller keeps them; R is as far
+// as it can spread, speed how fast it creeps (a stirred or bubbling one spreads faster).
+export function spread(s, c, dt, R, speed, stir = 0){
+  const f = s.front || {x: s.hit ? s.hit.x : 0, z: s.hit ? s.hit.z : 0, r: .004};
+  const gas = chem.step(c, dt, stir, Math.max(.02, Math.min(1, (f.r/Math.max(R, .006))**2)));
+  if (gas > 1e-5) { s.front = f; s.quiet = 0; f.r = Math.min(R, f.r + dt*(speed + stir*.1 + gas/dt*.0005)); }
+  else if (s.front && (s.quiet = (s.quiet || 0) + dt) > .6) s.front = null;
+  return gas;
+}
+
 // hooks: catches(x, y, z, drop) -> the container a point is inside, deliver(v, rec, x, z), fizz(pool, gas)
 export function makeFluid(root, hooks){
   const drops = [], pools = [], foams = [];
@@ -67,7 +79,7 @@ export function makeFluid(root, hooks){
   // ---------- puddles and piles ----------
   function settle(c, x, y, z, body, nx, ny, nz){
     let p = pools.find(p => p.body === body && Math.hypot(p.wx - x, p.wy - y, p.wz - z) < p.r + .008);
-    if (p) { chem.merge(p.c, c); size(p); return p; }
+    if (p) { chem.merge(p.c, c); p.hit = {x:x - p.wx, z:z - p.wz}; size(p); return p; }
     // too many puddles: this one joins the nearest on the same surface instead of making another
     if (pools.length >= MAX_POOLS) {
       const near = pools.filter(q => q.body === body).sort((a, b) => Math.hypot(a.wx - x, a.wz - z) - Math.hypot(b.wx - x, b.wz - z))[0] || pools[0];
@@ -114,12 +126,13 @@ export function makeFluid(root, hooks){
       }
     }
     // every tick of chemistry happens right here on the surface
-    const gas = chem.step(p.c, dt);
+    const gas = spread(p, p.c, dt, p.r, .025);
     if (gas > 0) {
       gasTotal += gas; p.gas += gas; hooks.fizz(p, gas, gas/dt);
       p.foamAcc += gas*((p.c.l.soap || 0) > .3 ? 4 : 1.2);
       const fc = chem.lerpCol(0xffffff, (chem.look(p.c) || {col:0xffffff}).col, .4);
-      p.foamAcc = gush(p.foamAcc, gas/dt, fc, null, p.n, () => { const a = Math.random()*7, rr = Math.random()*p.r*.7; _b.x = p.wx + Math.cos(a)*rr; _b.y = p.wy + .004; _b.z = p.wz + Math.sin(a)*rr; return _b; });
+      const f = p.front || {x:0, z:0, r:p.r};
+      p.foamAcc = gush(p.foamAcc, gas/dt, fc, null, p.n, () => { const a = Math.random()*7, rr = Math.random()*Math.min(f.r, p.r)*.8; _b.x = p.wx + f.x + Math.cos(a)*rr; _b.y = p.wy + .004; _b.z = p.wz + f.z + Math.sin(a)*rr; return _b; });
     }
     size(p);
     return !chem.isEmpty(p.c);
@@ -129,6 +142,9 @@ export function makeFluid(root, hooks){
       const a = pools[i], b = pools[j];
       if (a.body !== b.body || Math.hypot(a.wx - b.wx, a.wy - b.wy, a.wz - b.wz) > (a.r + b.r)*.8) continue;
       const big = chem.liquidVol(a.c) + chem.pileVol(a.c) >= chem.liquidVol(b.c) + chem.pileVol(b.c) ? a : b, small = big === a ? b : a;
+      // where they touch is where any fizz between them starts
+      const d = Math.hypot(small.wx - big.wx, small.wz - big.wz) || 1;
+      big.hit = {x:(small.wx - big.wx)/d*big.r, z:(small.wz - big.wz)/d*big.r};
       chem.merge(big.c, small.c); size(big); dropPool(small); pools.splice(pools.indexOf(small), 1); return;
     }
   }
@@ -140,12 +156,13 @@ export function makeFluid(root, hooks){
   }
   // Lets `n` blobs of foam out of a surface facing `up`, from spots spot() picks; returns what's left
   // over. Gentle fizzing (gas rate in units a second) wells up; a sudden rush blasts out a fountain of
-  // more, bigger foam.
-  function gush(n, rate, c, vel, up, spot){
-    const k = Math.min(1, Math.max(0, (rate - 15)/90)), vx = vel ? vel.x : 0, vz = vel ? vel.z : 0;
+  // more, bigger foam. `squeeze` is how much narrower the way out is than where the gas is made: gas
+  // forced through a small mouth comes out that much faster.
+  function gush(n, rate, c, vel, up, spot, squeeze = 1){
+    const k = Math.min(1, Math.max(0, (rate*squeeze - 12)/70)), vx = vel ? vel.x : 0, vz = vel ? vel.z : 0;
     n += n*k*2.5;
     while (n >= 1) {
-      n -= 1; const w = spot(), a = Math.random()*7, sp = .04 + Math.random()*.08 + k*Math.random()*.7, jet = .1 + Math.random()*.15 + k*(.4 + Math.random()*1.1);
+      n -= 1; const w = spot(), a = Math.random()*7, sp = .04 + Math.random()*.08 + k*Math.random()*.7, jet = (.1 + Math.random()*.15 + k*(.4 + Math.random()*1.1))*Math.min(1.35, Math.sqrt(squeeze));
       foam(w.x, w.y, w.z, vx + up.x*jet + Math.cos(a)*sp, up.y*jet, vz + up.z*jet + Math.sin(a)*sp, c, 1 + k*Math.random()*1.5);
     }
     return n;

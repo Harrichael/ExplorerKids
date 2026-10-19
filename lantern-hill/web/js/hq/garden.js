@@ -104,17 +104,21 @@ col(11.6, 12.0, -3.2, -2.6);
 
 // ---------- Treehouse ----------
 export const TX = 22, TZ = -3.6, PLAT = 3;
+// The whole treehouse, tree and all, turns about its trunk when Pip's magic lifts it into the sky.
+// Its parts are laid out in yard coordinates inside `TREEHOUSE.deck`, so at rest they sit where they say.
+const lifter = grp(TX, 0, TZ), th = grp(-TX, 0, -TZ, 0, lifter);
+export const TREEHOUSE = {lifter, deck: th};
 const bark = T(0x6b4a35), barkDk = T(0x523626);
-cyl(.8, 1.15, 9, bark, TX, 4.5, TZ, null, 20);
-for (let i=0;i<5;i++){ const a = i*1.26+.3; const rt = cyl(.12,.38,1.4,barkDk,TX+Math.cos(a)*1.0,.35,TZ+Math.sin(a)*1.0,null,6); rt.rotation.z = Math.cos(a)*.9; rt.rotation.x = -Math.sin(a)*.9; }
+cyl(.8, 1.15, 9, bark, TX, 4.5, TZ, th, 20);
+for (let i=0;i<5;i++){ const a = i*1.26+.3; const rt = cyl(.12,.38,1.4,barkDk,TX+Math.cos(a)*1.0,.35,TZ+Math.sin(a)*1.0,th,6); rt.rotation.z = Math.cos(a)*.9; rt.rotation.x = -Math.sin(a)*.9; }
 col(TX-.95, TX+.95, TZ-.95, TZ+.95);
 const deckTex = tex(256,256,(g,w,h)=>{ for (let i=0;i<8;i++){ g.fillStyle = i%2 ? '#8a5a3a' : '#7a4e32'; g.fillRect(i*32,0,32,h); g.fillStyle='rgba(30,15,8,.5)'; g.fillRect(i*32,0,3,h); } }, 2, 1.7);
-box(7, .22, 6, T(0xffffff,{map:deckTex}), 21.5, PLAT - .11, -3);
-for (const [px,pz] of [[18.2,-5.8],[24.8,-5.8],[18.2,-.2],[24.8,-.2]]) { box(.3, PLAT, .3, barkDk, px, PLAT/2, pz); const br = box(.14, 1.5, .14, barkDk, px + (px < 21 ? .5 : -.5), PLAT - .7, pz); br.rotation.z = px < 21 ? -.7 : .7; }
+box(7, .22, 6, T(0xffffff,{map:deckTex}), 21.5, PLAT - .11, -3, th);
+for (const [px,pz] of [[18.2,-5.8],[24.8,-5.8],[18.2,-.2],[24.8,-.2]]) { box(.3, PLAT, .3, barkDk, px, PLAT/2, pz, th); const br = box(.14, 1.5, .14, barkDk, px + (px < 21 ? .5 : -.5), PLAT - .7, pz, th); br.rotation.z = px < 21 ? -.7 : .7; }
 function rail(x1, z1, x2, z2){
   const len = Math.hypot(x2-x1, z2-z1), n = Math.max(1, Math.round(len/.6)), ang = Math.atan2(z2-z1, x2-x1);
-  for (let i=0;i<=n;i++){ const t = i/n; box(.08,.85,.08,T(C.woodLt), x1+(x2-x1)*t, PLAT+.42, z1+(z2-z1)*t); }
-  const r = box(len,.1,.12,T(C.woodDk),(x1+x2)/2,PLAT+.88,(z1+z2)/2); r.rotation.y = -ang;
+  for (let i=0;i<=n;i++){ const t = i/n; box(.08,.85,.08,T(C.woodLt), x1+(x2-x1)*t, PLAT+.42, z1+(z2-z1)*t, th); }
+  const r = box(len,.1,.12,T(C.woodDk),(x1+x2)/2,PLAT+.88,(z1+z2)/2,th); r.rotation.y = -ang;
   col(Math.min(x1,x2)-.15, Math.max(x1,x2)+.15, Math.min(z1,z2)-.15, Math.max(z1,z2)+.15, PLAT-.3, PLAT+1.2);
 }
 const RAMP0 = 13, RAMP1 = 18, RZ0 = -2.0, RZ1 = 0;
@@ -125,7 +129,7 @@ for (let i=0;i<12;i++) box(rampLen/12 - .03, .12, RZ1 - RZ0 + .1, T(i%2?C.woodLt
 for (const zz of [-(RZ1-RZ0)/2 - .05, (RZ1-RZ0)/2 + .05]) { box(rampLen,.08,.1,T(C.woodDk),0,.85,zz,ramp); for (let i=0;i<=6;i++) box(.07,.85,.07,T(C.woodLt),-rampLen/2 + i*rampLen/6,.42,zz,ramp); }
 for (const zz of [RZ0 - .1, RZ1 + .1]) for (let i=0;i<14;i++){ const x = RAMP0 + i*(RAMP1-RAMP0)/14; const y0 = (x - RAMP0)/(RAMP1-RAMP0)*PLAT; col(x-.05, x+(RAMP1-RAMP0)/14+.05, zz-.1, zz+.1, y0-.3, y0+1.2); }
 box(.22, PLAT*.55, .22, barkDk, 15.8, PLAT*.27, RZ0+.05); box(.22, PLAT*.55, .22, barkDk, 15.8, PLAT*.27, RZ1-.05);
-const hut = grp(24, PLAT, -4.25);
+const hut = grp(24, PLAT, -4.25, 0, th);
 const hutTex = tex(256,256,(g,w,h)=>{ g.fillStyle='#6d3b5e'; g.fillRect(0,0,w,h); g.fillStyle='rgba(20,8,20,.3)'; for (let x=0;x<w;x+=32) g.fillRect(x,0,4,h); });
 box(1.9, 2.0, 3.1, T(0xffffff,{map:hutTex}), 0, 1.0, 0, hut);
 box(.06, 1.4, .8, T(C.woodDk), -.96, .7, .4, hut, false);
@@ -136,17 +140,17 @@ const roof = add(new THREE.ConeGeometry(2.2, 1.5, 4), T(0x2f5552), 0, 2.75, 0, h
 cyl(.03,.03,1.3,T(C.cream),0,3.9,0,hut,5); const flag = box(.55,.32,.02,T(C.gold),.28,4.4,0,hut,false);
 occluder(hut);
 col(23.0, 25, -5.85, -2.65, PLAT-.3, PLAT+3);
-const tele2 = grp(24.4, PLAT, -.6, -.6);
+const tele2 = grp(24.4, PLAT, -.6, -.6, th);
 for (let i=0;i<3;i++){ const a = i*2.1; const l = cyl(.03,.03,1.1,T(C.woodDk),Math.cos(a)*.22,.52,Math.sin(a)*.22,tele2,5); l.rotation.z = Math.cos(a)*.22; l.rotation.x = -Math.sin(a)*.22; }
 const tt2 = cyl(.08,.12,1,T(C.navy),0,1.15,0,tele2,10); tt2.rotation.z = 1.0; outline(tt2,1.08);
 col(24.1, 24.75, -.85, -.3, PLAT-.3, PLAT+1.6);
 const deckLamps = [];
-for (const [lx,lz] of [[18,-6],[25,-6],[25,0],[18,0]]) { const l = sph(.16, glowM(0xffcf73,1.1), lx, PLAT+1.08, lz, null, 8, false); deckLamps.push(l); box(.04,.15,.04,T(C.ink),lx,PLAT+.95,lz); }
-const deckLight = new THREE.PointLight(0xffb85c, .9, 7, 2); deckLight.position.set(20, PLAT+1.6, -2); scene.add(deckLight); lampLights.push(deckLight);
+for (const [lx,lz] of [[18,-6],[25,-6],[25,0],[18,0]]) { const l = sph(.16, glowM(0xffcf73,1.1), lx, PLAT+1.08, lz, th, 8, false); deckLamps.push(l); box(.04,.15,.04,T(C.ink),lx,PLAT+.95,lz,th); }
+const deckLight = new THREE.PointLight(0xffb85c, .9, 7, 2); deckLight.position.set(20, PLAT+1.6, -2); th.add(deckLight); lampLights.push(deckLight);
 lampLights.forEach(l => l.userData.full = l.intensity);
 const bunting = [];
-for (let i=0;i<9;i++){ const t = i/8; const x = 18.2 + t*6.6, y = PLAT+1.0 - Math.sin(t*Math.PI)*.25; const tri = add(new THREE.ConeGeometry(.1,.2,3), T([C.rust,C.gold,C.plum,0x2f8f8a][i%4]), x, y - .1, 0, null, false); tri.rotation.x = Math.PI; bunting.push(tri); }
-const canopy = grp(TX, 0, TZ);
+for (let i=0;i<9;i++){ const t = i/8; const x = 18.2 + t*6.6, y = PLAT+1.0 - Math.sin(t*Math.PI)*.25; const tri = add(new THREE.ConeGeometry(.1,.2,3), T([C.rust,C.gold,C.plum,0x2f8f8a][i%4]), x, y - .1, 0, th, false); tri.rotation.x = Math.PI; bunting.push(tri); }
+const canopy = grp(TX, 0, TZ, 0, th);
 for (const [cx,cy,cz,r,c] of [[0,8.6,0,3.0,0x2f5a3a],[2.3,7.9,1.2,2.2,0x3a6b45],[-2.4,8.1,-.8,2.3,0x3a6b45],[.8,10.1,-1.2,2.1,0x2f5a3a],[-1.2,7.7,2.2,2.0,0x447a4c],[1.6,7.6,-2.2,2.0,0x447a4c]]) {
   rand(); rand();
   leafCloud(canopy, [[cx, cy, cz, r*.92, c === 0x2f5a3a ? 1 : c === 0x447a4c ? 2 : 1], [cx, cy - r*.35, cz, r*.7, 0]], .07, outlineMat.clone());

@@ -63,11 +63,12 @@ export const ITEMS = {
       const nk = add(new THREE.CylinderGeometry(.022, .024, .04, 16, 1, true), GLASS, 0, .17, 0, b, false); nk.renderOrder = 3;
       const f = cyl(.05, .05, .012, GLASS, 0, .006, 0, b, 22, false); f.renderOrder = 3;
       const rim = add(new THREE.TorusGeometry(.023, .004, 5, 16), RIM, 0, .19, 0, b, false); rim.rotation.x = Math.PI/2; rim.renderOrder = 4; }},
-  volcano: {name:'Volcano', kind:'vessel', r:.2, h:.17, ri:.036, floor:.06, hi:.1, see:true, flow:'liquid', rate:40, mouth:.045,
-    build: b => { outline(add(new THREE.CylinderGeometry(.05, .2, .17, 18, 1, true), T(0x8a5a3a, {side:THREE.DoubleSide}), 0, .085, 0, b), 1.03);
+  // a wide chamber inside under a narrow crater, like a bottle hidden in a hill: the gas has to squeeze out
+  volcano: {name:'Volcano', kind:'vessel', r:.2, h:.17, ri:.05, floor:.025, hi:.115, see:true, flow:'liquid', rate:40, mouth:.03,
+    build: b => { outline(add(new THREE.CylinderGeometry(.034, .2, .17, 18, 1, true), T(0x8a5a3a, {side:THREE.DoubleSide}), 0, .085, 0, b), 1.03);
       for (const [y, r, c] of [[.04, .175, 0x6b4430], [.11, .1, 0x9a6a45]]) { const s = add(new THREE.TorusGeometry(r, .012, 5, 18), T(c), 0, y, 0, b); s.rotation.x = Math.PI/2; s.scale.z = .5; }
-      cyl(.036, .036, .06, T(C.woodDk), 0, .03 + .06, 0, b, 14, false);
-      const rim = add(new THREE.TorusGeometry(.046, .008, 6, 18), T(0x5a3626), 0, .17, 0, b); rim.rotation.x = Math.PI/2; }},
+      add(new THREE.CylinderGeometry(.03, .03, .03, 14, 1, true), T(C.woodDk, {side:THREE.BackSide}), 0, .155, 0, b, false);
+      const rim = add(new THREE.TorusGeometry(.032, .007, 6, 18), T(0x5a3626), 0, .17, 0, b); rim.rotation.x = Math.PI/2; }},
   // ---------- supplies ----------
   pitcher: {name:'Water', kind:'vessel', r:.08, h:.19, ri:.068, floor:.012, hi:.17, see:true, flow:'liquid', rate:90,
     build: b => { glass(b, .068, .19, .012); const hd = add(new THREE.TorusGeometry(.045, .009, 6, 14, Math.PI), T(0xdff1f5, {transparent:true, opacity:.6}), .072, .1, 0, b, false); hd.rotation.z = -Math.PI/2; }},
@@ -160,7 +161,8 @@ for (const k in STOCK) Object.assign(ITEMS[k], {cap:STOCK[k][0], fill:STOCK[k][1
 // What each thing is to the physics engine, in its own frame with the bottom centre at the origin:
 //   ['hollow', ri, h, wall, floor]   an open cup: a floor and a ring of wall panels, so things drop inside
 //   ['neck', r, y0, y1, rOut]        a narrower ring on top of a hollow, with a shoulder out to rOut
-//   ['cyl', r, h, y0]  ['box', w, h, d, y0]  ['ball', r, y]  ['cone', rTop, rBottom, h]
+//   ['cyl', r, h, y0]  ['box', w, h, d, y0]  ['ball', r, y]
+//   ['crater', rTop, rBottom, h, ri, neckY, rNeck, floor]   a cone with a chamber inside, narrow at the top
 //   ['bar', len, thick, axis, y]     a thin rod lying along x, or standing up (axis 'y')
 // Solids weigh their density; containers are light shells that carry the weight of what's in them.
 const SHAPE = {
@@ -168,7 +170,7 @@ const SHAPE = {
   dish: [['hollow', .11, .032, .01, .006]], saucer: [['hollow', .048, .024, .008, .008]], pitcher: [['hollow', .068, .19, .012, .012]],
   cabbage: [['hollow', .054, .16, .01, .012]], sand: [['hollow', .04, .075, .006, .008]],
   bottle: [['hollow', .044, .12, .006, .012], ['neck', .022, .12, .19, .05]],
-  volcano: [['cone', .05, .2, .17]],
+  volcano: [['crater', .034, .2, .17, .05, .14, .03, .025]],
   vinegar: [['cyl', .036, .19, 0]], lemon: [['cyl', .036, .1, 0]], milk: [['box', .075, .18, .075, 0]], oil: [['cyl', .035, .22, 0]],
   soap: [['cyl', .034, .18, 0]], red: [['cyl', .02, .08, 0]], yellow: [['cyl', .02, .08, 0]], blue: [['cyl', .02, .08, 0]],
   soda: [['hollow-box', .095, .13, .065, .005]], sugar: [['hollow-box', .095, .13, .065, .005]],
@@ -183,7 +185,7 @@ const SHAPE = {
   magnet: [['box', .085, .03, .022, .05], ['box', .022, .05, .022, 0, -.03], ['box', .022, .05, .022, 0, .03]]
 };
 // where a container opens: liquid and powder inside this cylinder belong to it; it pours from its rim
-const OPEN = {bottle: {y:.19, r:.022, neckY:.12}, volcano: {y:.17, r:.045}, soda: {y:.13, r:.04}, sugar: {y:.13, r:.04}, balloon: {y:.11, r:.03}};
+const OPEN = {bottle: {y:.19, r:.022, neckY:.12}, volcano: {y:.17, r:.03, neckY:.14}, soda: {y:.13, r:.04}, sugar: {y:.13, r:.04}, balloon: {y:.11, r:.03}};
 // glass weighs what glass weighs; plastic tubs and trays are lighter
 for (const k of ['cup', 'jar', 'dish', 'bottle', 'pitcher', 'cabbage']) ITEMS[k].glass = true;
 for (const k in ITEMS) { const d = ITEMS[k]; d.shape = SHAPE[k];

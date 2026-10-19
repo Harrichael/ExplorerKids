@@ -1,10 +1,11 @@
-// The pop-up diorama: a place's food web as a little island that rises out of the globe. Plants and
-// algae stand on the island; each animal stands on a step one higher than the highest thing it
-// eats, and the steps narrow as they climb, so the web is also an energy pyramid. Arrows run from
-// food to eater with glowing specks riding them, the way energy moves, starting from the sun.
+// The pop-up diorama: a place's food web as a little island that rises out of the globe. It is
+// drawn as a web, not a pyramid: everyone stands on the flat island, plants and algae nearest the
+// sun and each animal a row behind the farthest thing it eats, so arrows mostly run one way. Arrows
+// run from food to eater with glowing specks riding them, the way energy moves, starting from the sun.
 //
-// One diorama at a time. The globe pops it up, asks what was tapped, and dresses it for each part
-// of Hoot's lesson: marks on guesses, arrows that grow in, animals that vanish or multiply.
+// One diorama at a time. It rises empty but for the sun; the globe calls in its living things as
+// Hoot's lesson builds the web, and dresses it for each part: marks on guesses, arrows that grow
+// in, animals that vanish or multiply.
 
 import * as THREE from 'three';
 import { C, T, glowTex, outline, sparkTex, tex } from '../core/kit.js';
@@ -12,10 +13,9 @@ import { BIOMES } from '../earth/biomes.js';
 import { eatenBy, layout } from './food-web.js';
 
 const TOKEN = .18, ASPECT = 320/256, DISC = .6125*TOKEN*ASPECT, RIM = TOKEN*.42;
-const SPACE = .21, DEPTH = .2, RISE = .11, ISLAND = .07;
+const SPACE = .21, DEPTH = .4, ISLAND = .07;
 const COL = {edge: 0xefe0bf, food: 0x8fd694, eater: 0xf2a65a, sun: 0xffd25a};
 const EMOJI = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
-const ROWS = ['Plants & algae', 'Plant eaters', 'Animal eaters'];
 
 let D = null;            // the diorama on show: {root, tokens, edges, …}
 let leaving = null;      // one shrinking away while the next grows
@@ -23,9 +23,9 @@ let leaving = null;      // one shrinking away while the next grows
 const rng = s => () => (s = s*16807 % 2147483647)/2147483647;
 const hash = str => [...str].reduce((h, c) => (h*31 + c.charCodeAt(0)) % 2147483646, 7) + 1;
 
-function label(g, lines, y, size, align = 'center'){
-  const x = align === 'right' ? g.canvas.width - size*.3 : g.canvas.width/2;
-  g.font = `800 ${size}px Nunito, "Segoe UI", sans-serif`; g.textAlign = align; g.textBaseline = 'middle';
+function label(g, lines, y, size){
+  const x = g.canvas.width/2;
+  g.font = `800 ${size}px Nunito, "Segoe UI", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
   g.lineJoin = 'round'; g.lineWidth = size*.28; g.strokeStyle = '#1a1320'; g.fillStyle = '#efe0bf';
   lines.forEach((t, i) => { g.strokeText(t, x, y + i*size*1.05); g.fillText(t, x, y + i*size*1.05); });
 }
@@ -110,41 +110,25 @@ export function showDiorama(parent, at, web, biomeId){
   const biome = BIOMES[biomeId], ground = new THREE.Color(biome.color).getHex();
   const root = new THREE.Group(); root.position.copy(at); root.scale.setScalar(.001); parent.add(root);
   const {rows, x} = layout(web.species), n = rows.length;
-  // the steps: each as wide as the widest row on it or above, and narrower than the one below
-  const need = rows.map(r => r.length*SPACE + .06), width = [];
-  for (let k = n - 1; k >= 0; k--) width[k] = Math.max(need[k], k < n - 1 ? width[k + 1] + .14 : 0);
+  const wide = Math.max(...rows.map(r => r.length*SPACE + .06));
   const front = ((n - 1)*DEPTH + .24)/2, back = front - (n - 1)*DEPTH - .2;
-  const R = Math.max(Math.hypot(width[0]/2, Math.max(front, -back)) + .06, .5);
+  const R = Math.max(Math.hypot(wide/2, Math.max(front, -back)) + .06, .5);
 
   const island = new THREE.Group(); root.add(island);
   outline(mesh(island, new THREE.CylinderGeometry(R, R*.93, ISLAND, 40), T(biome.water ? 0x3d5a78 : 0x6b4430), 0, ISLAND/2, 0), 1.02);
   mesh(island, new THREE.CylinderGeometry(R - .005, R - .005, .012, 40), T(ground), 0, ISLAND + .002, 0).receiveShadow = true;
-  const stepMat = T(new THREE.Color(ground).multiplyScalar(biome.water ? .8 : .78).getHex());
-  for (let k = 1; k < n; k++) {
-    const zf = front - k*DEPTH + .085, h = k*RISE, s = outline(mesh(island, new THREE.BoxGeometry(width[k], h, zf - back), stepMat, 0, ISLAND + h/2, (zf + back)/2), 1.01);
-    s.receiveShadow = true;
-    mesh(island, new THREE.BoxGeometry(width[k] - .01, .008, zf - back - .01), T(ground), 0, ISLAND + h + .002, (zf + back)/2).receiveShadow = true;
-  }
   const disposables = [];
-  // each row's name, beside it on its step: the bottom three by what they eat, and the top of a tall web
-  rows.forEach((r, k) => {
-    const name = ROWS[k] || (k === n - 1 ? 'Top of the web' : null); if (!name) return;
-    const t = tex(512, 80, g => { label(g, [name], 42, 40, 'right'); }); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
-    const m = new THREE.SpriteMaterial({map: t, transparent: true, depthWrite: false}); disposables.push(t, m);
-    const sign = new THREE.Sprite(m); sign.center.set(1, .5); sign.scale.set(.42, .066, 1);
-    sign.position.set(-r.length*SPACE/2 + .02, ISLAND + k*RISE + .05, front - k*DEPTH + .02); root.add(sign);
-  });
-  scenery(island, biomeId, R, width[0], front, back, rng(hash(web.id)));
+  scenery(island, biomeId, R, wide, front, back, rng(hash(web.id)));
 
   // the animals
   const tokens = new Map();
   rows.forEach((r, k) => r.forEach(s => {
     const map = tokenTex(s), mat = new THREE.SpriteMaterial({map, transparent: true, alphaTest: .1}); disposables.push(map, mat);
     const sp = new THREE.Sprite(mat); sp.center.set(.5, 0); sp.scale.set(TOKEN, TOKEN*ASPECT, 1); sp.userData.name = s.name;
-    const home = new THREE.Vector3(x.get(s.name)*SPACE, ISLAND + .012 + k*RISE, front - k*DEPTH);
-    sp.position.copy(home); root.add(sp);
+    const home = new THREE.Vector3(x.get(s.name)*SPACE, ISLAND + .012, front - k*DEPTH);
+    sp.position.copy(home); sp.visible = false; root.add(sp);
     const badge = new THREE.Sprite(new THREE.SpriteMaterial({transparent: true, depthTest: false})); badge.scale.setScalar(.06); badge.visible = false; badge.renderOrder = 3; root.add(badge); disposables.push(badge.material);
-    tokens.set(s.name, {s, sp, home, badge, disc: home.clone().setY(home.y + DISC), size: 1, want: 1, fade: 1, wantFade: 1, shake: 0, ph: Math.random()*6, copies: []});
+    tokens.set(s.name, {s, sp, home, badge, disc: home.clone().setY(home.y + DISC), shown: false, size: 0, want: 0, fade: 1, wantFade: 1, shake: 0, ph: Math.random()*6, copies: []});
   }));
 
   // the sun, and every arrow; each grows in when asked
@@ -158,7 +142,7 @@ export function showDiorama(parent, at, web, biomeId){
     for (const f of s.eats) edges.push(arrow(root, tokens.get(f).disc, to, f, s.name, disposables, RIM));
   }
   // the camera frames the animals and their steps; the island's rim can fall off the edge
-  D = {root, web, tokens, edges, sun, disposables, grow: 0, t: 0, sparks: [], sel: null, radius: Math.max(width[0]/2 + .14, (front - back)/2 + .12), top: ISLAND + (n - 1)*RISE + .3};
+  D = {root, web, tokens, edges, sun, disposables, grow: 0, t: 0, sparks: [], sel: null, radius: Math.max(wide/2 + .14, (front - back)/2 + .12), top: ISLAND + .3};
 }
 
 function scenery(g, biomeId, R, w, front, back, r){
@@ -174,7 +158,8 @@ function scenery(g, biomeId, R, w, front, back, r){
 }
 
 function arrow(root, a, b, food, eater, disposables, startGap){
-  const mid = a.clone().add(b).multiplyScalar(.5); mid.y += .04 + Math.abs(b.y - a.y)*.4; mid.z += .07;
+  // the longer the jump, the higher the arc, so arrows that skip a row pass over it
+  const mid = a.clone().add(b).multiplyScalar(.5); mid.y += .04 + a.distanceTo(b)*.18; mid.z += .07;
   const bez = new THREE.QuadraticBezierCurve3(a.clone(), mid, b.clone());
   // leave the food's rim and stop at the eater's, so the head isn't hidden behind the token
   let t0 = 0, t1 = 1;
@@ -223,13 +208,19 @@ export function selectAnimal(name){
 
 export function markAnimal(name, kind){
   const t = D && D.tokens.get(name); if (!t) return;
-  t.badge.visible = !!kind; if (kind) { t.badge.material.map = badgeTex[kind]; t.badge.material.needsUpdate = true; }
+  t.badge.visible = !!kind && t.shown; if (kind) { t.badge.material.map = badgeTex[kind]; t.badge.material.needsUpdate = true; }
   if (kind === 'wrong') t.shake = .5;
   if (kind === 'right' || kind === 'guess') t.size = 1.18;
 }
 export function clearMarks(){ if (D) for (const name of D.tokens.keys()) markAnimal(name, null); }
 // one animal stands up tall and bounces, so it's clear who a question is about; null settles everyone
-export function spotlight(name){ if (D) for (const [n, t] of D.tokens) if (!t.gone) t.want = n === name ? 1.3 : 1; }
+export function spotlight(name){ if (D) for (const [n, t] of D.tokens) if (t.shown && !t.gone) t.want = n === name ? 1.3 : 1; }
+
+// living things join the island, springing up where they stand
+export function enter(names){
+  if (!D) return;
+  for (const n of names) { const t = D.tokens.get(n); if (t.shown) continue; t.shown = true; t.want = 1; burst(t.disc, 6); }
+}
 
 // grow in the arrows that match, in the order energy would reach them; resolves when they're in
 export function growArrows(match = () => true){
@@ -253,7 +244,7 @@ export function vanish(gone, more, fewer){
 }
 export function restore(){
   if (!D) return;
-  for (const t of D.tokens.values()) { if (t.gone) burst(t.disc, 8); t.gone = false; t.want = 1; t.wantFade = 1; t.copies.forEach(c => { c.userData.want = 0; }); }
+  for (const t of D.tokens.values()) { if (t.gone) burst(t.disc, 8); t.gone = false; t.want = t.shown ? 1 : 0; t.wantFade = 1; t.copies.forEach(c => { c.userData.want = 0; }); }
   selectAnimal(D.sel);
 }
 
