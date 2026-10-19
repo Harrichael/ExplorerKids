@@ -120,9 +120,9 @@ const $g = id => hud.querySelector('#' + id), card = $g('gCard');
 const stored = load('globe') || {}, list = v => Array.isArray(v) ? v : [];
 const found = new Set(list(stored.found)), learned = new Set(list(stored.webs));
 let met = !!stored.met;
-// what the geography globe keeps: the wonders found, its lens, and which globe was picked last
-const store = {wonders: new Set(list(stored.wonders)), lens: stored.lens, metGeo: !!stored.metGeo, mode: stored.mode === 'geo' ? 'geo' : 'biomes'};
-const keep = () => save('globe', {found: [...found], webs: [...learned], met, wonders: [...store.wonders], lens: store.lens, metGeo: store.metGeo, mode: store.mode});
+// what the geography globe keeps: the wonders and landforms found, its lens, and which globe was picked last
+const store = {wonders: new Set(list(stored.wonders)), landforms: new Set(list(stored.landforms)), lens: stored.lens, metGeo: !!stored.metGeo, mode: stored.mode === 'geo' ? 'geo' : 'biomes'};
+const keep = () => save('globe', {found: [...found], webs: [...learned], met, wonders: [...store.wonders], landforms: [...store.landforms], lens: store.lens, metGeo: store.metGeo, mode: store.mode});
 const ALL = Object.keys(BIOMES);
 const H = text => ['hoot', text];
 const tune = (notes, o = {}) => notes.forEach((f, i) => Sound.tone(f, {type: 'triangle', t: i*(o.gap || .08), dur: o.dur || .2, vol: o.vol || .06}));
@@ -215,7 +215,7 @@ function drawPick(){
   const tile = (m, title, words) => `<button data-m="${m}" class="${store.mode === m ? 'last' : ''}"><b>${title}</b><span>${words}</span></button>`;
   card.innerHTML = `<div class="gtop"><span class="gicon" aria-hidden="true">🦉</span><div><div class="gkind">Professor Hoot asks</div><h3>Which globe today?</h3></div></div>
     <div class="gpick">${tile('biomes', '🌿 Biomes', 'Who lives where, and who eats whom. Riddles and pop-up food webs.')}
-      ${tile('geo', '🗺️ Geography', 'The real Earth from space: countries, mountains and rivers, wonders of the world, and real photos of the animals that live there.')}</div>`;
+      ${tile('geo', '🗺️ Geography', 'The real Earth from space: mountains, rivers and volcanoes for Hoot\'s notebook, wonders of the world, and real photos of the animals that live there.')}</div>`;
   card.querySelectorAll('.gpick button').forEach(b => b.addEventListener('click', () => pick(b.dataset.m)));
 }
 function leave(){
@@ -562,7 +562,7 @@ const real = makeRealEarth({card, hud, globeBall, R, surface, store, view, keep,
   credit: text => { $g('gCredit').textContent = text; },
   setColor: c => c ? card.style.setProperty('--c', c) : card.style.removeProperty('--c'),
   dropPin, hidePin: () => { pin.visible = false; }, flyTo,
-  found: text => { $g('gFound').textContent = text; }, chips: showChips, redraw: () => draw(),
+  chips: showChips, redraw: () => draw(),
   // the geography globe's way into a food web: over to the biome globe, at the same spot
   openWebAt: p => { pick('biomes'); here = p; dropPin(p.lat, p.lon); openWeb(); }});
 

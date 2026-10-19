@@ -10,7 +10,7 @@ import { P, cast, rot, toLocal, toWorld } from './physics.js';
 import { UNITS_PER_M3 } from './stuff.js';
 
 const DROP = 1.2, GRAIN = .5, FILM = .007;
-const MAX_DROPS = 900, MAX_FOAM = 520, MAX_POOLS = 60;
+const MAX_DROPS = 900, MAX_FOAM = 1400, MAX_POOLS = 60;
 
 const share = (c, f) => { const o = chem.empty(); for (const k in c.l) o.l[k] = c.l[k]*f; for (const k in c.p) o.p[k] = c.p[k]*f; return o; };
 const lookCol = c => chem.liquidVol(c) ? (c.l.oil && chem.waterVol(c) < .01 ? chem.SUB.oil.col : (chem.look(c) || {col:0xc8e6f2}).col) : chem.pileColor(c);
@@ -116,11 +116,10 @@ export function makeFluid(root, hooks){
     // every tick of chemistry happens right here on the surface
     const gas = chem.step(p.c, dt);
     if (gas > 0) {
-      gasTotal += gas; p.gas += gas; hooks.fizz(p, gas);
+      gasTotal += gas; p.gas += gas; hooks.fizz(p, gas, gas/dt);
       p.foamAcc += gas*((p.c.l.soap || 0) > .3 ? 4 : 1.2);
       const fc = chem.lerpCol(0xffffff, (chem.look(p.c) || {col:0xffffff}).col, .4);
-      while (p.foamAcc >= 1) { p.foamAcc -= 1; const a = Math.random()*7, rr = Math.random()*p.r*.7;
-        foam(p.wx + Math.cos(a)*rr, p.wy + .004, p.wz + Math.sin(a)*rr, Math.cos(a)*.05, .15 + Math.random()*.1, Math.sin(a)*.05, fc); }
+      p.foamAcc = gush(p.foamAcc, gas/dt, fc, null, p.n, () => { const a = Math.random()*7, rr = Math.random()*p.r*.7; _b.x = p.wx + Math.cos(a)*rr; _b.y = p.wy + .004; _b.z = p.wz + Math.sin(a)*rr; return _b; });
     }
     size(p);
     return !chem.isEmpty(p.c);
@@ -135,9 +134,21 @@ export function makeFluid(root, hooks){
   }
 
   // ---------- foam ----------
-  function foam(x, y, z, vx, vy, vz, c){
+  function foam(x, y, z, vx, vy, vz, c, big = 1){
     if (foams.length >= MAX_FOAM) foams.shift();
-    foams.push({x, y, z, vx, vy, vz, body:null, lp:null, ln:null, s:.008 + Math.random()*.008, life:8 + Math.random()*6, t:0, col:c});
+    foams.push({x, y, z, vx, vy, vz, body:null, lp:null, ln:null, s:(.008 + Math.random()*.008)*big, life:8 + Math.random()*6, t:0, col:c});
+  }
+  // Lets `n` blobs of foam out of a surface facing `up`, from spots spot() picks; returns what's left
+  // over. Gentle fizzing (gas rate in units a second) wells up; a sudden rush blasts out a fountain of
+  // more, bigger foam.
+  function gush(n, rate, c, vel, up, spot){
+    const k = Math.min(1, Math.max(0, (rate - 15)/90)), vx = vel ? vel.x : 0, vz = vel ? vel.z : 0;
+    n += n*k*2.5;
+    while (n >= 1) {
+      n -= 1; const w = spot(), a = Math.random()*7, sp = .04 + Math.random()*.08 + k*Math.random()*.7, jet = .1 + Math.random()*.15 + k*(.4 + Math.random()*1.1);
+      foam(w.x, w.y, w.z, vx + up.x*jet + Math.cos(a)*sp, up.y*jet, vz + up.z*jet + Math.sin(a)*sp, c, 1 + k*Math.random()*1.5);
+    }
+    return n;
   }
   function stepFoam(f, dt){
     f.t += dt; if (f.t > f.life) f.s *= Math.exp(-2.5*dt);
@@ -202,5 +213,5 @@ export function makeFluid(root, hooks){
   function clear(){ drops.length = foams.length = 0; for (const p of pools) dropPool(p); pools.length = 0; gasTotal = 0; dropMesh.count = foamMesh.count = 0; }
   // the puddle at a point, if there is one (things sitting in a puddle get wet)
   function poolAt(x, y, z, reach = .01){ return pools.find(p => Math.hypot(p.wx - x, p.wz - z) < p.r + reach && Math.abs(p.wy - y) < .03 + reach) || null; }
-  return {emit, foam, step, draw, clear, poolAt, gas: () => gasTotal};
+  return {emit, gush, step, draw, clear, poolAt, gas: () => gasTotal};
 }

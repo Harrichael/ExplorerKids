@@ -84,7 +84,7 @@ const hud = document.createElement('div'); hud.id = 'labHud'; hud.hidden = true;
 hud.innerHTML = `<div class="lab-card"><div class="sub" id="lhSub"></div><h3 id="lhTitle"></h3><div class="q" id="lhQ"></div><div class="status" id="lhStatus"></div><div class="after" id="lhAfter" hidden></div></div>
   <div class="btns"><button class="lab-pill" id="lhHint">Need a hint?</button><button class="lab-pill" id="lhBook">Experiment book</button><button class="lab-pill" id="lhReset">Start over</button><button class="lab-pill" id="lhLeave">Step away</button></div>
   <div id="lhChoose" hidden></div><button class="lab-pill go" id="lhLock" hidden>These are my guesses →</button>
-  <button id="labTip" hidden aria-label="Hold to tip">Tip<small>HOLD</small></button><div id="labHint" hidden></div>`;
+  <button id="labTip" hidden aria-label="Hold to tip">Tip<small>${coarse ? 'HOLD' : 'HOLD T'}</small></button><div id="labHint" hidden></div>`;
 const book = document.createElement('div'); book.id = 'labBook'; book.hidden = true; book.setAttribute('role', 'dialog'); book.setAttribute('aria-labelledby', 'lbTitle');
 book.innerHTML = `<div class="page"><header><div><div class="sub">Dr. Vega Sparks' lab</div><h2 id="lbTitle">Experiment Book</h2></div></header>
   <div class="grid" id="lbGrid"></div><footer><button class="lab-pill" id="lbLeave">Step away</button></footer></div>`;
@@ -328,7 +328,7 @@ function tipUi(dt){
   if (canTip && desk.tip) lab.tipped = true;
   lab.hintAt += dt;
   hint.hidden = lab.tipped || lab.hintAt > 40;
-  if (!hint.hidden) hint.innerHTML = coarse ? 'Drag things to carry them · hold <b>Tip</b> to pour' : 'Drag things to carry them · hold <b>Space</b> or <b>right-click</b> to tip';
+  if (!hint.hidden) hint.innerHTML = coarse ? 'Drag things to carry them · hold <b>Tip</b> to pour' : 'Drag things to carry them · hold <b>T</b>, <b>Space</b> or <b>right-click</b> to tip';
 }
 function pill(text, fn){ const b = document.createElement('button'); b.className = 'lab-pill'; b.textContent = text; b.addEventListener('click', fn); return b; }
 function toast(big, small){
@@ -347,12 +347,14 @@ const tipOff = () => { tipBtn.classList.remove('on'); setTipButton(false); };
 tipBtn.addEventListener('pointerdown', tipOn); tipBtn.addEventListener('pointerup', tipOff); tipBtn.addEventListener('pointercancel', tipOff);
 tipBtn.addEventListener('contextmenu', e => e.preventDefault());
 
-// Space tips while the explorer isn't reading; Esc backs out one level: experiment, book, desk
+// T tips any time, Space only while the explorer isn't reading (it turns pages); Esc backs out one
+// level: experiment, book, desk
+const tipKey = e => e.key === 't' || e.key === 'T' || e.key === ' ';
 addEventListener('keydown', e => {
   if (!lab || lab.phase === 'walk' || lab.phase === 'turn') return;
-  if (e.key === ' ' && !convo && lab.phase === 'run') { e.preventDefault(); e.stopPropagation(); if (!e.repeat) setTipKey(true); return; }
+  if (tipKey(e) && (e.key !== ' ' || !convo) && lab.phase === 'run') { e.preventDefault(); e.stopPropagation(); if (!e.repeat) setTipKey(true); return; }
   if ((e.key === 'm' || e.key === 'M') && !e.repeat && !convo) { setSound(!Sound.isOn()); return; }
   if (e.key === 'Escape' && !convo) { e.stopPropagation(); if (lab.phase === 'run') openBook(); else if (lab.phase === 'book') leave(); }
 }, true);
-addEventListener('keyup', e => { if (e.key === ' ') setTipKey(false); });
+addEventListener('keyup', e => { if (tipKey(e)) setTipKey(false); });
 addEventListener('blur', () => setTipKey(false));

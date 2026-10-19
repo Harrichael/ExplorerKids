@@ -1,8 +1,8 @@
 // Builds the world model's data. web/data/earth.json is what grows where: Natural Earth coastlines and
 // lakes for drawing and telling land from sea, RESOLVE's ecoregions on a half-degree grid, and the
 // coral reef zones, drawn by hand. web/data/geography.json is what people call things: Natural
-// Earth's countries, borders, rivers, mountains, deserts and seas, each with the Wikipedia article
-// its pictures come from, looked up through Wikidata.
+// Earth's countries, borders, rivers, lakes, mountains, deserts and seas, and Wikidata's volcanoes,
+// each with the Wikipedia article its pictures come from, looked up through Wikidata.
 //
 //   node tools/earth/build.mjs        (from lantern-hill/; sources download once into tools/earth/cache)
 //
@@ -283,6 +283,36 @@ const REGION_KIND = {'Continent': 'continent', 'Range/mtn': 'mountains', 'Desert
   'Tundra': 'tundra', 'Delta': 'delta', 'Peninsula': 'peninsula', 'Pen/cape': 'peninsula', 'Valley': 'valley', 'Gorge': 'gorge', 'Wetlands': 'wetland',
   'Island group': 'islands', 'Island': 'island', 'Isthmus': 'isthmus', 'Geoarea': 'region'};
 const MARINE_KIND = {ocean: 'ocean', sea: 'sea', bay: 'bay', gulf: 'gulf', strait: 'strait', channel: 'channel', sound: 'sound'};
+// Natural Earth files a few names under a class a child would be misled by: a peninsula as a plateau,
+// provinces as islands, farmland as desert, the ice domes on Antarctica's plateau as plateaus, and
+// the Caspian, the biggest lake on Earth, as a sea
+const REKIND = {'Caspian Sea': 'lake', 'PENÍNSULA IBÉRICA': 'peninsula', 'LABRADOR': 'region', 'Nova Scotia': 'region', 'PUNJAB': 'region', 'CAATINGAS': 'region', 'SAHEL': 'region',
+  'LES LAURENTIDES': 'region', 'Talos Dome': 'region', 'Dome C (Charlie)': 'region', 'Dome A (Argus)': 'region', 'Dome F (Fuji)': 'region',
+  'Cà Mau Point': 'cape', 'Cape Chelyuskin': 'cape', 'Arctic Institute I.': 'islands', 'Bristol Channel': 'bay'};
+
+// The volcanoes the Smithsonian's Global Volcanism Program numbers, from Wikidata, kept to the ones
+// famous enough for articles in thirty languages. Volcanic islands stay islands.
+const VOLCANOES = `SELECT ?item ?title ?coord ?links WHERE {
+  ?item wdt:P1886 ?gvp; wdt:P625 ?coord; wikibase:sitelinks ?links; wdt:P31/wdt:P279* wd:Q8072.
+  ?article schema:about ?item; schema:isPartOf <https://en.wikipedia.org/>; schema:name ?title.
+  FILTER(?links >= 30) FILTER NOT EXISTS { ?item wdt:P31/wdt:P279* wd:Q23442. }
+}`;
+async function volcanoes(){
+  const p = join(CACHE, 'volcanoes.json');
+  if (!existsSync(p)) {
+    console.log('asking wikidata for volcanoes');
+    const r = await fetch(`https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(VOLCANOES)}`, {headers: {'User-Agent': 'LanternHill-earth-build/1.0 (educational game)'}});
+    if (!r.ok) throw new Error(`wikidata query: ${r.status}`);
+    writeFileSync(p, await r.text());
+  }
+  const seen = new Map();
+  for (const b of JSON.parse(readFileSync(p, 'utf8')).results.bindings) {
+    const [lon, lat] = b.coord.value.match(/-?[\d.]+/g).map(Number);
+    // Wikidata doesn't always say a volcanic island is an island, but its name does
+    if (!seen.has(b.item.value) && !/\bIslands?\b/.test(b.title.value)) seen.set(b.item.value, {title: b.title.value, at: [lat, lon].map(v => Math.round(v*1000)/1000), links: +b.links.value});
+  }
+  return [...seen.values()].sort((a, b) => b.links - a.links);
+}
 
 async function buildGeography(){
   const ne = name => features(fetchOnce(NE + name + '.geojson', name + '.geojson'));
@@ -293,29 +323,37 @@ async function buildGeography(){
   const falls = JSON.parse(readFileSync(fetchOnce(NE + 'ne_50m_geography_regions_points.geojson', 'ne_50m_geography_regions_points.geojson'), 'utf8')).features.filter(f => f.properties.featurecla === 'waterfall');
   const capitals = JSON.parse(readFileSync(fetchOnce(NE + 'ne_110m_populated_places.geojson', 'ne_110m_populated_places.geojson'), 'utf8')).features.filter(f => f.properties.FEATURECLA === 'Admin-0 capital');
   const borders = lines('ne_50m_admin_0_boundary_lines_land'), rivers = lines('ne_50m_rivers_lake_centerlines');
+  const lakes = ne('ne_50m_lakes').filter(f => f.props.name && f.props.featurecla !== 'Reservoir');
 
   const keptPeaks = peaks.filter(f => f.properties.scalerank <= 5 && f.properties.name && /mountain|depression/.test(f.properties.featurecla));
   const titles = await wikiTitles([...countries.map(f => f.props.WIKIDATAID), ...regions.map(f => f.props.WIKIDATAID), ...marine.map(f => f.props.wikidataid),
-    ...keptPeaks.map(f => f.properties.wikidataid), ...falls.map(f => f.properties.wikidataid), ...capitals.map(f => f.properties.wikidataid)]);
+    ...keptPeaks.map(f => f.properties.wikidataid), ...falls.map(f => f.properties.wikidataid), ...capitals.map(f => f.properties.wikidataid),
+    ...lakes.map(f => f.props.wikidataid)]);
   const wiki = id => titles[id] || null;
   const shown = (name, id) => wiki(id) ? nameOf(wiki(id)) : titleCase(name);
   // Natural Earth's min_label is the web-map zoom a name first shows at; places carry it as `min`
   const min = v => Math.round((+v || 0)*10)/10;
 
+  // a volcano Natural Earth already has as a peak becomes one, keeping its height
+  const fiery = await volcanoes(), volcano = new Set(fiery.map(v => v.title));
   const places = [
-    ...regions.filter(f => REGION_KIND[f.props.FEATURECLA] && f.props.NAME).map(f => ({name: shown(f.props.NAME, f.props.WIKIDATAID), kind: REGION_KIND[f.props.FEATURECLA],
+    ...regions.filter(f => REGION_KIND[f.props.FEATURECLA] && f.props.NAME).map(f => ({name: shown(f.props.NAME, f.props.WIKIDATAID), kind: REKIND[f.props.NAME] || REGION_KIND[f.props.FEATURECLA],
       at: labelPoint(f.rings.map(r => simplify(r))), min: min(f.props.MIN_LABEL), wiki: wiki(f.props.WIKIDATAID)})),
-    ...marine.filter(f => MARINE_KIND[f.props.featurecla] && f.props.name).map(f => ({name: shown(f.props.name, f.props.wikidataid), kind: MARINE_KIND[f.props.featurecla],
+    ...marine.filter(f => MARINE_KIND[f.props.featurecla] && f.props.name).map(f => ({name: shown(f.props.name, f.props.wikidataid), kind: REKIND[f.props.name] || MARINE_KIND[f.props.featurecla],
       at: labelPoint(f.rings.map(r => simplify(r))), min: min(f.props.min_label), wiki: wiki(f.props.wikidataid)})),
-    ...keptPeaks.map(f => ({name: shown(f.properties.name, f.properties.wikidataid), kind: f.properties.featurecla === 'depression' ? 'lowest' : 'peak',
+    ...keptPeaks.map(f => ({name: shown(f.properties.name, f.properties.wikidataid), kind: f.properties.featurecla === 'depression' ? 'lowest' : volcano.has(wiki(f.properties.wikidataid)) ? 'volcano' : 'peak',
       at: [f.properties.lat_y, f.properties.long_x].map(v => Math.round(v*100)/100), min: min(f.properties.min_zoom || f.properties.scalerank), wiki: wiki(f.properties.wikidataid), elevation: +f.properties.elevation || null})),
     ...falls.map(f => ({name: shown(f.properties.name, f.properties.wikidataid), kind: 'waterfall', at: [f.properties.lat_y, f.properties.long_x].map(v => Math.round(v*100)/100), min: min(f.properties.min_zoom), wiki: wiki(f.properties.wikidataid)})),
     ...capitals.map(f => ({name: f.properties.NAME.replace(/\s+/g, ' '), kind: 'capital', at: [f.geometry.coordinates[1], f.geometry.coordinates[0]].map(v => Math.round(v*100)/100),
       min: min(f.properties.MIN_LABEL || 3), wiki: wiki(f.properties.wikidataid)})),
+    ...lakes.map(f => ({name: shown(f.props.name, f.props.wikidataid), kind: 'lake', at: labelPoint(f.rings.map(r => simplify(r))), min: min(f.props.min_label), wiki: wiki(f.props.wikidataid)})),
   ];
+  const peaked = new Set(places.map(p => p.wiki));
+  // the most famous come out with the great ranges' peaks, the rest only close up
+  for (const v of fiery) if (!peaked.has(v.title)) places.push({name: nameOf(v.title), kind: 'volcano', at: v.at, min: v.links >= 100 ? 4 : v.links >= 60 ? 4.7 : v.links >= 40 ? 5.3 : 6, wiki: v.title});
   const capitalOf = new Map(capitals.map(f => [f.properties.ISO_A2, f.properties.NAME.replace(/\s+/g, ' ')]));
   const out = {
-    credits: ['Countries, borders, rivers and place names: Natural Earth, public domain', 'Article links: Wikidata, CC0'],
+    credits: ['Countries, borders, rivers and place names: Natural Earth, public domain', 'Article links and volcanoes: Wikidata, CC0'],
     countries: countries.map(f => ({name: english(f.props), ...(f.props.NAME !== english(f.props) && {short: f.props.NAME}), continent: f.props.CONTINENT, at: [f.props.LABEL_Y, f.props.LABEL_X].map(v => Math.round(v*100)/100),
       min: min(f.props.MIN_LABEL), color: f.props.MAPCOLOR7, wiki: wiki(f.props.WIKIDATAID), capital: capitalOf.get(f.props.ISO_A2_EH) || null,
       rings: f.rings.map(r => simplify(r, COUNTRY_TOLERANCE)).filter(shapely).map(hundredths)})),
