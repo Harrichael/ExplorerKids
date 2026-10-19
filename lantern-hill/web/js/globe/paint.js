@@ -1,0 +1,90 @@
+// A storybook map of the Earth for a globe: each biome in its own colour, inked coastlines. The
+// colours come from the world model cell by cell, so the map shows exactly what tapping it says.
+// A plain map is just land, sea and polar ice, for a globe that's about places, not biomes; a
+// countries map is each country in its own colour, for the geography globe.
+
+import { tex } from '../core/kit.js';
+import { BIOMES } from '../earth/biomes.js';
+import { loadEarth } from '../earth/model.js';
+
+const COLS = 720, ROWS = 360;   // how finely biomes are sampled; finer than the model's own grid gains nothing
+
+function cells(biomeAt, colorOf){
+  const c = document.createElement('canvas'); c.width = COLS; c.height = ROWS;
+  const g = c.getContext('2d'), img = g.createImageData(COLS, ROWS), rgba = new Map();
+  for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) {
+    const b = biomeAt(90 - (j + .5)*180/ROWS, -180 + (i + .5)*360/COLS);
+    if (!rgba.has(b)) { const hex = colorOf(b); rgba.set(b, hex ? [...[1, 3, 5].map(k => parseInt(hex.slice(k, k + 2), 16)), 255] : [0, 0, 0, 0]); }
+    img.data.set(rgba.get(b), (j*COLS + i)*4);
+  }
+  g.putImageData(img, 0, 0); return c;
+}
+
+// the biomes as colorOf paints them: water, reefs, land clipped to the coast, then lakes
+function biomes(g, earth, colorOf, w, h, path, shallows){
+  g.imageSmoothingEnabled = false;
+  g.drawImage(cells(earth.seaBiome, colorOf), 0, 0, w, h);
+  const land = path(earth.land), reef = colorOf(BIOMES.reef), lake = colorOf(BIOMES.lake);
+  if (shallows) { g.strokeStyle = shallows; g.lineWidth = 7; g.lineJoin = 'round'; g.stroke(land); }
+  if (reef) { g.fillStyle = reef; g.globalAlpha = .75; g.fill(path(earth.reefs.map(r => r.ring))); g.globalAlpha = 1; }
+  g.save(); g.clip(land, 'evenodd'); g.clearRect(0, 0, w, h); g.drawImage(cells(earth.landBiome, colorOf), 0, 0, w, h); g.restore();
+  const lakes = path(earth.lakes.map(l => l.ring));
+  g.save(); g.clip(lakes); g.clearRect(0, 0, w, h); g.restore();
+  if (lake) { g.fillStyle = lake; g.fill(lakes); }
+  return {land, lakes};
+}
+
+// the whole world, or just a box of it ({w, e, s, n} in degrees) for a close-up
+function projection(w, h = w/2, box = {w: -180, e: 180, s: -90, n: 90}){
+  const X = lon => (lon - box.w)*w/(box.e - box.w), Y = lat => (box.n - lat)*h/(box.n - box.s);
+  const path = rings => { const p = new Path2D(); for (const r of rings) { p.moveTo(X(r[0]), Y(r[1])); for (let i = 2; i < r.length; i += 2) p.lineTo(X(r[i]), Y(r[i + 1])); p.closePath(); } return p; };
+  return {h, Y, path};
+}
+
+const PLAIN = {sea: '#3a74a6', land: '#9bb56a', ice: '#eef2f4', lake: BIOMES.lake.color};
+const plainColor = b => b === BIOMES.ice ? PLAIN.ice : b === BIOMES.lake ? PLAIN.lake : b.water ? (b === BIOMES.reef ? null : PLAIN.sea) : PLAIN.land;
+
+export function paintEarth(earth, {plain = false, w = 2048} = {}){
+  const {h, Y, path} = projection(w);
+  return tex(w, h, g => {
+    const {land, lakes} = biomes(g, earth, plain ? plainColor : b => b.color, w, h, path, 'rgba(160,215,235,.28)');
+    g.strokeStyle = 'rgba(26,19,32,.85)'; g.lineWidth = 1.6; g.stroke(land); g.lineWidth = 1; g.stroke(lakes);
+    // a faint graticule every 30°, and the equator in gold: Hoot's riddles measure from it
+    g.strokeStyle = 'rgba(239,224,191,.16)'; g.lineWidth = 1;
+    for (let lon = -150; lon < 180; lon += 30) { g.beginPath(); g.moveTo(lon*w/360 + w/2, 0); g.lineTo(lon*w/360 + w/2, h); g.stroke(); }
+    for (const lat of [-60, -30, 30, 60]) { g.beginPath(); g.moveTo(0, Y(lat)); g.lineTo(w, Y(lat)); g.stroke(); }
+    if (plain) return;
+    g.strokeStyle = 'rgba(217,164,65,.9)'; g.lineWidth = 3; g.setLineDash([14, 8]);
+    g.beginPath(); g.moveTo(0, Y(0)); g.lineTo(w, Y(0)); g.stroke(); g.setLineDash([]);
+  });
+}
+
+// every country in its own colour; Natural Earth numbers them so no two neighbours share one
+const COUNTRY = ['#e8c87a', '#c9dd8f', '#f0a98e', '#b9c7ef', '#e3b3d6', '#9fd5c4', '#f2d6a2'];
+export function paintCountries(g, geo, earth, w, h, box){
+  const {path} = projection(w, h, box);
+  g.fillStyle = PLAIN.sea; g.fillRect(0, 0, w, h);
+  for (const c of geo.countries) { g.fillStyle = COUNTRY[(c.color - 1) % COUNTRY.length]; g.fill(path(c.rings), 'evenodd'); }
+  g.fillStyle = PLAIN.lake; g.fill(path(earth.lakes.map(l => l.ring)));
+  g.strokeStyle = 'rgba(26,19,32,.7)'; g.lineWidth = 1.2; g.stroke(path(earth.land));
+}
+
+// white wherever the biome is and clear everywhere else, to light it up on the globe; haloed, so
+// even a thin strip of mangrove shows
+export function paintGlow(earth, id, w = 1024){
+  const {h, path} = projection(w);
+  const mask = document.createElement('canvas'); mask.width = w; mask.height = h;
+  biomes(mask.getContext('2d'), earth, b => b === BIOMES[id] ? '#ffffff' : null, w, h, path);
+  return tex(w, h, g => {
+    g.shadowColor = '#ffffff'; g.shadowBlur = 10;
+    for (let i = 0; i < 3; i++) g.drawImage(mask, 0, 0);
+  });
+}
+
+// the world model and its map, each style painted once for every globe that wants it; a failed load isn't kept
+const painted = {};
+export function earthMap(plain = false){
+  const k = plain ? 'plain' : 'biomes';
+  if (!painted[k]) { painted[k] = loadEarth().then(earth => ({earth, map: paintEarth(earth, {plain})})); painted[k].catch(() => { delete painted[k]; }); }
+  return painted[k];
+}

@@ -109,27 +109,26 @@ const drawerTex = tex(256,256,(g,w,h)=>{ g.fillStyle='#6b4430'; g.fillRect(0,0,w
 add(new THREE.PlaneGeometry(1.15, 1.15), T(0xffffff,{map:drawerTex}), 0, .65, .36, catalog, false);
 col(-6.05, -4.75, 5.5, 6.3);
 windowOn(-9.97, 1.9, 3.4, Math.PI/2);
-box(1.0, .5, 2.6, T(C.woodDk), -9.45, .25, 3.4); box(1.0, .16, 2.6, T(C.plum), -9.45, .58, 3.4);
+export const WINDOW_SEAT = {x:-9.45, y:.66, z:3.4};
+box(1.0, .5, 2.6, T(C.woodDk), WINDOW_SEAT.x, .25, WINDOW_SEAT.z); box(1.0, .16, 2.6, T(C.plum), WINDOW_SEAT.x, .58, WINDOW_SEAT.z);
 for (const zz of [2.6, 4.2]) { const p = box(.3, .45, .6, T(zz > 3 ? C.forest : C.gold), -9.7, .85, zz); p.rotation.y = .2; }
 col(-10, -8.9, 2, 4.8);
 const reading = tex(256,256,(g,w,h)=>{ g.fillStyle='#5b3d64'; g.beginPath(); g.arc(128,128,126,0,7); g.fill(); g.strokeStyle='#d9a441'; g.lineWidth=6; for (let r=20;r<120;r+=24){ g.beginPath(); g.arc(128,128,r,0,7); g.stroke(); } });
 const rug2 = add(new THREE.CircleGeometry(1.6, 32), T(0xffffff,{map:reading, transparent:true}), -7.6,.05,3.6, null, false); rug2.rotation.x = -Math.PI/2;
-for (const [cx,cz,cc] of [[-7.0,4.4,C.rust],[-8.0,2.8,C.navy]]) { const cu = sph(.42, T(cc), cx,.25,cz, null, 12); cu.scale.set(1,.5,1); }
+for (const [cx,cz,cc] of [[-7.0,4.4,C.rust],[-8.0,2.6,C.navy]]) { const cu = sph(.42, T(cc), cx,.25,cz, null, 12); cu.scale.set(1,.5,1); }
 for (let i=0;i<6;i++) box(.5 - (i%3)*.04, .1, .38, T(bookCols[(i+3)%9]), -6.6, .06 + i*.1, 2.9).rotation.y = i*.3;
-{ const ob = grp(-7.0, .06, 4.05, -.35);
-  for (const sd of [-1, 1]) { const cvb = box(.36, .03, .44, T(C.plum), sd * .19, .015, 0, ob); const pg = box(.33, .035, .4, T(0xf6ecd6), sd * .185, .045, 0, ob, false); pg.rotation.z = -sd * .06; }
-  for (let i = 0; i < 3; i++) box(.22, .006, .02, T(0x6b5a7a), -.19, .066, -.1 + i * .07, ob, false);
-  box(.2, .12, .006, T(0xd9a441), .19, .066, 0, ob, false).rotation.x = -Math.PI / 2; }
 const libLantern = grp(-7.6, 0, 2.2);
 box(.32,.05,.32,T(C.woodDk),0,.03,0,libLantern); box(.26,.4,.26,glowM(0xffcf73,1.1),0,.26,0,libLantern,false);
 for (const [sx,sz] of [[-.14,-.14],[.14,-.14],[-.14,.14],[.14,.14]]) box(.04,.42,.04,T(C.woodDk),sx,.26,sz,libLantern);
 add(new THREE.ConeGeometry(.24,.18,4), T(C.woodDk), 0,.55,0, libLantern).rotation.y = Math.PI/4;
 const libLight = new THREE.PointLight(0xffb85c, .9, 7, 2); libLight.position.set(-7.6, 1, 2.6); scene.add(libLight);
-const globe = grp(-5.6, 0, -.2);
+export const GLOBE = {x:-5.6, y:1.05, z:-.2};
+const globe = grp(GLOBE.x, 0, GLOBE.z);
 cyl(.25,.32,.08,T(C.woodDk),0,.04,0,globe); for (let i=0;i<3;i++) cyl(.025,.025,.7,T(C.woodDk),Math.cos(i*2.1)*.15,.38,Math.sin(i*2.1)*.15,globe,5);
 const globeTex = tex(256,128,(g,w,h)=>{ g.fillStyle='#3a5f8a'; g.fillRect(0,0,w,h); g.fillStyle='#c9b48a'; for (let i=0;i<14;i++){ g.beginPath(); g.ellipse(rand()*w, rr(20,h-20), rr(10,30), rr(8,18), rand()*3, 0, 7); g.fill(); } });
-const globeBall = add(new THREE.SphereGeometry(.4,22,16), T(0xffffff,{map:globeTex}), 0,1.05,0, globe); outline(globeBall, 1.04);
-const gring = add(new THREE.TorusGeometry(.46,.02,6,30), T(C.gold), 0,1.05,0, globe); gring.rotation.y = Math.PI/2;
+// the Explorer's Globe repaints it with the real map once someone has used it
+export const globeBall = add(new THREE.SphereGeometry(.4,22,16), T(0xffffff,{map:globeTex}), 0,GLOBE.y,0, globe); outline(globeBall, 1.04);
+export const globeRing = add(new THREE.TorusGeometry(.46,.02,6,30), T(C.gold), 0,GLOBE.y,0, globe); globeRing.rotation.y = Math.PI/2;
 col(-5.95, -5.25, -.55, .15);
 
 // ===== HEARTH ROOM (x -4.5..4.5) =====

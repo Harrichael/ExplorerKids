@@ -14,7 +14,7 @@ const gBranch = ribbonGeo([[15.6, 1.8], [15.3, 2.7], [15.1, 3.5]], .85, .034, fa
 scene.add(new THREE.Mesh(gBranch.geo, dirtMat));
 for (let i = 0; i < 40; i++) { const p = gPath.pts[Math.floor(frand()*gPath.pts.length)]; bAdd([0x8a8090, 0x9a90a0, 0x7d7486][i%3], new THREE.SphereGeometry(fr(.04, .09), 6, 4), XF(p.x + fr(-.6, .6), .04, p.z + fr(-.6, .6), 1, .5, 1)); }
 const onGPath = (x, z, r = .75) => nearPath(x, z, gPath.pts, r) || nearPath(x, z, gBranch.pts, r);
-const gBusy = (x, z) => (x < 18.6 && z > -2.5 && z < .3) || (x > 17.3 && x < 25.6 && z > -6.6 && z < .6) || (x > 12.8 && x < 18.4 && z > 3.7 && z < 7.3) || (x > 19.9 && x < 25.7 && z > 2.9 && z < 7.5) || onGPath(x, z);
+const gBusy = (x, z) => (x > 14.1 && x < 18.1 && z < -7.1) || (x < 18.6 && z > -2.5 && z < .3) || (x > 17.3 && x < 25.6 && z > -6.6 && z < .6) || (x > 12.8 && x < 18.4 && z > 3.7 && z < 7.3) || (x > 19.9 && x < 25.7 && z > 2.9 && z < 7.5) || onGPath(x, z);
 
 // tall grass and wildflowers through the lawn
 for (let i = 0; i < 260; i++) { const x = fr(11.3, 26.6), z = fr(-9.6, 8.6); if (gBusy(x, z)) continue; if (frand() < .3) flower(x, z, 0, 1.1); else grassTuft(x, z, 0, 1.15); }
@@ -84,13 +84,8 @@ const frogState = {t:0, next:4};
 hqAnims.push((dt) => { frogState.t += dt; const h = frogState.t - frogState.next;
   if (h > 0 && h < .5) { frog.position.y = .02 + Math.sin(h/.5*Math.PI)*.35; frog.rotation.y += dt*6; } else { frog.position.y = .02; if (h >= .5) { frogState.next = frogState.t + fr(3, 7); } } });
 
-// ----- veggie patch and a friendly scarecrow -----
+// ----- a friendly scarecrow minding the vegetable bed (garden/bed.js) -----
 { const vx = 16.4, vz = -8.6;
-  for (let r = 0; r < 3; r++) { const row = box(3.2, .12, .45, T(0x5a4030), vx, .06, vz - .7 + r*.7, null, false); row.receiveShadow = true;
-    for (let i = 0; i < 6; i++) { const x = vx - 1.35 + i*.54, z = vz - .7 + r*.7;
-      if (r === 1) { bAdd(0x4f8a4a, new THREE.SphereGeometry(.17, 9, 7), XF(x, .2, z, 1, .7, 1), {ink:.02}); bAdd(0x6eaa5e, new THREE.SphereGeometry(.12, 8, 6), XF(x, .28, z, 1, .6, 1)); }
-      else for (let k = 0; k < 3; k++) bAdd(0x5b9a4a, new THREE.ConeGeometry(.03, .26, 3), XF(x + fr(-.05, .05), .24, z, 1, 1, 1, fr(-.3, .3), 0, fr(-.3, .3))); } }
-  col(vx - 1.7, vx + 1.7, vz - 1, vz + 1);
   const sc = grp(vx + 2.3, 0, vz + .2, -.4);
   cyl(.05, .05, 1.9, T(C.woodDk), 0, .95, 0, sc, 6); const arm = box(1.5, .07, .07, T(C.woodDk), 0, 1.45, 0, sc);
   const shirt = box(.55, .6, .3, T(0xb5552f), 0, 1.35, 0, sc); outline(shirt, 1.05);

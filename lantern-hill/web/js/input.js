@@ -3,6 +3,7 @@ import { isNewExplorer } from './explorer.js';
 import { game } from './state.js';
 import { closeDialog, convo, talk } from './ui/dialogue.js';
 import { $ } from './ui/dom.js';
+import { openInventory } from './ui/inventory.js';
 import { dressing, openWardrobe, wardrobeKey } from './ui/wardrobe.js';
 
 export const coarse = matchMedia('(pointer: coarse)').matches;
@@ -16,7 +17,7 @@ function begin(){
     if (isNewExplorer) setTimeout(() => openWardrobe(true), 350); }
 }
 startEl.addEventListener('pointerdown', begin);
-// a full-screen activity (flashcards, book) or the block tower catches keys before this handler while it is open
+// flashcards, the globe, the book reader, the telescope, the block tower and the backpack catch keys before this handler while they are open
 addEventListener('keydown', e => {
   const k = e.key;
   if (e.target && e.target.tagName === 'INPUT') { if (k === 'Enter' || k === 'Escape') e.target.blur(); return; }
@@ -27,8 +28,10 @@ addEventListener('keydown', e => {
   begin();
   if (first) return;
   keys[k.length === 1 ? k.toLowerCase() : k] = true;
-  if ((k === ' ' || k === 'Enter') && !e.repeat) { if (convo || game.nearest || !game.nearUse) talk(); else useThing(); }
-  if ((k === 'e' || k === 'E') && !e.repeat && !convo) useThing();
+  if ((k === ' ' || k === 'Enter') && !e.repeat) { const first = game.reach.findIndex(Boolean); if (convo || game.nearest || first < 0) talk(); else useSlot(first); }
+  const slot = k.length === 1 ? USE_KEYS.indexOf(k.toLowerCase()) : -1;
+  if (slot >= 0 && !e.repeat && !convo) useSlot(slot);
+  if ((k === 'z' || k === 'Z') && !e.repeat) openBag();
   if ((k === 'm' || k === 'M') && !e.repeat) toggleSound();
   if (k === 'Escape') closeDialog();
 });
@@ -57,6 +60,21 @@ function moveJoy(e){
 }
 document.getElementById('talk').addEventListener('click', () => { Sound.init(); if (!dressing) talk(); });
 
-export const useBtn = $('use');
-function useThing(){ if (game.nearUse && !convo && !dressing && !game.activity && !game.cutscene) game.nearUse.action(); }
-useBtn.addEventListener('click', e => { e.stopPropagation(); Sound.init(); useThing(); });
+// the keys for things in reach, handed out from the middle of the row outward as more come into range
+export const USE_KEYS = ['e', 'r', 'w', 't', 'q', 'y'];
+function useSlot(i){ const u = game.reach[i]; if (u && !convo && !dressing && !game.activity && !game.cutscene) u.action(); }
+let lastBtn = $('use');
+export const useBtns = USE_KEYS.map((k, i) => {
+  const b = i ? lastBtn.cloneNode() : lastBtn;
+  if (i) { b.removeAttribute('id'); lastBtn.after(b); lastBtn = b; }
+  b.style.setProperty('--i', i);
+  b.addEventListener('click', e => { e.stopPropagation(); Sound.init(); useSlot(i); });
+  return b;
+});
+
+function openBag(){
+  if (convo || dressing || game.activity || game.cutscene || !startEl.hidden) return;
+  for (const k in keys) keys[k] = false;
+  openInventory();
+}
+$('bag').addEventListener('click', e => { e.stopPropagation(); Sound.init(); openBag(); $('bag').blur(); });

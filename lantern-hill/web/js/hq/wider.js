@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { C, LEAF, T, XF, add, bAdd, barkGeo, box, cyl, fr, frand, glowTex, grp, mergeGeos, meshOf, outline, rand, rr, sph, tex } from '../core/kit.js';
 import { boughGeo } from './garden.js';
 import { LH, MEAD, PLAY, VIL, WM, hAt, streamZ } from './ground.js';
+import { daylight } from './daylight.js';
 import { hqAnims, scene } from './scene.js';
 
 const PALETTES = [
@@ -122,7 +123,8 @@ for (let i = 4, k = 0; i < hp.pts.length; i += 9, k++) {
   lanternMeshes.push(big);
   const bench = grp(1.8, .1, 1.2, -.6, g); box(1.3, .08, .4, T(C.wood), 0, .45, 0, bench); for (const sx of [-.55, .55]) box(.08, .45, .35, T(C.woodDk), sx, .22, 0, bench);
 }
-hqAnims.push((dt, t) => { lanternGlow.emissiveIntensity = 1.25 + Math.sin(t*5.3)*.08 + Math.sin(t*13.1)*.05; });
+hqAnims.push((dt, t) => { const lit = .15 + .85*(1 - daylight.day);
+  lanternGlow.emissiveIntensity = (1.25 + Math.sin(t*5.3)*.08 + Math.sin(t*13.1)*.05)*lit; winGlow.emissiveIntensity = 1.15*lit; });
 
 // ----- the windmill on its knoll -----
 const sails = new THREE.Group();

@@ -158,7 +158,7 @@ export const Sound = (() => {
       master.gain.setTargetAtTime(0, now + 1.25, .05);
     },
     // the new page: a gentle two-note landing as the page settles into the world
-    updateIn(){ bell(midi(79), .55, 1, .04); bell(midi(84), .78, 1.6, .05); tone(midi(48), {type:'sine', t:.78, dur:1.2, vol:.06, attack:.08}); },
+    updateIn(){ bell(midi(79), .9, 1, .04); bell(midi(84), 1.1, 1.6, .05); tone(midi(48), {type:'sine', t:1.1, dur:1.2, vol:.06, attack:.08}); },
     // a reloaded page may not have earned audio yet: browsers wait for a tap or key
     running(){ return !!ctx && ctx.state === 'running'; },
     meow(){ tone(520, {type:'triangle', dur:.42, vol:.12, f2:820, cut:2200, vib:[7,18]}); tone(820, {type:'triangle', t:.28, dur:.3, vol:.08, f2:480, cut:2000}); }
