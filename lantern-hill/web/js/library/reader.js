@@ -83,8 +83,10 @@ function setFlat() {
   B.setBoards(spread > 0 ? 1 : 0, spread < last ? 0 : 1); B.setStacks(f, 1 - f); B.setPages(leaf(L), leaf(Rr));
   $r('rPg').textContent = spread === 0 ? 'Cover' : spread === last ? 'Back cover' : `${L + 1}–${Rr + 1} / ${book.pages}`;
   $r('rPrev').disabled = spread === 0; $r('rNext').disabled = spread >= last;
-  // two spreads either way are on hand before anyone asks for them
-  for (let i = L - 4; i <= Rr + 4; i++) pageTex(book, i);
+  // two spreads either way are on hand before anyone asks for them, and every spread still to come in a run
+  // of quick taps
+  const back = 4 + 2 * Math.max(0, -queued), ahead = 4 + 2 * Math.max(0, queued);
+  for (let i = L - back; i <= Rr + ahead; i++) pageTex(book, i);
   record().spread = spread; dwell = 0; saveState();
 }
 const record = () => state[book.id] = state[book.id] || { seen: [], read: false };
@@ -195,7 +197,9 @@ function readCam(pos, look) {
 }
 hqAnims.push(dt => {
   if (!open || !book || !flip) return;
-  flip.t = Math.min(1, flip.t + dt / (flip.board === null ? .6 : .8)); const e = ease(flip.t), p = flip.dir > 0 ? e : 1 - e;
+  // with more turns waiting, each turn hurries, so a run of taps riffles through rather than plodding
+  const hurry = 1 + Math.min(Math.abs(queued), 5);
+  flip.t = Math.min(1, flip.t + dt * hurry / (flip.board === null ? .6 : .8)); const e = ease(flip.t), p = flip.dir > 0 ? e : 1 - e;
   if (flip.board === 0) B.setBoards(p, 0); else if (flip.board === 1) B.setBoards(1, p); else B.curl(p, dt);
   // a page that has landed lets its edge flutter flat, unless the next turn is already waiting
   if (flip.t >= 1 && (flip.board !== null || queued || !B.fluttering())) { spread += flip.dir; flip = null; B.settle(); setFlat(); if (queued) { const d = Math.sign(queued); queued -= d; turn(d); } }
@@ -204,9 +208,10 @@ hqAnims.push(dt => {
 function openBook(b) {
   book = b;
   $r('rTitle').textContent = b.title; $r('rSub').textContent = b.sub; $r('rCredit').textContent = b.credit || '';
-  // back where they left off, unless they had closed it on the back cover
-  const left = (state[b.id] || {}).spread | 0;
-  B.setAspect(b.aspect); B.setShade(1); spread = left > 0 && left < Math.floor(b.pages / 2) ? left : 0; flip = null; queued = 0;
+  // back where they left off, unless they had come to the end: the back cover, or the last pages of a book
+  // they've finished, which they'll want to read again from the start
+  const st = state[b.id] || {}, left = st.spread | 0, last = Math.floor(b.pages / 2);
+  B.setAspect(b.aspect); B.setShade(1); spread = left >= last || st.read && left >= last - 1 ? 0 : left; flip = null; queued = 0;
   B.setCovers([pageTex(b, 0), pageTex(b, 1)], [pageTex(b, b.pages - 1), pageTex(b, b.pages - 2)]); setFlat();
 }
 // swipe or tap a side of the book to turn

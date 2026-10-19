@@ -13,11 +13,13 @@
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([serves_the_game_with_types_the_browser_accepts/1, serves_nothing_outside_a_version/1,
          an_edit_reaches_open_tabs_while_old_tabs_keep_their_version/1,
+         pages_load_while_a_new_version_is_being_published/1,
          keeps_recent_versions_across_restarts_and_drops_older_ones/1,
          update_streams_survive_repeated_hot_loads/1]).
 
 all() -> [serves_the_game_with_types_the_browser_accepts, serves_nothing_outside_a_version,
           an_edit_reaches_open_tabs_while_old_tabs_keep_their_version,
+          pages_load_while_a_new_version_is_being_published,
           keeps_recent_versions_across_restarts_and_drops_older_ones,
           update_streams_survive_repeated_hot_loads].
 
@@ -71,6 +73,22 @@ an_edit_reaches_open_tabs_while_old_tabs_keep_their_version(Config) ->
     {200, _, NewMain, _} = fetch(versioned(New, "js/main.js")),
     ?assertNotEqual(OldMain, NewMain),
     gen_tcp:close(Tab).
+
+%% Publishing holds the version owner for seconds while it hashes and copies all of web/. Tabs
+%% reload the moment a version goes live, often while the next one is being published, so
+%% the page and the update stream must not queue behind it: past the call timeout, they fail.
+pages_load_while_a_new_version_is_being_published(_Config) ->
+    V = current_version(),
+    Owner = whereis(lantern_hill_versions),
+    ok = sys:suspend(Owner),
+    try
+        V = current_version(),
+        Tab = open_updates(),
+        V = next_version(Tab),
+        gen_tcp:close(Tab)
+    after
+        sys:resume(Owner)
+    end.
 
 keeps_recent_versions_across_restarts_and_drops_older_ones(Config) ->
     Versions = [edit(Config) || _ <- lists:seq(1, 6)],

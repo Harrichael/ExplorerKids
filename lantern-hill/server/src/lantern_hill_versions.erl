@@ -10,6 +10,7 @@
 
 -define(KEEP, 5).
 -define(SUBSCRIBERS, lantern_hill_subscribers).
+-define(LIVE, {?MODULE, live}).
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
@@ -17,7 +18,14 @@ start_link() ->
 %% Rehash the web root; a change becomes the current version and is announced to subscribers.
 refresh() -> gen_server:call(?MODULE, refresh, infinity).
 
-current() -> gen_server:call(?MODULE, current).
+%% Read without asking the owner, which is busy for seconds while it snapshots a new version:
+%% every page load asks, and none should wait on a publish. The call only answers for a node
+%% hot-loaded from before the live version was kept here, until its next refresh.
+current() ->
+    case persistent_term:get(?LIVE, undefined) of
+        undefined -> gen_server:call(?MODULE, current);
+        V -> V
+    end.
 
 %% The caller receives {lantern_hill_version, Version} whenever the version changes.
 subscribe() -> pg:join(?SUBSCRIBERS, version, self()).
@@ -52,7 +60,7 @@ update(State = #{root := Root, versions := Versions}) ->
     Files = read_tree(web_root()),
     V = hash(Files),
     case Versions of
-        [V | _] -> State;
+        [V | _] -> persistent_term:put(?LIVE, V), State;
         _ ->
             Dir = filename:join(Root, V),
             case filelib:is_dir(Dir) of
@@ -61,6 +69,8 @@ update(State = #{root := Root, versions := Versions}) ->
             end,
             Keep = lists:sublist([V | lists:delete(V, Versions)], ?KEEP),
             prune(Root, Keep),
+            %% before the announcement, so a tab told about V finds V at /
+            persistent_term:put(?LIVE, V),
             [Pid ! {lantern_hill_version, V} || Pid <- pg:get_members(?SUBSCRIBERS, version)],
             logger:notice("Lantern Hill frontend version ~ts", [V]),
             State#{versions := Keep}
