@@ -55,7 +55,7 @@ const HARNESS = `(async () => {
     if (!document.getElementById('labHud').hidden) document.getElementById('lhBook').click();
     else { PL.player.x = 8.6; PL.player.z = -4.4; await sleep(200); LAB.openLab(); }
     if (!await until(() => !document.getElementById('labBook').hidden)) throw new Error('the experiment book never opened');
-    document.querySelector(id === 'free' ? '#lbFree .lb-card' : '#lbTree [data-id="' + id + '"]').click();
+    document.querySelector(id === 'free' ? '#lbFree .lb-card' : '#lbGrid [data-id="' + id + '"]').click();
     await until(() => D.desk.items.length ? D.desk.items.every(it => it.pop >= 1) : !document.getElementById('labHud').hidden);
     dlg.endConvo(true);
   };
@@ -71,11 +71,16 @@ const HARNESS = `(async () => {
 })()`;
 
 const STORIES = [
-  ['vinegar poured on the baking soda box fizzes', `(async () => { const {open, choose, carry, tip, until, D} = lab;
+  ['vinegar poured on the baking soda box fizzes, and the first eruption opens the Wonder Bus', `(async () => { const {open, choose, carry, tip, until, sleep, D} = lab;
+    const rec = JSON.parse(localStorage.getItem('lantern-hill-lab'));
+    localStorage.setItem('lantern-hill-lab', JSON.stringify({...rec, done:rec.done.filter(id => id !== 'volcano')}));
     await open('volcano'); await choose(0);
     const before = D.totalGas();
     await carry('vinegar', 'soda', tip(1800));
-    return await until(() => D.totalGas() - before > 5) ? '' : 'no gas after vinegar met the baking soda';
+    if (!await until(() => D.totalGas() - before > 5)) return 'no gas after vinegar met the baking soda';
+    const dlg = await import('/js/ui/dialogue.js');
+    for (let i = 0; i < 300; i++) { if (document.body.innerText.includes('Wonder Bus')) return ''; if (dlg.convo) dlg.talk(); await sleep(60); }
+    return 'finishing the volcano never mentioned the Wonder Bus';
   })()`],
   ['a rock sinks and a cork floats', `(async () => { const {open, carry, until, D, sleep} = lab;
     await open('sinkfloat');
@@ -200,7 +205,7 @@ const STORIES = [
       document.getElementById('lhLock').click(); await sleep(300); (await import('/js/ui/dialogue.js')).endConvo(true);
       // a full cup glugs out fast, so the water only gets a short tip each time
       for (const [id, cup, ms] of [['lemon', 'c1', 1400], ['vinegar', 'c2', 1400], ['water', 'c3', 500], ['soap', 'c4', 1400], ['water', 'c5', 900], ['soda', 'c5', 1400]]) await carry(id, cup, async h => { await tip(ms)(); await lab.move(h, {x:pos(cup).x, z:-.3}); });
-      const dip = async cup => { await until(() => chem.steady(D.find(cup).c), 15000); const at = pos(cup); await carry('strip', cup, async h => { await sleep(700); await lab.move(h, {x:at.x, z:at.z - .16}); }); };
+      const dip = async cup => { await until(() => chem.steady(D.find(cup).c), 15000); await carry('strip', cup, async h => { await sleep(700); await lab.move(h, {x:.72, z:-.16}); }); };
       for (const cup of ['c1', 'c2', 'c3', 'c4', 'c5']) await dip(cup);
       const read = () => ['c1', 'c2', 'c3', 'c4', 'c5'].map(id => { const d = D.find(id).stats.dip; return id + ' ' + (d ? d.ph.toFixed(1) : '-'); }).join(', ');
       if (!await until(right, 6000)) return 'sorting: ' + lab.status() + ' (' + read() + ')';
@@ -261,6 +266,23 @@ const STORIES = [
     const d = pos('dish');
     await carry('magnet', {x:d.x + .4, y:0, z:d.z}, async h => { for (const dx of [.3, .22, .2, .19]) { await move(h, {x:d.x + dx, z:d.z}); await sleep(700); } });
     return await until(right, 4000) ? '' : 'through the glass: ' + lab.status() + ' clip at ' + JSON.stringify(pos('clip'));
+  })()`],
+  ['the Free Lab cabinet hands out a tub, then the water, then the same cup three times running', `(async () => { const {open, click, screen, sleep, until, D, C} = lab;
+    await open('free');
+    const R = await import('/js/core/render.js'), cam = R.camera.position;
+    for (let i = 0, was = cam.clone(); i < 60; i++) { await sleep(150); if (was.distanceTo(cam) < 1e-4) break; was.copy(cam); }
+    const shelf = label => { const s = C.shelves.find(s => s.def.label === label); return screen(s.x, s.y + s.h/2, -.64); };
+    const slot = type => { for (const s of C.shelves) for (const t of s.slots) if (t.type === type && t.model) { const v = t.model.position; return screen(v.x, v.y + .04, v.z); } };
+    const count = type => D.desk.items.filter(it => !it.gone && it.type === type).length, mat = () => D.desk.items.filter(it => !it.gone).map(it => it.type).join(',');
+    // a finger, not a mouse: touch pointers only move the hand while they're down
+    const cv = document.getElementById('world'), tap = async ([x, y]) => { for (const [type, buttons] of [['pointerdown', 1], ['pointerup', 0]]) { cv.dispatchEvent(new PointerEvent(type, {pointerId:9, pointerType:'touch', isPrimary:true, bubbles:true, button:0, buttons, clientX:x, clientY:y})); await sleep(80); } };
+    await click(shelf('Containers')); await sleep(1200); await click(slot('tub'));
+    if (!await until(() => count('tub'), 3000)) return 'no tub came out';
+    await click(shelf('Bottles')); await sleep(1200); await click(slot('pitcher'));
+    if (!await until(() => count('pitcher'), 3000)) return 'no water after the tub: ' + mat();
+    await tap(shelf('Containers')); await sleep(1200);
+    for (let i = 1; i <= 3; i++) { await tap(slot('cup')); if (!await until(() => count('cup') === i, 3000)) return 'cup ' + i + ' never came: ' + mat(); }
+    return '';
   })()`],
   ['the Free Lab cabinet holds only what finished experiments used, and hands it out', `(async () => { const {open, click, screen, until, sleep, D, C} = lab;
     await open('free');

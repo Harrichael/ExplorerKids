@@ -66,19 +66,17 @@ css.textContent = `
 #labBook header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:12px}
 #labBook .sub{font-weight:900;font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:var(--rust)}
 #labBook h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(24px,6vw,34px);line-height:1.05;color:var(--plum)}
-#labBook .tree{position:relative;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(178px,230px);column-gap:30px;overflow-x:auto;padding:2px 2px 6px}
-#labBook .tree .col{position:relative;z-index:1;display:flex;flex-direction:column;justify-content:space-around;gap:10px}
-#labBook .links{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
-#labBook .links path{fill:none;stroke-width:3.5;stroke-linecap:round}
-#labBook .links path.done{stroke:var(--teal)}
-#labBook .links path.new{stroke:var(--rust);stroke-dasharray:2 7}
+#labBook .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(186px,1fr));gap:10px;padding:2px 2px 6px}
 #lbFree{margin-top:12px}
 .lb-card{position:relative;text-align:left;font-family:var(--body);color:var(--ink);background:#fbf4e2;border:2.5px solid var(--ink);border-radius:14px;padding:7px 10px 7px 42px;cursor:pointer;box-shadow:0 3px 0 var(--ink)}
 .lb-card:hover{transform:translateY(-1px)}
 .lb-card .num{position:absolute;left:8px;top:8px;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:16px;background:var(--plum);color:var(--parch);border:2px solid var(--ink)}
 .lb-card b{display:block;font-family:var(--display);font-weight:400;font-size:17px;line-height:1.1}
 .lb-card .bl{display:block;font-weight:800;font-size:12px;line-height:1.25;color:#5a4a4a;margin-top:2px}
-.lb-card .st{display:inline-block;margin-top:4px;font-weight:900;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:2px 8px;border-radius:999px;background:rgba(26,19,32,.08)}
+.lb-card .st{display:inline-block;margin:4px 6px 0 0;font-weight:900;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:2px 8px;border-radius:999px;background:rgba(26,19,32,.08)}
+.lv{display:inline-block;letter-spacing:2px;line-height:1}
+.lb-card .lv{margin-top:4px;font-size:13px;color:var(--rust)}
+#labHud .sub .lv{font-size:12px;letter-spacing:2px}
 .lb-card .nb{display:block;margin-top:4px;font-weight:800;font-size:12px;color:#5a4a4a}
 .lb-card.done .num{background:var(--teal)}
 .lb-card.done .st{background:#cfe8d4;color:#22543a}
@@ -97,7 +95,7 @@ hud.innerHTML = `<div class="lab-card" id="lhCard"><div class="sub" id="lhSub"><
   <button id="labTip" hidden aria-label="Hold to tip">Tip<small>${coarse ? 'HOLD' : 'HOLD T'}</small></button><div id="labHint" hidden></div>`;
 const book = document.createElement('div'); book.id = 'labBook'; book.hidden = true; book.setAttribute('role', 'dialog'); book.setAttribute('aria-labelledby', 'lbTitle');
 book.innerHTML = `<div class="page"><header><div><div class="sub">Dr. Vega Sparks' lab</div><h2 id="lbTitle">Experiment Book</h2></div></header>
-  <div class="tree" id="lbTree"></div><div id="lbFree"></div><footer><button class="lab-pill" id="lbLeave">Step away</button></footer></div>`;
+  <div class="grid" id="lbGrid"></div><div id="lbFree"></div><footer><button class="lab-pill" id="lbLeave">Step away</button></footer></div>`;
 document.body.append(hud, book);
 const $ = id => document.getElementById(id);
 const tipBtn = $('labTip'), hint = $('labHint'), chooseEl = $('lhChoose'), lockBtn = $('lhLock'), hintBtn = $('lhHint');
@@ -158,32 +156,25 @@ function leave(){
 hqAnims.push(dt => { if (lab) step(dt); });
 
 // ---------- the experiment book ----------
-// Drawn as the tree it is: each experiment one column further along than the deepest one it comes
-// after, kept level with what it grew from, with lines back to each of those. Only what's open is drawn,
-// so the tree grows as the explorer goes.
+// Every experiment opened so far, easiest first. "New!" marks what the last one finished opened up.
+const dots = n => `<span class="lv" role="img" aria-label="Difficulty ${n} of 5">${'●'.repeat(n)}${'○'.repeat(5 - n)}</span>`;
 function openBook(){
   if (convo) endConvo(false);
   lab.phase = 'book'; lab.run = null; clearDesk(); handsOff(); closeCabinet(); hud.hidden = true;
-  const done = progress(), notes = record().notes || {}, tree = $('lbTree'), shown = EXPERIMENTS.filter(e => opened(e, done));
+  const rec = record(), done = progress(), notes = rec.notes || {}, grid = $('lbGrid');
+  // before anything is done, the first experiment is the new one
+  const fresh = new Set(done.size ? rec.fresh || [] : EXPERIMENTS.filter(e => opened(e, done)).map(e => e.id));
   stockCabinet(stocked(done));
-  // an old save can have something done without what now comes before it; it hangs off what's shown
-  const depth = {}, cols = [], at = {}, from = e => e.after.filter(id => id in depth);
-  for (const e of shown) { depth[e.id] = Math.max(-1, ...from(e).map(id => depth[id])) + 1; (cols[depth[e.id]] = cols[depth[e.id]] || []).push(e); }
-  const mean = e => from(e).reduce((s, id) => s + at[id], 0)/(from(e).length || 1);
-  cols.forEach(col => { col.sort((a, b) => mean(a) - mean(b)); col.forEach((e, i) => { at[e.id] = i; }); });
-  tree.innerHTML = '<svg class="links" aria-hidden="true"></svg>';
+  grid.innerHTML = '';
   let firstNew = null;
-  for (const col of cols) {
-    const c = document.createElement('div'); c.className = 'col'; tree.appendChild(c);
-    for (const e of col) {
-      const fin = done.has(e.id), n = notes[e.id], b = document.createElement('button');
-      b.className = 'lb-card ' + (fin ? 'done' : 'new'); b.dataset.id = e.id;
-      b.innerHTML = `<span class="num">${fin ? '✓' : '?'}</span><b>${e.title}</b><span class="bl">${e.blurb}</span>
-        <span class="st">${fin ? 'Done' : 'New!'} · Grade ${e.grade}</span>${n ? `<span class="nb">Predictions right: ${n.right} of ${n.total}</span>` : ''}`;
-      b.addEventListener('click', () => startRun(e));
-      if (!fin && !firstNew) firstNew = b;
-      c.appendChild(b);
-    }
+  for (const e of EXPERIMENTS.filter(e => opened(e, done)).sort((a, b) => a.level - b.level)) {
+    const fin = done.has(e.id), isNew = !fin && fresh.has(e.id), n = notes[e.id], b = document.createElement('button');
+    b.className = 'lb-card' + (fin ? ' done' : isNew ? ' new' : ''); b.dataset.id = e.id;
+    b.innerHTML = `<span class="num">${fin ? '✓' : '?'}</span><b>${e.title}</b><span class="bl">${e.blurb}</span>
+      ${fin || isNew ? `<span class="st">${fin ? 'Done' : 'New!'}</span>` : ''}${dots(e.level)}${n ? `<span class="nb">Predictions right: ${n.right} of ${n.total}</span>` : ''}`;
+    b.addEventListener('click', () => startRun(e));
+    if (isNew && !firstNew) firstNew = b;
+    grid.appendChild(b);
   }
   const foot = $('lbFree'); foot.innerHTML = '';
   if (done.size >= FREE_AFTER) {
@@ -193,23 +184,10 @@ function openBook(){
     free.addEventListener('click', () => startRun(FREE));
     foot.appendChild(free);
   }
-  book.hidden = false; link();
-  (firstNew || foot.lastElementChild || tree.querySelector('.lb-card')).focus({preventScroll:true});
+  book.hidden = false;
+  (firstNew || grid.querySelector('.lb-card:not(.done)') || foot.lastElementChild || grid.querySelector('.lb-card')).focus({preventScroll:true});
   labSound.book();
 }
-// measured from layout, not the screen: the page is still popping in, scaled, when this runs
-function link(){
-  const tree = $('lbTree'), svg = tree.querySelector('svg'), done = progress();
-  svg.setAttribute('width', tree.scrollWidth); svg.setAttribute('height', tree.scrollHeight);
-  const card = id => { const c = tree.querySelector(`[data-id="${id}"]`), col = c.parentNode;
-    return {left:col.offsetLeft + c.offsetLeft, right:col.offsetLeft + c.offsetLeft + c.offsetWidth, mid:col.offsetTop + c.offsetTop + c.offsetHeight/2}; };
-  const shown = id => !!tree.querySelector(`[data-id="${id}"]`);
-  svg.innerHTML = EXPERIMENTS.filter(e => shown(e.id)).flatMap(e => e.after.filter(shown).map(id => {
-    const a = card(id), b = card(e.id), x0 = a.right, y0 = a.mid, x1 = b.left, y1 = b.mid, m = (x0 + x1)/2;
-    return `<path class="${done.has(e.id) ? 'done' : 'new'}" d="M${x0} ${y0}C${m} ${y0} ${m} ${y1} ${x1} ${y1}"/>`;
-  })).join('');
-}
-addEventListener('resize', () => { if (!book.hidden) link(); });
 
 // ---------- running an experiment: question, prediction, test, result ----------
 async function startRun(exp, quiet){
@@ -223,7 +201,7 @@ async function startRun(exp, quiet){
   lab.phase = 'run'; lab.run = {exp, r:-1, notes:[]};
   labSound.setup(exp.setup.length);
   $('lhReset').textContent = exp.free ? 'Clean up' : 'Start over';
-  $('lhSub').textContent = `Experiment · Grade ${exp.grade}`;
+  $('lhSub').innerHTML = exp.free ? 'Free Lab' : `Experiment · ${dots(exp.level)}`;
   $('lhTitle').textContent = exp.title; $('lhAfter').hidden = true;
   lab.hintAt = lab.hintAt || 0;
   // the Free Lab has no question to pin up, and the cabinet needs the room
@@ -329,14 +307,16 @@ function finish(){
   const run = lab.run, exp = run.exp, rec = record(), before = new Set(rec.done || []), done = new Set(before);
   run.phase = 'done'; run.rd = null; done.add(exp.id);
   const right = run.notes.reduce((s, n) => s + n.right, 0), total = run.notes.reduce((s, n) => s + n.total, 0);
-  save('lab', {done:[...done], notes:Object.assign({}, rec.notes, {[exp.id]: {right, total}})});
-  labSound.complete();
   const fresh = EXPERIMENTS.filter(e => opened(e, done) && !opened(e, before)), had = stocked(before), now = stocked(done);
+  save('lab', {done:[...done], notes:Object.assign({}, rec.notes, {[exp.id]: {right, total}}), fresh:fresh.map(e => e.id)});
+  labSound.complete();
   const got = [...now].filter(t => !had.has(t)), freeNow = before.size < FREE_AFTER && done.size >= FREE_AFTER, extra = [];
   if (fresh.length) labSound.unlock(1.5);
   stockCabinet(now);
   toast('Experiment complete!', fresh.length ? `New in the book: ${list(fresh.map(e => e.title))}` : got.length ? 'New supplies in your cabinet!' : exp.title);
   if (fresh.length) extra.push(['sparks', `You've opened up ${fresh.length > 1 ? 'new experiments' : 'a new experiment'} in my book: ${list(fresh.map(e => e.title))}!`]);
+  // the first eruption is what opens the Wonder Bus trip to the volcano (hq/index.js)
+  if (exp.id === 'volcano' && !before.has('volcano')) extra.push(['sparks', "That fizz gave me an idea, {name}! The Wonder Bus is ready to visit a REAL volcano. Hop aboard in the garden whenever you like!"]);
   if (freeNow) extra.push(['sparks', "And you've earned the Free Lab! Everything from this experiment is waiting in the cabinet behind the mat, to mix however you like."]);
   else if (got.length) extra.push(['sparks', `I've put the ${list(got.map(t => ITEMS[t].name.toLowerCase()))} in your cabinet for the Free Lab.`]);
   const after = $('lhAfter'); after.innerHTML = ''; after.hidden = false;

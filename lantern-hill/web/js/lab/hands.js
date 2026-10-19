@@ -23,7 +23,8 @@ const latex = T(0xa9d8ef);
   const th = new THREE.Group(); th.position.set(-.026, 0, -.002); th.rotation.y = .9; glove.add(th);
   cyl(.0065, .0065, .022, latex, 0, 0, -.011, th, 6).rotation.x = Math.PI/2; sph(.0068, latex, 0, 0, -.022, th, 6);
   fingers.push(th);
-  glove.traverse(m => { if (m.isMesh) m.castShadow = true; });
+  // drawn after the cabinet's veil (see cabinet.js), so the hand stays bright over a dimmed mat
+  glove.traverse(m => { if (!m.isMesh) return; m.castShadow = true; m.material = m.material.clone(); m.material.transparent = true; m.renderOrder = 30; });
   glove.scale.setScalar(1.3); glove.visible = false;
 }
 
