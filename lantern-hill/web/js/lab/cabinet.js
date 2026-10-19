@@ -2,10 +2,12 @@
 // small model of everything the explorer has stocked by finishing experiments. Nothing they haven't
 // earned is shown, and a shelf with nothing on it yet has no label. In the Free Lab it's a menu you
 // reach into: tap a shelf and its door lifts and everything on it floats out over the mat, lit up and
-// full size; tap one and a real one drops onto the mat beneath it. Positions are in the desk's frame.
+// full size, on a glass plank in front of everything else, which dims behind it; tap one and a real one
+// drops onto the mat. Positions are in the desk's frame.
 
 import * as THREE from 'three';
 import { T, add, box, outlineMat, tex } from '../core/kit.js';
+import { camera } from '../core/render.js';
 import { bring, desk } from './desk.js';
 import { labSound } from './sounds.js';
 import { ITEMS } from './stuff.js';
@@ -23,11 +25,16 @@ const ROWS = [
 // a penny from the cabinet is an old one, dull with tarnish
 const TAKE = {tub:{fill:{water:950}}, coin:{tarnish:1}};
 const MAX_ON_MAT = 30;
-// where an open shelf's things float, over the mat and toward the explorer, a little bigger than life
-const SHOW = {w:1.56, y:.2, z:-.16, h:.3, most:1.3};
+// where an open shelf's things float: over the middle of the mat, clear of the shelves behind them on
+// screen, a little bigger than life
+const SHOW = {w:1.56, y:.2, z:.06, h:.3, most:1.3};
 
 const W = 1.68, BACK = -.7, FRONT = -.578, SIDE = .02, DIV = .014, PLINTH = .025, SHELF = .014;
-const GOLD = new THREE.Color(0xffd36a), GOLD_OUT = new THREE.MeshBasicMaterial({color:0xffc94a, side:THREE.BackSide});
+const GOLD = new THREE.Color(0xffd36a), GOLD_OUT = new THREE.MeshBasicMaterial({color:0xffc94a, side:THREE.BackSide, transparent:true});
+// While a shelf is open, a dark veil faces the camera just behind its floating row. It draws over the
+// whole scene and writes its own depth there, so the row, its plank and the hand, drawn after it, show
+// bright in front of a dimmed mat; that's why they're moved into the transparent pass while it's up.
+const VEIL = 20, FRONT_ROW = 22, DIM = .5;
 const HIT = new THREE.MeshBasicMaterial({visible:false});
 const wood = T(0x6b4430), dark = T(0x3a2418);
 const GLASS = T(0xdff1f5, {transparent:true, opacity:.16, depthWrite:false});
@@ -36,7 +43,7 @@ const room = type => Math.sqrt(2*ITEMS[type].r);
 
 export const shelves = [];
 const hits = [];
-let root = null, open = null, hoverShelf = null, hoverThing = null;
+let root = null, open = null, shown = null, hoverShelf = null, hoverThing = null, veil = null, plank = null;
 
 function plate(text){
   const m = T(0xffffff, {map:tex(256, 56, (g, w, h) => { g.fillStyle = '#3a1f34'; g.fillRect(0, 0, w, h); g.strokeStyle = '#d9a441'; g.lineWidth = 5; g.strokeRect(3, 3, w - 6, h - 6);
@@ -80,6 +87,12 @@ export function initCabinet(parent){
     y += row.h + SHELF;
     box(inner, SHELF, depth, wood, 0, y - SHELF/2, midZ, root);
   }
+  veil = add(new THREE.PlaneGeometry(8, 8), new THREE.MeshBasicMaterial({color:0x0c0812, transparent:true, opacity:0, depthTest:false}), 0, 0, 0, root, false);
+  veil.renderOrder = VEIL; veil.visible = false;
+  plank = new THREE.Group(); root.add(plank); plank.visible = false;
+  const glassy = new THREE.MeshBasicMaterial({color:0xfff3d0, transparent:true, opacity:.35}), rim = new THREE.MeshBasicMaterial({color:0xffc94a, transparent:true});
+  for (const [w, h, d, y, z, m, a] of [[1, .008, .17, -.004, 0, glassy, .35], [1, .004, .006, -.002, -.085, rim, 1], [1, .004, .006, -.002, .085, rim, 1]]) {
+    const b = add(new THREE.BoxGeometry(w, h, d), m, 0, y, z, plank, false); b.renderOrder = FRONT_ROW; b.userData.a = a; }
 }
 
 function model(slot){
@@ -122,15 +135,17 @@ function lineUp(sh){
 }
 
 // What the ray points at: something floating out of the open shelf first, since it's in front of
-// everything; then a shelf, unless something on the mat stands in front of it.
+// everything; then a shelf. With a shelf open the cabinet is a menu, so its shelves win over whatever
+// on the mat they're seen behind; with none open, a thing on the mat in front of a shelf is what you
+// get. Only what's showing counts: an empty glass's water is there but hidden, and a metre wide.
 const _rc = new THREE.Raycaster();
 function aimAt(ray){
   if (!ray || !root) return null;
   _rc.ray.copy(ray);
   if (open) { const h = _rc.intersectObjects(open.slots.filter(s => s.model).map(s => s.hit), false)[0]; if (h) return h.object.userData; }
   const hit = _rc.intersectObjects(hits.filter(h => h.userData.shelf.plate.visible), false)[0];
-  if (!hit) return null;
-  const mat = _rc.intersectObjects(desk.items.filter(it => !it.gone).map(it => it.g), true)[0];
+  if (!hit || open) return hit ? hit.object.userData : null;
+  const mat = _rc.intersectObjects(desk.items.filter(it => !it.gone).map(it => it.g), true).find(h => h.object.visible);
   return mat && mat.distance < hit.distance ? null : hit.object.userData;
 }
 
@@ -150,18 +165,43 @@ export const reach = {
     return true;
   }
 };
+// what's taken lands toward the front of the mat, below its place in the row, out of the way of the cabinet
 function take(slot){
   const n = desk.items.filter(it => !it.gone).length, p = slot.model.position;
-  const it = n < MAX_ON_MAT && bring(slot.type, TAKE[slot.type], {x:p.x, z:p.z});
+  const it = n < MAX_ON_MAT && bring(slot.type, TAKE[slot.type], {x:p.x*.8, z:.34});
   if (!it) { slot.lift = -1; labSound.refuse(p.x); return; }
   labSound.take(p.x);
   slot.lift = 1;
 }
 
-const _c = new THREE.Color();
+const _c = new THREE.Color(), _v = new THREE.Vector3(), _d = new THREE.Vector3();
+// a thing out on the menu row draws in front of the veil; back on its shelf, behind its glass door as before
+function toFront(slot, front){
+  if (slot.front === front) return; slot.front = front;
+  slot.model.traverse(m => {
+    if (!m.isMesh || m.userData.outline) return;
+    if (m.userData.ro === undefined) { m.userData.ro = m.renderOrder; m.userData.tr = m.material.transparent; }
+    m.renderOrder = front ? FRONT_ROW + m.userData.ro : m.userData.ro; m.material.transparent = front || m.userData.tr;
+  });
+}
+function backdrop(){
+  let k = 0; if (open) shown = open;
+  if (shown) for (const s of shown.slots) if (s.model) k = Math.max(k, s.out);
+  veil.visible = plank.visible = k > .01;
+  if (!veil.visible) return;
+  veil.material.opacity = DIM*k;
+  root.localToWorld(_v.set(0, SHOW.y, SHOW.z)).add(camera.getWorldDirection(_d).multiplyScalar(.35));
+  veil.position.copy(root.worldToLocal(_v)); veil.quaternion.copy(camera.quaternion);
+  // the plank rises out of the shelf with its things, and runs under the whole row
+  const out = shown.slots.filter(s => s.model), w = Math.min(SHOW.w, out.length*.24) + .1;
+  plank.position.set(shown.x + (0 - shown.x)*k, shown.y + (SHOW.y - shown.y)*k, (FRONT + BACK)/2 + (SHOW.z - (FRONT + BACK)/2)*k);
+  plank.scale.set(w*Math.max(.15, k), 1, Math.max(.15, k));
+  for (const m of plank.children) m.material.opacity = m.userData.a*k;
+}
 export function updateCabinet(dt){
   if (!root) return;
   const ease = Math.min(1, dt*10), t = performance.now()/1000;
+  backdrop();
   for (const sh of shelves) {
     sh.k += ((sh === open ? 1 : sh === hoverShelf ? .35 : 0) - sh.k)*ease;
     sh.ajar += ((sh === open ? 1 : 0) - sh.ajar)*ease;
@@ -177,6 +217,7 @@ export function updateCabinet(dt){
       g.position.y += arc + bob + .02*slot.k + .03*Math.max(0, slot.lift);
       if (slot.lift < 0) g.position.x += Math.sin(t*200)*.006*-slot.lift;
       g.scale.setScalar((slot.s + (slot.big - slot.s)*o)*(1 + .18*slot.k));
+      toFront(slot, o > .25);
       // an open shelf's things are all ringed in gold; the one being considered glows too
       const glow = sh.k*.2 + slot.k*.6, ringed = sh.k > .5 || slot.k > .5;
       g.traverse(m => {
