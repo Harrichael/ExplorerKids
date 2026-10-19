@@ -140,11 +140,11 @@ let met = !!stored.met;
 // what the real-Earth globes keep: what's been found and visited, each one's lens, which have said
 // hello, and which globe was picked last
 const set = k => new Set(list(stored[k]));
-const store = {wonders: set('wonders'), landforms: set('landforms'), countries: set('countries'), flags: set('flags'), capitals: set('capitals'), weather: set('weather'),
+const store = {wonders: set('wonders'), landforms: set('landforms'), countries: set('countries'), flags: set('flags'), capitals: set('capitals'), weather: set('weather'), clouds: set('clouds'), lessons: set('lessons'),
   lenses: stored.lenses && typeof stored.lenses === 'object' ? stored.lenses : {}, met: new Set([...list(stored.metGlobes), ...(stored.metGeo ? ['geo'] : [])]),
   mode: KINDS.some(k => k.id === stored.mode) ? stored.mode : 'biomes'};
 const keep = () => save('globe', {found: [...found], webs: [...learned], met, mode: store.mode, lenses: store.lenses, metGlobes: [...store.met],
-  ...Object.fromEntries(['wonders', 'landforms', 'countries', 'flags', 'capitals', 'weather'].map(k => [k, [...store[k]]]))});
+  ...Object.fromEntries(['wonders', 'landforms', 'countries', 'flags', 'capitals', 'weather', 'clouds', 'lessons'].map(k => [k, [...store[k]]]))});
 const ALL = Object.keys(BIOMES);
 const H = text => ['hoot', text];
 const tune = (notes, o = {}) => notes.forEach((f, i) => Sound.tone(f, {type: 'triangle', t: i*(o.gap || .08), dur: o.dur || .2, vol: o.vol || .06}));
