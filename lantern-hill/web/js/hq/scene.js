@@ -8,7 +8,8 @@ export const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x2a2240);
 scene.fog = new THREE.Fog(0x2a2240, 22, 60);
 
-scene.add(new THREE.HemisphereLight(0xa597d0, 0x4a3626, 0.62));
+export const hemi = new THREE.HemisphereLight(0xa597d0, 0x4a3626, 0.62);
+scene.add(hemi);
 export const sun = new THREE.DirectionalLight(0xffb47c, 0.72);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);

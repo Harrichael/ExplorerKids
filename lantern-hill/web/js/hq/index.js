@@ -11,15 +11,19 @@ import './wider.js';
 import './garden-life.js';
 import './toy-crane.js';
 import './sky.js';
+import '../garden/bed.js';
+import './daylight.js';
 import { bFlush } from '../core/kit.js';
 import { addUsable } from '../core/world.js';
 import { game } from '../state.js';
 import { openWardrobe } from '../ui/wardrobe.js';
 import { LAB_DESK, WINDOW_SEAT } from './cottage.js';
+import { BED } from '../garden/bed.js';
 import { BENCH } from './garden-life.js';
 import { PLAT, groundAt } from './garden.js';
 import { npcs } from './residents.js';
 import { PLAY } from './toy-crane.js';
+import { sunFrom } from './daylight.js';
 import { colliders, hqAnims, occMeshes, occluders, scene, sun } from './scene.js';
 
 bFlush(scene);
@@ -28,14 +32,14 @@ const surfaceAt = (x, z, y) => y > .3 ? 'deck' : (x < 10.2 ? 'wood' : 'grass');
 
 function areaFor(x, z, y){
   if (y > 2) return 'The Treehouse';
-  if (x > 10.3) { if (x > 13 && x < 18.5 && z > 3 && z < 8) return 'Wonder Bus'; if (x > 20 && z > 2.5) return 'Lily Pond'; return 'Garden Yard'; }
+  if (x > 10.3) { if (x > 13.8 && x < 18.6 && z < -6.6) return 'Vegetable Garden'; if (x > 13 && x < 18.5 && z > 3 && z < 8) return 'Wonder Bus'; if (x > 20 && z > 2.5) return 'Lily Pond'; return 'Garden Yard'; }
   if (x < -4.5) return 'Library Nook';
   if (x > 4.5 && z < -1.2) return 'Science Corner';
   if (x > 4.5) return 'Entry Hall';
   return 'Hearth Room';
 }
 
-export const HQ = {scene, colliders, occluders, occMeshes, npcs, usables:[], sun, cam:null, bounds:null,
+export const HQ = {scene, colliders, occluders, occMeshes, npcs, usables:[], sun, sunFrom, cam:null, bounds:null,
   ground:groundAt, surface:surfaceAt, area:areaFor, update:(dt, t) => hqAnims.forEach(f => f(dt, t))};
 
 async function openFlashcards(){
@@ -66,6 +70,10 @@ async function openLab(){
   const { openLab } = await import('../lab/index.js');
   openLab();
 }
+async function openGarden(){
+  const { openGarden } = await import('../garden/tend.js');
+  openGarden();
+}
 async function lookThroughTelescope(){
   const { openTelescope } = await import('../sky/telescope.js');
   openTelescope();
@@ -90,3 +98,4 @@ addUsable(HQ, {name:'Experiment desk', x:LAB_DESK.x, z:LAB_DESK.z + 1.05, range:
 addUsable(HQ, {name:'Wonder Bus', x:15.9, z:3.6, range:1.9, verb:'Board the Wonder Bus', short:'Board', glow:[15.6, 2.9, 5.5], action:boardWonderBus});
 addUsable(HQ, {name:'Telescope', x:23.7, z:-1.05, y:PLAT, range:1.3, verb:'Look through the telescope', short:'Look', glow:[24.4, PLAT + 1.5, -.6], action:lookThroughTelescope});
 addUsable(HQ, {name:'Pond bench', x:BENCH.x, z:BENCH.z - .78, range:1.25, verb:'Sit on the bench', short:'Sit', glow:[BENCH.x, .9, BENCH.z], action:sitOnBench});
+addUsable(HQ, {name:'Vegetable garden', x:BED.x, z:BED.front + .55, range:1.9, verb:'Tend the garden', short:'Garden', glow:[BED.x, .8, BED.z + .3], action:openGarden});
