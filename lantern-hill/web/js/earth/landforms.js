@@ -1,0 +1,146 @@
+// The kinds of landform a child should know, for Hoot's notebook on the geography globe: what each
+// one means, in a child's words, and which names on the map are one. `kinds` are geography.json's
+// place kinds that count as it ('river' is the rivers); `like` are landforms it could be mistaken
+// for but never also is, for Hoot to offer beside it (a volcano is a mountain too, so a volcano's
+// never offers mountain). `ask` is Hoot's challenge to go and find one, and `compare` sets it beside
+// its neighbours, where that teaches something.
+//
+// Natural Earth names no volcanoes (the build adds Wikidata's), buttes, mesas, fjords, glaciers or
+// many canyons, so LANDMARKS are famous ones picked by hand, each with its Wikipedia article.
+// `country` is where its spot falls on the map, or for a fjord, the coast it's beside, for the tests.
+//
+//   landformOf('gorge')   // the canyon
+//   LANDMARKS.filter(p => p.kind === 'butte')
+
+export const LANDFORMS = [
+  // ---------- high land ----------
+  {id: 'mountains', name: 'Mountain range', icon: '⛰️', kinds: ['mountains'], like: ['peak', 'plateau', 'valley'],
+    means: 'A mountain range is a long chain of mountains, side by side.',
+    ask: 'Mountains like company! They often stand together in long chains. Can you find a mountain range?',
+    compare: 'A range is many mountains together. A peak is the top of just one of them.'},
+  {id: 'peak', name: 'Mountain peak', icon: '🏔️', kinds: ['peak'], like: ['mountains', 'plateau', 'mesa'],
+    means: 'A peak is the pointed top of a mountain, the highest spot for miles around.',
+    ask: 'Can you find a mountain peak? Its name shows how high it is!',
+    compare: 'A peak is the top of one mountain. Lots of mountains side by side make a range.'},
+  {id: 'volcano', name: 'Volcano', icon: '🌋', kinds: ['volcano'], like: ['plateau', 'mesa', 'valley'],
+    means: 'A volcano is a place where hot melted rock from deep inside the Earth comes out. Its lava and ash often pile up into a mountain.',
+    ask: 'Some mountains have fire inside! Can you find a volcano?',
+    compare: 'Lots of mountains are volcanoes, built up from layer after layer of lava and ash.'},
+  {id: 'plateau', name: 'Plateau', icon: '🟫', kinds: ['plateau'], like: ['plain', 'mesa', 'mountains'],
+    means: 'A plateau is a big area of high, flat land, raised up above the land around it.',
+    ask: 'Can you find a plateau: land that is flat, but way up high?',
+    compare: 'A plateau is high and flat; a plain is low and flat. A mesa is like a small plateau, and a butte is smaller still.'},
+  {id: 'mesa', name: 'Mesa', icon: '🪨', kinds: ['mesa'], like: ['butte', 'volcano', 'canyon'],
+    means: 'A mesa is a hill or mountain with a wide, flat top and steep cliffs all round. Mesa is Spanish for table!',
+    ask: 'Can you find a mesa, a mountain shaped like a table? They are hard to spot, so lean in close.',
+    compare: 'A mesa is smaller than a plateau and wider than a butte. Over a very long time, rain and wind wear its edges away, and a mesa can shrink into a butte.'},
+  {id: 'butte', name: 'Butte', icon: '🌵', kinds: ['butte'], like: ['mesa', 'volcano', 'canyon'],
+    means: 'A butte is a hill with steep sides and a small flat top, standing all on its own. It is taller than it is wide.',
+    ask: 'Can you find a butte? Say it like the start of "beautiful"! They are small, so lean in very close.',
+    compare: 'Plateau, mesa, butte: each one is a smaller piece than the last. A butte is what is left after rain and wind have worn away almost all of a mesa.'},
+  // ---------- low and flat land ----------
+  {id: 'valley', name: 'Valley', icon: '🏞️', kinds: ['valley'], like: ['plain', 'plateau', 'delta'],
+    means: 'A valley is low land between hills or mountains. Often a river runs along the bottom.',
+    ask: 'Can you find a valley, the low land between mountains?',
+    compare: 'A valley can be wide with gentle sides. A canyon is a valley that is deep and narrow, with steep rocky walls.'},
+  {id: 'canyon', name: 'Canyon', icon: '🏜️', kinds: ['gorge', 'canyon'], like: ['plateau', 'butte', 'peak'],
+    means: 'A canyon is a deep, narrow valley with steep rocky sides. Most were carved by a river, very slowly, over a very long time.',
+    ask: 'Can you find a canyon? A river dug it, a little at a time.',
+    compare: 'Every canyon is a valley, but not every valley is a canyon. A canyon is the deep, narrow, steep kind.'},
+  {id: 'plain', name: 'Plain', icon: '🌾', kinds: ['plain'], like: ['plateau', 'valley', 'desert'],
+    means: 'A plain is a big area of flat, low land, often covered in grass or farms.',
+    ask: 'Can you find a plain, flat land as far as you can see?',
+    compare: 'A plain is flat and low; a plateau is flat and high.'},
+  {id: 'desert', name: 'Desert', icon: '🐪', kinds: ['desert'], like: ['valley', 'glacier', 'plain'],
+    means: 'A desert is a place that gets very little rain. Some deserts are sandy, some are rocky, and some are cold!',
+    ask: 'Can you find a desert, a land where it hardly ever rains?',
+    compare: 'A desert is about rain, not sand or heat. Antarctica, all covered in ice, is the biggest desert on Earth!'},
+  // ---------- land and water meeting ----------
+  {id: 'island', name: 'Island', icon: '🏝️', kinds: ['island'], like: ['peninsula', 'isthmus', 'delta'],
+    means: 'An island is land with water all around it.',
+    ask: 'Can you find an island, land with water all around it?',
+    compare: 'An island has water all the way round. A peninsula is almost an island, but one side is still joined on.'},
+  {id: 'peninsula', name: 'Peninsula', icon: '🗺️', kinds: ['peninsula'], like: ['island', 'isthmus', 'bay'],
+    means: 'A peninsula is land with water on three sides, still joined to more land on the fourth.',
+    ask: 'Can you find a peninsula, land that sticks out into the water?',
+    compare: 'A peninsula is almost an island. A bay is the opposite: water reaching into the land.'},
+  {id: 'isthmus', name: 'Isthmus', icon: '🌉', kinds: ['isthmus'], like: ['strait', 'peninsula', 'island'],
+    means: 'An isthmus is a narrow strip of land with water on both sides, joining two bigger lands. Say it like "iss-muss"!',
+    ask: 'Can you find an isthmus, a thin bridge of land between two big lands?',
+    compare: 'An isthmus and a strait are opposites: a thin strip of land between two waters, and a thin strip of water between two lands.'},
+  {id: 'delta', name: 'River delta', icon: '🔱', kinds: ['delta'], like: ['bay', 'lake', 'valley'],
+    means: 'A delta is where a river reaches the sea and spreads out into lots of little streams, dropping the mud and sand it carried.',
+    ask: 'Can you find a delta, where a river fans out into the sea?',
+    compare: 'A river slows down when it reaches the sea, and drops its mud. Bit by bit, the mud builds new land: the delta.'},
+  {id: 'glacier', name: 'Glacier', icon: '🧊', kinds: ['glacier'], like: ['river', 'fjord', 'mountains'],
+    means: 'A glacier is a huge river of ice that moves slowly downhill. It is made of snow, piled up and squeezed into ice over many years.',
+    ask: 'Can you find a glacier, a river made of ice? Look high in the mountains, or near the poles.',
+    compare: 'Long ago, glaciers carved deep valleys. Where the ice melted and the sea flowed in, they left fjords.'},
+  {id: 'fjord', name: 'Fjord', icon: '🛳️', kinds: ['fjord'], like: ['river', 'lake', 'canyon'],
+    means: 'A fjord is a long, narrow arm of the sea between steep cliffs. Say it like "fee-ord"!',
+    ask: 'Can you find a fjord, where the sea reaches deep between the mountains?',
+    compare: 'Glaciers carved the fjords long ago. When the ice melted, the sea flowed into the deep valleys they left behind.'},
+  // ---------- water ----------
+  {id: 'river', name: 'River', icon: '🛶', kinds: ['river'], water: true, like: ['lake', 'strait', 'glacier'],
+    means: 'A river is fresh water flowing downhill in a long channel, to the sea, a lake or another river.',
+    ask: 'Can you find a river? Look for blue lines, and lean in to read their names.',
+    compare: 'A river starts high up, in hills or mountains, and always flows downhill to the sea or a lake.'},
+  {id: 'waterfall', name: 'Waterfall', icon: '💦', kinds: ['waterfall'], water: true, like: ['canyon', 'lake', 'glacier'],
+    means: 'A waterfall is where a river drops over a cliff or a steep step.',
+    ask: 'Can you find a waterfall? There are only a few big enough to show, so look carefully.',
+    compare: 'A waterfall is a place on a river. Over time, the falling water wears the cliff away, so many waterfalls slowly move upstream.'},
+  {id: 'lake', name: 'Lake', icon: '🦆', kinds: ['lake'], water: true, like: ['sea', 'bay', 'delta'],
+    means: 'A lake is a big body of water with land all around it.',
+    ask: 'Can you find a lake, water with land all around it?',
+    compare: 'Most lakes are fresh water, but some are salty. The Dead Sea is really a lake, so salty you float on top of it!'},
+  {id: 'ocean', name: 'Ocean', icon: '🌊', kinds: ['ocean'], water: true, like: ['sea', 'lake', 'gulf'],
+    means: 'An ocean is one of the five giant bodies of salt water that cover most of the Earth.',
+    ask: 'Can you find an ocean? This one is easy! There are five.',
+    compare: 'The oceans are the biggest waters of all. Seas, gulfs and bays are smaller parts of them, closer to the land.'},
+  {id: 'sea', name: 'Sea', icon: '⛵', kinds: ['sea'], water: true, like: ['ocean', 'lake', 'strait'],
+    means: 'A sea is a big area of salt water, smaller than an ocean. Most seas are partly closed in by land.',
+    ask: 'Can you find a sea, a smaller part of the ocean near the land?',
+    compare: 'A sea is smaller than an ocean, and usually has land around part of it.'},
+  {id: 'gulf', name: 'Gulf', icon: '🐬', kinds: ['gulf'], water: true, like: ['lake', 'strait', 'delta'],
+    means: 'A gulf is a large part of the sea that reaches into the land, mostly closed in by land.',
+    ask: 'Can you find a gulf, a big piece of the sea tucked into the land?',
+    compare: 'Gulfs are usually bigger than bays. But they were named long ago, so not always: the Bay of Bengal is bigger than the Gulf of Mexico!'},
+  {id: 'bay', name: 'Bay', icon: '⚓', kinds: ['bay'], water: true, like: ['lake', 'strait', 'delta'],
+    means: 'A bay is a part of the sea that curves into the land, with land around it on three sides.',
+    ask: 'Can you find a bay, where the sea curves into the land?',
+    compare: 'A bay is like a gulf, usually smaller. A bay is water reaching into the land; a peninsula is land reaching into the water.'},
+  {id: 'strait', name: 'Strait', icon: '🚢', kinds: ['strait', 'channel'], water: true, like: ['river', 'isthmus', 'lake'],
+    means: 'A strait is a narrow strip of sea between two lands, joining two bigger waters. Wide ones are often called channels.',
+    ask: 'Can you find a strait, a narrow sea where ships squeeze between two lands?',
+    compare: 'A strait and an isthmus are opposites: a thin strip of water between two lands, and a thin strip of land between two waters.'},
+];
+
+const BY_KIND = new Map(LANDFORMS.flatMap(l => l.kinds.map(k => [k, l])));
+export const landformOf = kind => BY_KIND.get(kind) || null;
+export const landformBy = id => LANDFORMS.find(l => l.id === id);
+
+const spot = (name, kind, at, min, wiki, country) => ({name, kind, at, min, wiki, country});
+export const LANDMARKS = [
+  spot('Grand Mesa', 'mesa', [39.0267, -108.0814], 6, 'Grand Mesa', 'United States of America'),
+  spot('Mount Roraima', 'mesa', [5.1433, -60.7625], 6.5, 'Mount Roraima'),
+  spot('Auyán-tepui', 'mesa', [5.9004, -62.5416], 6.5, 'Auyán-tepui', 'Venezuela'),
+  spot('Merrick Butte', 'butte', [36.9806, -110.086], 7, 'Merrick Butte', 'United States of America'),
+  spot('Fajada Butte', 'butte', [36.0189, -107.9098], 7, 'Fajada Butte', 'United States of America'),
+  spot('Courthouse Butte', 'butte', [34.8028, -111.7546], 7, 'Courthouse Butte', 'United States of America'),
+  spot('Fish River Canyon', 'canyon', [-27.5893, 17.5976], 6, 'Fish River Canyon', 'Namibia'),
+  spot('Colca Canyon', 'canyon', [-15.5972, -71.8792], 6.5, 'Colca Canyon', 'Peru'),
+  spot('Copper Canyon', 'canyon', [27.5161, -107.7658], 5.5, 'Copper Canyon', 'Mexico'),
+  spot('Verdon Gorge', 'canyon', [43.7378, 6.3639], 7, 'Verdon Gorge', 'France'),
+  spot('Yosemite Valley', 'valley', [37.7217, -119.6464], 7, 'Yosemite Valley', 'United States of America'),
+  spot('Aletsch Glacier', 'glacier', [46.4422, 8.0772], 6.5, 'Aletsch Glacier', 'Switzerland'),
+  spot('Perito Moreno Glacier', 'glacier', [-50.5, -73.1333], 6.5, 'Perito Moreno Glacier', 'Argentina'),
+  spot('Hubbard Glacier', 'glacier', [60.3139, -139.3708], 6, 'Hubbard Glacier'),
+  spot('Baltoro Glacier', 'glacier', [35.7364, 76.3808], 6, 'Baltoro Glacier'),
+  spot('Franz Josef Glacier', 'glacier', [-43.4669, 170.1917], 7, 'Franz Josef Glacier', 'New Zealand'),
+  spot('Geirangerfjord', 'fjord', [62.121, 7.129], 7, 'Geirangerfjord', 'Norway'),
+  spot('Sognefjord', 'fjord', [61.1, 5.1667], 5.5, 'Sognefjord', 'Norway'),
+  spot('Hardangerfjord', 'fjord', [60.1667, 6], 6, 'Hardangerfjord', 'Norway'),
+  spot('Milford Sound', 'fjord', [-44.6481, 167.9056], 6.5, 'Milford Sound', 'New Zealand'),
+  spot('Ilulissat Icefjord', 'fjord', [69.15, -49.55], 6, 'Ilulissat Icefjord', 'Greenland'),
+  spot('Scoresby Sound', 'fjord', [70.5, -25], 4.5, 'Scoresby Sound', 'Greenland'),
+];

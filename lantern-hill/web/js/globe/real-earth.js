@@ -3,7 +3,8 @@
 // deserts, seas and rivers coming out as you go. Tap anywhere for its field guide: the country, the
 // ecoregion with a real photo of it, and the wild animals people have really photographed there,
 // after Hoot asks which of four doesn't belong. Or pick a wonder of the world, and Hoot shows a real
-// photo of it to find on the globe, saying how far off each guess is and which way to go.
+// photo of it to find on the globe, saying how far off each guess is and which way to go. Or open
+// Hoot's landform notebook (notebook.js) and find every kind of landform there is.
 //
 // globe.js owns the room globe, the camera and the hands; this owns what the globe shows and says
 // while it's the geography globe. `room` is what it borrows from globe.js.
@@ -13,10 +14,12 @@ import { camera, canvas } from '../core/render.js';
 import { Sound } from '../core/sound.js';
 import { WEBS } from '../earth/biomes.js';
 import { loadGeography } from '../earth/geography.js';
+import { LANDMARKS } from '../earth/landforms.js';
 import { arc } from '../earth/model.js';
 import { WONDERS } from '../earth/wonders.js';
 import { closeUp, LENSES, lensBy, wholeEarth } from './imagery.js';
 import { makeNames } from './names.js';
+import { makeNotebook } from './notebook.js';
 import { article, oddOneOut, photoCredit, pictures, seenNear } from './photos.js';
 import { judge } from './wonder-hunt.js';
 
@@ -33,6 +36,9 @@ css.textContent = `
 .geography .gcredit{bottom:calc(92px + env(safe-area-inset-bottom,0px));max-width:45%}
 .glenstip{position:absolute;left:max(16px,env(safe-area-inset-left,0px));max-width:50%;bottom:calc(92px + env(safe-area-inset-bottom,0px));font-weight:800;font-size:12px;color:var(--parch);text-shadow:0 1px 3px #000;pointer-events:none}
 .talking .glenses,.talking .gzoom,.talking .glenstip{visibility:hidden}
+.gshelf{pointer-events:auto;flex:none;display:flex;gap:4px}.geography .gfound{display:none}
+.gshelf button{font-weight:900;font-size:13px;color:var(--parch);background:rgba(26,19,32,.82);border:2px solid rgba(217,164,65,.6);border-radius:999px;padding:4px 10px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.gshelf button[aria-pressed=true]{background:var(--gold);color:var(--ink);border-color:var(--gold)}
 #gCard .gpic{position:relative;margin:0 -4px;border-radius:12px;overflow:hidden;background:#d9c9a4;border:2.5px solid var(--ink);aspect-ratio:16/10}
 #gCard .gpic img{display:block;width:100%;height:100%;object-fit:cover}
 #gCard .gpic.tall{aspect-ratio:4/3}
@@ -53,7 +59,7 @@ css.textContent = `
 .gsights{display:flex;flex-wrap:wrap;gap:6px}
 .gsights button{font-weight:900;font-size:13px;color:var(--ink);background:#fbf4e2;border:2px solid var(--ink);border-radius:999px;padding:3px 11px}
 .gwarm{font-weight:900;font-size:15px;color:#b5552f}.gwarm.hot{color:#2f7a3a}
-@media (max-aspect-ratio:1/1){.gzoom{top:auto;left:auto;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(96px + env(safe-area-inset-bottom,0px));transform:none}.glenstip{max-width:calc(100% - 140px)}.gzoom button{width:40px;height:40px;font-size:21px}#gCard .gpic{aspect-ratio:16/8}}`;
+@media (max-aspect-ratio:1/1){.gzoom{top:auto;left:auto;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(96px + env(safe-area-inset-bottom,0px));transform:none}.glenstip{max-width:calc(100% - 140px)}.gzoom button{width:40px;height:40px;font-size:21px}#gCard .gpic{aspect-ratio:16/8}.gshelf span{display:none}}`;
 document.head.appendChild(css);
 
 // leaning in past where the satellites stop getting sharper (about 48) is only for telling a
@@ -65,7 +71,7 @@ const like = m => m < 2.5 ? 'Like a weather satellite' : m < 10 ? 'Like the Spac
 const KIND_WORD = {continent: 'Continent', ocean: 'Ocean', sea: 'Sea', gulf: 'Gulf', bay: 'Bay', strait: 'Strait', channel: 'Channel', sound: 'Sound',
   mountains: 'Mountain range', peak: 'Mountain', lowest: 'Low point', desert: 'Desert', plateau: 'Plateau', basin: 'Basin', plain: 'Plain', tundra: 'Tundra',
   delta: 'River delta', peninsula: 'Peninsula', valley: 'Valley', gorge: 'Gorge', wetland: 'Wetland', region: 'Region', isthmus: 'Isthmus',
-  islands: 'Islands', island: 'Island', waterfall: 'Waterfall', capital: 'Capital city', river: 'River', country: 'Country'};
+  islands: 'Islands', island: 'Island', waterfall: 'Waterfall', capital: 'Capital city', river: 'River', country: 'Country', cape: 'Cape'};
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
 // 'That's the Pacific Ocean', 'the United States of America', but 'Lake Victoria', 'France'
 const the = name => /^(the |lake )/i.test(name) || !/ocean|sea$|gulf|bay$|united|republic|kingdom|islands$|netherlands|philippines|emirates|bahamas/i.test(name) ? name : 'the ' + name;
@@ -80,7 +86,12 @@ export function makeRealEarth(room){
   const zoomer = document.createElement('div'); zoomer.className = 'gzoom';
   zoomer.innerHTML = '<button aria-label="Zoom in">+</button><div class="like"></div><button aria-label="Zoom out">−</button>';
   const tip = document.createElement('div'); tip.className = 'glenstip';
-  hud.append(tip, bar, zoomer); tip.hidden = bar.hidden = zoomer.hidden = true;
+  // the bar along the bottom holds the wonders' photo riddles, or Hoot's landform notebook
+  const shelfEl = document.createElement('div'); shelfEl.className = 'gshelf'; shelfEl.setAttribute('role', 'group'); shelfEl.setAttribute('aria-label', 'Wonders or landforms');
+  shelfEl.innerHTML = '<button data-s="wonders"></button><button data-s="landforms"></button>';
+  hud.querySelector('#gChips').before(shelfEl);
+  hud.append(tip, bar, zoomer); tip.hidden = bar.hidden = zoomer.hidden = shelfEl.hidden = true;
+  let shelf = 'wonders';
   const [zIn, likeEl, zOut] = zoomer.children;
   zIn.addEventListener('click', () => zoomBy(2)); zOut.addEventListener('click', () => zoomBy(.5));
 
@@ -112,8 +123,8 @@ export function makeRealEarth(room){
     // every name the globe can show, most important first: the order names.js places them in
     labels = [
       ...geo.countries.map(c => ({text: c.short || c.name, kind: 'country', lat: c.at[0], lon: c.at[1], rank: c.min, ref: {country: c}})),
-      ...geo.places.map(p => ({text: p.kind === 'peak' && p.elevation ? `${p.name} ${p.elevation.toLocaleString()} m` : p.name, kind: p.kind, lat: p.at[0], lon: p.at[1],
-        rank: p.kind === 'continent' ? -2 : p.kind === 'ocean' ? -1 : p.min + (p.kind === 'capital' || p.kind === 'peak' ? 1 : .4), ref: {place: p}})),
+      ...[...geo.places, ...LANDMARKS].map(p => ({text: (p.kind === 'peak' || p.kind === 'volcano') && p.elevation ? `${p.name} ${p.elevation.toLocaleString()} m` : p.name, kind: p.kind, lat: p.at[0], lon: p.at[1],
+        rank: p.kind === 'continent' ? -2 : p.kind === 'ocean' ? -1 : p.min + (p.kind === 'capital' || p.kind === 'peak' || p.kind === 'volcano' ? 1 : .4), ref: {place: p}})),
       ...geo.rivers.map(r => { const l = r.lines.reduce((a, b) => b.length > a.length ? b : a), i = Math.floor(l.length/4)*2;
         return {text: r.name, kind: 'river', lat: l[i + 1], lon: l[i], rank: r.min + 1, ref: {river: r}}; }),
     ].sort((a, b) => a.rank - b.rank);
@@ -191,18 +202,21 @@ export function makeRealEarth(room){
   let drawnAt = '';
   function drawNames(){
     const m = room.view.mag, e = globeBall.matrixWorld.elements;
-    const key = [e[0], e[1], e[2], e[4], m, innerWidth, innerHeight, camera.position.x, camera.position.y, store.wonders.size, lens.id].map(v => typeof v === 'number' ? v.toFixed(4) : v).join();
+    const key = [e[0], e[1], e[2], e[4], m, innerWidth, innerHeight, camera.position.x, camera.position.y, store.wonders.size, lens.id, C.target?.text].map(v => typeof v === 'number' ? v.toFixed(4) : v).join();
     if (key === drawnAt) return; drawnAt = key;
     const found = WONDERS.filter(w => store.wonders.has(w.id));
     // a found wonder's sights come out once the explorer leans in on it, and its own name, which
     // would sit on top of one of them, steps aside
     const near = found.filter(w => w.sights && m >= w.zoom*.75);
     const sights = near.flatMap(w => w.sights.map(s => ({text: s.name, kind: 'sight', lat: s.at[0], lon: s.at[1], rank: -1.4, ref: {sight: s, wonder: w}})));
-    names.draw([...found.filter(w => !near.includes(w)).map(w => ({text: w.name, kind: 'wonder', lat: w.at[0], lon: w.at[1], rank: -1.5, ref: {wonder: w}})), ...sights, ...labels.filter(l => l.rank < 0 || magFor(l.rank) <= m*1.1)], project);
+    // the name Hoot has circled for a challenge goes first, or a neighbour's name could take its place
+    const circled = C.kind === 'seek' && C.target ? [C.target] : [];
+    names.draw([...circled, ...found.filter(w => !near.includes(w)).map(w => ({text: w.name, kind: 'wonder', lat: w.at[0], lon: w.at[1], rank: -1.5, ref: {wonder: w}})), ...sights,
+      ...labels.filter(l => l !== C.target && (l.rank < 0 || magFor(l.rank) <= m*1.1))], project);
   }
 
   // ---------- the card ----------
-  let C = {kind: 'idle'};   // what the card is about: idle, place, feature, hunt or wonder
+  let C = {kind: 'idle'};   // what the card is about: idle, place, feature, hunt, wonder or sight, or one of the notebook's
   const H = room.H;
   function draw(){
     room.setColor(null);
@@ -212,7 +226,8 @@ export function makeRealEarth(room){
     if (C.kind === 'place') return drawPlace();
     if (C.kind === 'feature') return drawFeature();
     if (C.kind === 'sight') return drawSight();
-    card.innerHTML = `<div class="ghint">Drag to spin. Pinch, scroll or press + to lean in close.<br>Tap anywhere to explore it!<br><br>Or pick a wonder at the bottom for one of Hoot's photo riddles.</div>`;
+    if (nb.cards[C.kind]) return nb.cards[C.kind](C);
+    card.innerHTML = `<div class="ghint">Drag to spin. Pinch, scroll or press + to lean in close.<br>Tap anywhere to explore it, or tap a name!<br><br>Or pick a wonder at the bottom for one of Hoot's photo riddles, or open Hoot's landform notebook.</div>`;
   }
   const head = (icon, kind, title, within) => `<div class="gtop"><span class="gicon" aria-hidden="true">${icon}</span><div><div class="gkind">${esc(kind)}</div><h3>${esc(title)}</h3>${within ? `<div class="gwithin">${esc(within)}</div>` : ''}</div></div>`;
   // A photo, its first words and its credit, filled in when the article arrives: the first of the
@@ -325,7 +340,11 @@ export function makeRealEarth(room){
 
   // ---------- wonders: a real photo, and where in the world is it? ----------
   function chips(){
-    room.found(`${store.wonders.size} of ${WONDERS.length} wonders`);
+    const [w, l] = shelfEl.children;
+    w.innerHTML = `📷<span> Wonders</span> ${store.wonders.size}/${WONDERS.length}`; l.innerHTML = `📒<span> Landforms</span> ${nb.tally()}`;
+    w.setAttribute('aria-label', `Wonders: ${store.wonders.size} of ${WONDERS.length} found`); l.setAttribute('aria-label', `Hoot's landform notebook: ${nb.tally().replace('/', ' of ')} found`);
+    w.setAttribute('aria-pressed', shelf === 'wonders'); l.setAttribute('aria-pressed', shelf === 'landforms');
+    if (shelf === 'landforms') return room.chips(nb.chips());
     // an unfound wonder's own icon would give its riddle away
     room.chips(WONDERS.map(w => ({icon: store.wonders.has(w.id) ? w.icon : '📷', found: store.wonders.has(w.id), hunting: C.kind === 'hunt' && C.w === w,
       label: store.wonders.has(w.id) ? `Go to the ${w.name}` : 'Photo riddle: where in the world?',
@@ -362,12 +381,12 @@ export function makeRealEarth(room){
     C.said = `${warm}That's ${what}. It's about ${j.about.toLocaleString()} km to the ${j.way}.`;
     const lines = [H(C.said)];
     if (C.misses === 2) lines.push(H(w.hint));
-    if (C.misses >= 4) { showRing(w); lines.push(H("I've drawn a gold circle around it for you. Tap inside it!")); }
+    if (C.misses >= 4) { showRing(w.at, Math.max(w.r, 400)); lines.push(H("I've drawn a gold circle around it for you. Tap inside it!")); }
     room.tune(j.warmer ? [523, 659] : [330, 262], {gap: .1, dur: .16, vol: .05});
     draw(); room.story(lines);
   }
-  function showRing(w){
-    const n = surface(...w.at), k = Math.max(w.r, 400)/6371*R*1.6;
+  function showRing(at, km){
+    const n = surface(...at), k = km/6371*R*1.6;
     ring.position.copy(n).multiplyScalar(R*1.002); ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n); ring.scale.setScalar(k); ring.visible = true;
   }
   function showWonder(w, lines){
@@ -426,32 +445,45 @@ export function makeRealEarth(room){
     return `<div data-slot="${slot}"><div class="gsec">More real photos</div><div class="gbig"></div><div class="gshots"></div></div>`;
   }
 
+  // ---------- Hoot's landform notebook ----------
+  const nb = makeNotebook(room, {card, esc, the, head, photoBlock, gallery, MAX_MAG, magFor,
+    now: () => C, show: c => { C = c; ring.visible = false; chips(); draw(); }, redraw: () => draw(),
+    labels: () => labels, centre: () => inView(), ring: showRing, explore: visit,
+    countryAt: (lat, lon) => maps.geo.countryAt(lat, lon), whereIs: (lat, lon) => the((maps.geo.countryAt(lat, lon) || maps.earth.placeAt(lat, lon)).name),
+    shelf: s => { shelf = s; chips(); }});
+  shelfEl.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    if (shelf === b.dataset.s) return;
+    shelf = b.dataset.s; Sound.tone(880, {type: 'triangle', dur: .08, vol: .05}); chips();
+    if (shelf === 'landforms') nb.opened();
+  }));
+
   // ---------- coming and going ----------
   let on = false;
   async function enter(){
-    on = true; hud.classList.add('geography'); layer.visible = true; names.el.hidden = false; tip.hidden = bar.hidden = zoomer.hidden = false;
+    on = true; hud.classList.add('geography'); layer.visible = true; names.el.hidden = false; tip.hidden = bar.hidden = zoomer.hidden = shelfEl.hidden = false;
     C = {kind: 'idle'}; drawnAt = ''; chips();
     if (!store.metGeo) { store.metGeo = true; room.keep();
       room.story([H('This is the real Earth, photographed from space by satellites!'),
         H('Lean in close and you can see real mountains, rivers and deserts. Tap anywhere and I\'ll show you photos of what lives there.'),
-        H('Or pick a wonder at the bottom. I\'ll show you a real photo, and you find where in the world it is!')]); }
+        H('Or pick a wonder at the bottom. I\'ll show you a real photo, and you find where in the world it is!'),
+        H('And tap the names! Every new kind of landform goes in my notebook.')]); }
     await setLens(lens.id);
     if (on) draw();
   }
   function leave(){
-    on = false; hud.classList.remove('geography'); layer.visible = false; names.el.hidden = true; names.clear(); tip.hidden = bar.hidden = zoomer.hidden = true;
+    on = false; hud.classList.remove('geography'); layer.visible = false; names.el.hidden = true; names.clear(); tip.hidden = bar.hidden = zoomer.hidden = shelfEl.hidden = true;
     dropPatch(); asking = null; want = null; ring.visible = false;
   }
   function zoomBy(k){ room.view.fly = null; room.view.mag = Math.max(1, Math.min(MAX_MAG, room.view.mag*k)); Sound.tone(k > 1 ? 880 : 660, {type: 'triangle', dur: .06, vol: .04}); }
 
   // a tap: a name if it's on one, else wherever on the globe it landed
-  function tap(x, y){ const it = names.hit(x, y); if (!it) return false; feature(it); return true; }
-  function press(lat, lon){ if (!maps) return; if (C.kind === 'hunt') guess(lat, lon); else visit(lat, lon); }
-  // Esc: the photo riddle, then whatever's on the card, then it's the globe's to handle
+  function tap(x, y){ const it = names.hit(x, y); if (!it) return false; if (!nb.tapped(it)) feature(it); return true; }
+  function press(lat, lon){ if (!maps) return; if (C.kind === 'hunt') guess(lat, lon); else if (!nb.pressed()) visit(lat, lon); }
+  // Esc: a riddle or challenge, then whatever's on the card, then it's the globe's to handle
   function back(){
-    if (C.kind === 'hunt') { C = {kind: 'idle'}; ring.visible = false; chips(); draw(); return true; }
+    if (C.kind === 'hunt' || C.kind === 'seek') { C = {kind: 'idle'}; ring.visible = false; chips(); draw(); return true; }
     if (C.kind === 'sight') { showWonder(C.w); return true; }
-    if (C.kind !== 'idle') { C = {kind: 'idle'}; room.hidePin(); draw(); return true; }
+    if (C.kind !== 'idle') { C = {kind: 'idle'}; ring.visible = false; room.hidePin(); draw(); return true; }
     return false;
   }
 

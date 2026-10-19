@@ -26,6 +26,13 @@ const HARNESS = `(async () => {
   const screen = (x, y, z) => { const v = new THREE.Vector3(x, y, z).add(D.desk.root.position).project(R.camera), r = cv.getBoundingClientRect(); return [(v.x + 1)/2*r.width, (1 - v.y)/2*r.height]; };
   const handY = h => PH.toWorld(h.body, 0, h.grip, 0, {}).y;
   const point = (type, [x, y]) => cv.dispatchEvent(new PointerEvent(type, {...O, clientX:x, clientY:y}));
+  // bring the held thing's grip over a spot
+  const move = async (h, at) => {
+    for (let i = 0; i < 300; i++) {
+      point('pointermove', screen(at.x, handY(h), at.z)); await sleep(30);
+      const hp = PH.toWorld(h.body, 0, h.grip, 0, {}); if (i > 20 && Math.hypot(hp.x - at.x, hp.z - at.z) < .01) break;
+    }
+  };
   // pick a thing up, bring the hand over a spot (or a thing), do something there, let go
   const carry = async (id, to, there) => {
     // tap where the hand will hold it: halfway up a horseshoe magnet is the gap in its arch
@@ -33,11 +40,7 @@ const HARNESS = `(async () => {
     const h = D.desk.held; if (!h || h.id !== id) { point('pointerup', [0, 0]); throw new Error('could not pick up ' + id + ' (got ' + (h && h.id) + ', ' + id + ' at ' + [t0.x, t0.y, t0.z].map(n => n.toFixed(2)) + ')'); }
     // aim where the target is when the hand sets off; chasing it live, a paperclip leaping onto the
     // magnet's leading pole drags the hand along after it into the wall
-    const at = typeof to === 'string' ? {...pos(to)} : to;
-    for (let i = 0; i < 300; i++) {
-      point('pointermove', screen(at.x, handY(h), at.z)); await sleep(30);
-      const hp = PH.toWorld(h.body, 0, h.grip, 0, {}); if (i > 20 && Math.hypot(hp.x - at.x, hp.z - at.z) < .01) break;
-    }
+    await move(h, typeof to === 'string' ? {...pos(to)} : to);
     if (there) await there(h);
     point('pointerup', [0, 0]); await sleep(300);
   };
@@ -58,7 +61,7 @@ const HARNESS = `(async () => {
   const status = () => document.getElementById('lhStatus').textContent;
   // read through whatever Dr. Sparks is saying, as a player tapping along would
   const listen = async () => { for (let i = 0; i < 200 && dlg.convo; i++) { dlg.talk(); await sleep(40); } };
-  window.lab = {sleep, until, carry, tip, shake, stir, open, choose, status, listen, D, chem, pos};
+  window.lab = {sleep, until, carry, move, tip, shake, stir, open, choose, status, listen, D, chem, pos};
   localStorage.setItem('lantern-hill-lab', JSON.stringify({done:['sinkfloat', 'magnets', 'volcano', 'rainbow', 'egg', 'dissolve', 'balloon', 'lava']}));
   return true;
 })()`;
@@ -93,6 +96,23 @@ const STORIES = [
     await open(8); await choose(0);
     await carry('lemon', 'k1', tip(1500));
     return await until(() => chem.ph(D.find('k1').c) < 5) ? '' : 'the juice stayed at pH ' + chem.ph(D.find('k1').c).toFixed(1);
+  })()`],
+  ['lemon poured from a little off to the side still lands in the cabbage juice', `(async () => { const {open, choose, carry, tip, until, D, chem} = lab;
+    await open(8); await choose(0);
+    const k = lab.pos('k1'), before = chem.amount(D.find('lemon').c, 'lemon');
+    await carry('lemon', {x:k.x - .04, y:0, z:k.z + .05}, tip(1500));
+    const poured = before - chem.amount(D.find('lemon').c, 'lemon'), got = chem.amount(D.find('k1').c, 'lemon');
+    return got > poured*.8 ? '' : 'only ' + got.toFixed(0) + ' of ' + poured.toFixed(0) + ' lemon reached the juice';
+  })()`],
+  ['a carried bottle keeps one height as it passes over other things', `(async () => { const {open, carry, sleep, D} = lab;
+    await open(2);
+    const ys = [];
+    await carry('vinegar', {x:.3, y:0, z:0}, async () => {
+      const h = D.desk.held, at = D.desk.held.body.translation();
+      for (const x of [.1, -.1, -.3, .3, 0]) { await lab.move(h, {x, z:at.z}); ys.push(h.body.translation().y); }
+    });
+    const lo = Math.min(...ys), hi = Math.max(...ys);
+    return hi - lo < .01 ? '' : 'it rose and fell by ' + ((hi - lo)*100).toFixed(1) + ' cm';
   })()`],
   ['a magnet picks up a paperclip and not a coin', `(async () => { const {open, carry, until, D, sleep} = lab;
     await open(1);

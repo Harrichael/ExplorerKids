@@ -68,12 +68,56 @@ function deliver(v, out, x, z, settled){
   if (!chem.liquidVol(v.c)) f.dropFilm(v);
 }
 
+// Pouring is forgiving: a stream from the hand bends into an open container whose mouth is near
+// where it's coming out, and that container's rim glows while the hand is over it. Out of reach,
+// it splashes wherever it lands.
+const AIM_REACH = .09;
+let ring = null;
+function aimTarget(v, p){
+  let best = null, bd = Infinity;
+  for (const {v:c, seal} of catchers) {
+    if (c === v || seal) continue;
+    const o = c.def.open, m = toWorld(c.body, 0, o.y, 0, {});
+    if (p.y - m.y < .005) continue;
+    const d = Math.hypot(m.x - p.x, m.z - p.z);
+    if (d < o.r + AIM_REACH && d < bd) { bd = d; best = {v:c, m, r: c.def.open.neckY ? o.r : Math.max(o.r, c.def.ri)}; }
+  }
+  return best;
+}
+// where the held container would pour: judged from its low rim, or from the hand before it's tipped
+// far enough for the rim to be over anything
+function heldTarget(){
+  const v = desk.held;
+  if (!v || !isVessel(v) || v.attached || chem.isEmpty(v.c)) return null;
+  const g = toWorld(v.body, 0, v.grip, 0, {}), r = lowRim(v).p;
+  return aimTarget(v, r) || aimTarget(v, {x:g.x, y:Math.max(g.y, r.y), z:g.z});
+}
+// the velocity (vx, vy, vz) from p that lands in the held container's target, if it has one
+function aimed(v, p, vel){
+  if (v !== desk.held) return vel;
+  const t = heldTarget(); if (!t) return vel;
+  const dy = p.y - t.m.y; if (dy < .003) return vel;
+  const ft = (vel.y + Math.sqrt(vel.y*vel.y + 19.62*dy))/9.81;
+  const a = Math.random()*7, r = Math.random()*t.r*.45;
+  vel.x = (t.m.x + Math.cos(a)*r - p.x)/ft; vel.z = (t.m.z + Math.sin(a)*r - p.z)/ft;
+  return vel;
+}
+function showAim(){
+  const t = heldTarget();
+  ring.visible = !!t;
+  if (!t) return;
+  ring.position.set(t.m.x, t.m.y + .004, t.m.z); ring.scale.setScalar(t.r*1.12);
+  ring.material.opacity = .45 + .25*Math.sin(performance.now()/160);
+}
+
 export function initDesk(root){
   desk.root = root;
+  ring = new THREE.Mesh(new THREE.RingGeometry(.86, 1, 40), new THREE.MeshBasicMaterial({color:0xfff2a8, transparent:true, depthWrite:false}));
+  ring.geometry.rotateX(-Math.PI/2); ring.renderOrder = 3; ring.visible = false; root.add(ring);
   desk.fx = makeFx({frame: v => v.g, inside: v => !v.gone && uprightness(v) > .8, top, waterTop, oilTop,
     deliver: (v, p) => { const t = v.body.translation(); deliver(v, p, t.x, t.z, true); }});
   desk.fx.attach(root);
-  desk.fluid = makeFluid(root, {catches, deliver, fizz: (pool, gas) => fizzSound(gas)});
+  desk.fluid = makeFluid(root, {catches, deliver, fizz: (pool, gas, rate) => fizzSound(gas, rate)});
 }
 
 // ---------- building and clearing ----------
@@ -175,8 +219,9 @@ export function release(){
 
 // what's inside the held thing doesn't count as something to carry it over
 const insideOf = (v, it) => it !== v && !it.gone && isVessel(v) && within(v, localOf(v, it.body.worldCom()), .02);
-// Carry things above the tops of whatever is near where they are and where they're headed, so they
-// clear a cup's rim instead of shoving its wall. Spoons and swabs dip into the container they're over.
+// Carry things at one steady height, just over the tallest thing on the desk, so they never bob up
+// and down while the hand moves and always clear a cup's rim instead of shoving its wall. Spoons and
+// swabs dip into the container they're over; a magnet goes low over what's near it, to reach it.
 function carryHeight(it, x, z){
   if (it.def.tool === 'spoon' || it.def.tool === 'swab') {
     for (const v of vessels()) {
@@ -196,7 +241,7 @@ function carryHeight(it, x, z){
     // things clinging to the magnet travel with it, so they're no obstacle
     if (it.def.tool === 'magnet' && o.stuck && Math.hypot(ot.x - t.x, ot.y - t.y, ot.z - t.z) < .09) continue;
     const reach = it.def.r + Math.max(o.def.r, (o.def.w || 0)/2) + .015;
-    if (Math.hypot(x - ot.x, z - ot.z) > reach && Math.hypot(t.x - ot.x, t.z - ot.z) > reach) continue;
+    if (it.def.tool === 'magnet' && Math.hypot(x - ot.x, z - ot.z) > reach && Math.hypot(t.x - ot.x, t.z - ot.z) > reach) continue;
     // how tall it stands right now: its height upright, its width once it's tipped over
     const c = Math.min(1, Math.abs(uprightness(o))), sn = Math.sqrt(1 - c*c);
     y = Math.max(y, ot.y + o.def.h*c + Math.min(o.def.r, .06)*sn);
@@ -388,10 +433,11 @@ function pourAngle(v){
   return Math.min(1.9, a);
 }
 const _d = {};
-// the point on the rim that's lowest right now, and which way is out from there
+// the point on the rim that's lowest right now, and which way is out from there; standing upright,
+// the side the hand tips it toward
 function lowRim(v){
   const q = v.body.rotation(); _d.x = 0; _d.y = -1; _d.z = 0; rot(q, _d, true);
-  let dx = _d.x, dz = _d.z; const dl = Math.hypot(dx, dz); if (dl < 1e-4) { dx = 1; dz = 0; } else { dx /= dl; dz /= dl; }
+  let dx = _d.x, dz = _d.z; const dl = Math.hypot(dx, dz); if (dl < 1e-4) { dx = -1; dz = 0; } else { dx /= dl; dz /= dl; }
   const o = v.def.open, p = toWorld(v.body, dx*o.r, o.y, dz*o.r, {}), out = rot(q, {x:dx, y:0, z:dz});
   return {p, out};
 }
@@ -403,8 +449,8 @@ function spill(v, dt){
   if (tilt < .15) return;
   if (flow === 'drops') {
     if (tilt < 1.8 || (v.drip = (v.drip || 0) - dt) > 0) return;
-    v.drip = .38; const {p} = lowRim(v);
-    desk.fluid.emit(p.x, p.y - .006, p.z, lv.x, lv.y - .1, lv.z, chem.take(v.c, 1), v.body); Sound.tone(1300, {dur:.06, vol:.04, f2:900});
+    v.drip = .38; const {p} = lowRim(v); p.y -= .006; const a = aimed(v, p, {x:lv.x, y:lv.y - .1, z:lv.z});
+    desk.fluid.emit(p.x, p.y, p.z, a.x, a.y, a.z, chem.take(v.c, 1), v.body); Sound.tone(1300, {dur:.06, vol:.04, f2:900});
     return;
   }
   if (flow === 'shake') {
@@ -412,16 +458,17 @@ function spill(v, dt){
     if (v.shook) { v.shook = false; v.sprinkle = .12; Sound.hiss({dur:.06, vol:.07, type:'highpass', freq:3500}); }
     if (!(v.sprinkle > 0)) return;
     v.sprinkle -= dt;
-    const {p} = lowRim(v); desk.fluid.emit(p.x, p.y, p.z, lv.x*.3, lv.y - .2, lv.z*.3, chem.take(v.c, 1.4*dt/.12), v.body);
+    const {p} = lowRim(v), a = aimed(v, p, {x:lv.x*.3, y:lv.y - .2, z:lv.z*.3}); desk.fluid.emit(p.x, p.y, p.z, a.x, a.y, a.z, chem.take(v.c, 1.4*dt/.12), v.body);
     return;
   }
   const a0 = pourAngle(v); if (tilt <= a0) return;
-  const rate = v.def.rate*clamp01((tilt - a0)/.45)*(tilt > 1.7 ? 1.4 : 1), out = chem.take(v.c, rate*dt);
+  // turned right over, it glugs out much faster than a careful pour
+  const rate = v.def.rate*clamp01((tilt - a0)/.45)*(tilt > 2.2 ? 2.6 : tilt > 1.7 ? 1.4 : 1), out = chem.take(v.c, rate*dt);
   if (chem.isEmpty(out)) return;
   if (!chem.liquidVol(v.c)) desk.fx.dropFilm(v);
   // a balloon on a bottle can only empty into the bottle; its mouth is wrapped round the neck
   if (v.attached) { const t = v.attached.body.translation(); deliver(v.attached, out, t.x, t.z); }
-  else { const {p, out:o} = lowRim(v); desk.fluid.emit(p.x, p.y, p.z, lv.x + o.x*.16, lv.y - .03, lv.z + o.z*.16, out, v.body); }
+  else { const {p, out:o} = lowRim(v), a = aimed(v, p, {x:lv.x + o.x*.16, y:lv.y - .03, z:lv.z + o.z*.16}); desk.fluid.emit(p.x, p.y, p.z, a.x, a.y, a.z, out, v.body); }
   if ((pourSnd -= dt) <= 0) { pourSnd = .07; if (chem.liquidVol(out)) Sound.hiss({dur:.13, vol:.025 + rate*.0003, type:'bandpass', freq:1200 + Math.random()*700, q:.9}); else Sound.hiss({dur:.12, vol:.03, type:'highpass', freq:2500 + Math.random()*1500}); }
 }
 function shaking(v){
@@ -436,7 +483,11 @@ function shaking(v){
 
 // ---------- chemistry in every container ----------
 let fizzT = 0;
-function fizzSound(gas){ if ((fizzT -= .016) > 0) return; fizzT = .05; Sound.hiss({dur:.05 + Math.random()*.06, vol:Math.min(.09, .015 + gas*.2), type:'highpass', freq:4000 + Math.random()*3000}); }
+let roarT = 0;
+function fizzSound(gas, rate){
+  if (rate > 40 && (roarT -= .016) <= 0) { roarT = .22; Sound.hiss({dur:.35, vol:Math.min(.16, .04 + rate*.0007), type:'bandpass', freq:500 + Math.random()*400, q:.7}); }
+  if ((fizzT -= .016) > 0) return; fizzT = .05; Sound.hiss({dur:.05 + Math.random()*.06, vol:Math.min(.09, .015 + gas*.2), type:'highpass', freq:4000 + Math.random()*3000});
+}
 function chemStep(v, dt){
   const gas = chem.step(v.c, dt, v.stir); v.stir = Math.max(0, v.stir - dt*3);
   if (desk.endless && v.refill && v !== desk.held && uprightness(v) > .8) {
@@ -455,19 +506,18 @@ function chemStep(v, dt){
   }
   if (!(gas > 0)) { v.head = Math.max(0, v.head - dt*.006); return; }
   v.stats.gas += gas;
-  fizzSound(gas);
-  const rate = gas/dt, b = balloonOn(v), lk = chem.look(v.c);
+  const rate = gas/dt; fizzSound(gas, rate);
+  const b = balloonOn(v), lk = chem.look(v.c);
   if (b) b.inflate = Math.min(1.6, b.inflate + gas*.06);
   else if (!(chem.oilVol(v.c) > 5)) {
     // oil on top lets the gas through as bubbles instead of froth
-    const soapy = (v.c.l.soap || 0) > .5, o = v.def.open;
+    const soapy = (v.c.l.soap || 0) > .5, o = v.def.open, up = rot(v.body.rotation(), {x:0, y:1, z:0});
     v.head = Math.min(.025, v.head + gas*.0012*(soapy ? 2 : 1));
-    v.foam += gas*(soapy ? 4.5 : .8)*(v.type === 'volcano' ? 1.5 : 1);
-    const fc = chem.lerpCol(0xffffff, lk ? lk.col : 0xffffff, soapy ? .55 : .3), lvel = v.body.linvel();
-    while (v.foam >= 1) {
-      v.foam -= 1; const a = Math.random()*7, r = Math.random()*o.r*.7, sp = .04 + Math.random()*.08, w = toWorld(v.body, Math.cos(a)*r, o.y + .004, Math.sin(a)*r, _w);
-      desk.fluid.foam(w.x, w.y, w.z, lvel.x + Math.cos(a)*sp, .1 + Math.random()*.15, lvel.z + Math.sin(a)*sp, fc);
-    }
+    v.foam += gas*(soapy ? 4.5 : 1.6)*(v.type === 'volcano' ? 1.5 : 1);
+    const fc = chem.lerpCol(0xffffff, lk ? lk.col : 0xffffff, soapy ? .55 : .3);
+    v.foam = desk.fluid.gush(v.foam, rate, fc, v.body.linvel(), up, () => { const a = Math.random()*7, r = Math.random()*o.r*.7; return toWorld(v.body, Math.cos(a)*r, o.y + .004, Math.sin(a)*r, _w); });
+    // a big rush of gas kicks the container about
+    if (rate > 40 && v !== desk.held) { const k = Math.min(1, (rate - 40)/120)*.0006*dt*60; v.body.applyImpulse({x:(Math.random() - .5)*k, y:k*.6, z:(Math.random() - .5)*k}, true); }
   }
   if (chem.oilVol(v.c) > 5 && lk) { v.blobAcc = (v.blobAcc || 0) + gas*.9; while (v.blobAcc >= 1) { v.blobAcc -= 1; desk.fx.blob(v, lk.col); v.stats.blobs++; } }
   if (Math.random() < Math.min(1, rate*.02)) for (let i = 0; i < Math.min(6, 1 + rate*.08); i++) desk.fx.bubble(v);
@@ -528,6 +578,7 @@ export function updateDesk(dt){
   for (const v of vessels()) chemStep(v, dt);
   catchers = vessels().filter(v => !v.attached && uprightness(v) >= .35).map(v => ({v, seal:balloonOn(v)}));
   desk.fluid.step(dt);
+  showAim();
   desk.fx.update(dt);
   desk.fluid.draw();
   for (const it of live()) draw(it, dt);
