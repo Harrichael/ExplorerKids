@@ -1,6 +1,6 @@
 // The world model against places a child might tap, Hoot's riddles against the map, the food webs
-// against the rules every web must keep, and the geography globe's wonders and landforms against the
-// map. Runs on the built data:
+// against the rules every web must keep, the geography globe's wonders and landforms against the map,
+// and the countries globe's facts against what every child's atlas says. Runs on the built data:
 //   node --test tools/earth/*.test.mjs   (from lantern-hill/)
 
 import assert from 'node:assert/strict';
@@ -10,6 +10,7 @@ import { BIOMES, WEBS, visit } from '../../web/js/earth/biomes.js';
 import { makeGeography } from '../../web/js/earth/geography.js';
 import { LANDFORMS, LANDMARKS, landformBy, landformOf } from '../../web/js/earth/landforms.js';
 import { arc, makeEarth } from '../../web/js/earth/model.js';
+import { foundedSaying, governmentOf } from '../../web/js/earth/nations.js';
 import { WONDERS } from '../../web/js/earth/wonders.js';
 import { arrivals, asked, eatenBy, makers, whatIf } from '../../web/js/globe/food-web.js';
 import { choices } from '../../web/js/globe/landform-quiz.js';
@@ -238,4 +239,47 @@ test("Hoot asks what kind of landform it is from three: the right one, and two i
   // never something it also is: a volcano is a mountain too, and a canyon is a valley
   const offers = (id, other) => landformBy(id).like.includes(other);
   assert.ok(!offers('volcano', 'peak') && !offers('volcano', 'mountains') && !offers('canyon', 'valley') && !offers('bay', 'gulf') && !offers('gulf', 'bay'));
+});
+
+test('the natural world reaches under the sea and along the coasts, each thing where it should be', () => {
+  const place = name => geo.places.find(p => p.name === name);
+  const mariana = place('Mariana Trench'), everest = place('Mount Everest');
+  assert.equal(mariana.kind, 'trench');
+  assert.equal(earth.placeAt(...mariana.at).name, 'Pacific Ocean');
+  assert.ok(mariana.at[1] > 120 && mariana.at[1] < 160, 'in the western Pacific');
+  assert.ok(mariana.depth > everest.elevation, 'deeper than Everest is tall');
+  assert.equal(place('Mid-Atlantic Ridge').kind, 'ridge');
+  assert.equal(earth.placeAt(...place('Mid-Atlantic Ridge').at).name, 'Atlantic Ocean');
+  assert.equal(place('Great Barrier Reef').kind, 'reef');
+  assert.ok(arc(...place('Great Barrier Reef').at, -18, 146) < 400, 'off the coast of Queensland');
+  assert.deepEqual(['Copacabana', 'Old Faithful', 'Uluru', 'Cliffs of Moher', 'Lascaux'].map(n => place(n)?.kind), ['beach', 'geyser', 'butte', 'cliff', 'cave']);
+  // what isn't nature stays out: an airport island, a resort strip, holy places filed as hills
+  for (const name of ['Kansai International Airport', 'Hong Kong International Airport', 'Hotel Zone', 'Temple Mount', 'Ajanta Caves']) assert.equal(place(name), undefined, name);
+  // Natural Earth names a great ocean or range twice, far apart, but the catalogue adds each thing once, under one kind
+  const caught = geo.places.filter(p => ['trench', 'ridge', 'seamount', 'reef', 'beach', 'cave', 'geyser', 'cliff', 'hill', 'dune', 'lagoon', 'cape'].includes(p.kind));
+  for (const p of caught) assert.equal(geo.places.filter(o => o.wiki === p.wiki).length, 1, p.name);
+});
+
+test('every country on the map can say its flag, money, capital, government and how it began', () => {
+  const nations = data('nations');
+  for (const c of geo.countries) {
+    const n = nations[c.id];
+    assert.ok(n, `${c.name} has no facts`);
+    assert.ok(governmentOf(n.government), `${c.name}: government ${n.government}`);
+    // a territory says whose it is; a country that isn't one says how it began
+    if (n.sovereign) assert.equal(n.government, 'territory', c.name);
+    else if (!['ATA', 'ESH', 'KAS'].includes(c.id)) assert.ok(foundedSaying(n), `${c.name}: when did it begin?`);
+    assert.equal(c.capital, n.capital, `${c.name}: the map and the facts agree on its capital`);
+  }
+  const say = id => [nations[id].capital, nations[id].currency.map(m => m.code).join(), nations[id].government];
+  assert.deepEqual(say('JPN'), ['Tokyo', 'JPY', 'constitutional-monarchy']);
+  assert.deepEqual(say('USA'), ['Washington, D.C.', 'USD', 'presidential']);
+  assert.deepEqual(say('DEU'), ['Berlin', 'EUR', 'parliamentary']);
+  assert.deepEqual(say('MMR').slice(0, 1), ['Naypyidaw']);
+  assert.equal(foundedSaying(nations.USA), '1776, when it broke away from Great Britain');
+  assert.ok(nations.USA.federal && !nations.JPN.federal);
+  assert.equal(nations.GRL.sovereign, 'Denmark');
+  assert.deepEqual(nations.JPN.cities.slice(0, 2).map(c => c.name), ['Tokyo', 'Osaka']);
+  // where countries disagree, the facts say so rather than pick a side
+  for (const id of ['TWN', 'KOS', 'PSE', 'ESH', 'AFG']) assert.ok(nations[id].disputed, id);
 });
