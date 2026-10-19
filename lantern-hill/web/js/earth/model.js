@@ -82,13 +82,13 @@ export function arc(lat1, lon1, lat2, lon2){
 }
 
 // a flat [lon, lat, …] ring, with its bounds so most tests can skip it at a glance
-function withBox(r){
+export function withBox(r){
   r.box = [Infinity, Infinity, -Infinity, -Infinity];
   for (let i = 0; i < r.length; i += 2) { r.box[0] = Math.min(r.box[0], r[i]); r.box[1] = Math.min(r.box[1], r[i + 1]); r.box[2] = Math.max(r.box[2], r[i]); r.box[3] = Math.max(r.box[3], r[i + 1]); }
   return r;
 }
 // even-odd test against a ring
-function inRing(r, x, y){
+export function inRing(r, x, y){
   const b = r.box; if (x < b[0] || x > b[2] || y < b[1] || y > b[3]) return false;
   let inside = false;
   for (let i = 0, j = r.length - 2; i < r.length; j = i, i += 2) {

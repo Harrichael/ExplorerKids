@@ -1,6 +1,8 @@
-// Builds web/data/earth.json, the geography behind the globe: Natural Earth coastlines and lakes for
-// drawing and telling land from sea, RESOLVE's ecoregions on a half-degree grid for what grows where,
-// and the coral reef zones, drawn by hand.
+// Builds the world model's data. web/data/earth.json is what grows where: Natural Earth coastlines and
+// lakes for drawing and telling land from sea, RESOLVE's ecoregions on a half-degree grid, and the
+// coral reef zones, drawn by hand. web/data/geography.json is what people call things: Natural
+// Earth's countries, borders, rivers, mountains, deserts and seas, each with the Wikipedia article
+// its pictures come from, looked up through Wikidata.
 //
 //   node tools/earth/build.mjs        (from lantern-hill/; sources download once into tools/earth/cache)
 //
@@ -12,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url)), CACHE = join(HERE, 'cache');
-const OUT = join(HERE, '../../web/data/earth.json');
+const OUT = join(HERE, '../../web/data/earth.json'), GEO_OUT = join(HERE, '../../web/data/geography.json');
 const NE = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/';
 const RESOLVE = 'https://storage.googleapis.com/teow2016/Ecoregions2017.zip';
 const STEP = .5, W = 360/STEP, H = 180/STEP;
@@ -103,7 +105,7 @@ const hundredths = r => Array.from(r, v => Math.round(v*100));
 
 // Douglas–Peucker, to about a third of a pixel on the globe's 2048-wide map
 const TOLERANCE = .06;
-function simplify(r){
+function simplify(r, tolerance = TOLERANCE){
   const n = r.length/2, keep = new Uint8Array(n), stack = [[0, n - 1]];
   keep[0] = keep[n - 1] = 1;
   while (stack.length) {
@@ -115,7 +117,7 @@ function simplify(r){
       const d = L < 1e-9 ? Math.hypot(px, py) : Math.abs(dy*px - dx*py)/L;
       if (d > far) { far = d; at = i; }
     }
-    if (far > TOLERANCE) { keep[at] = 1; stack.push([a, at], [at, b]); }
+    if (far > tolerance) { keep[at] = 1; stack.push([a, at], [at, b]); }
   }
   const out = []; for (let i = 0; i < n; i++) if (keep[i]) out.push(r[i*2], r[i*2 + 1]);
   return out;
@@ -212,7 +214,7 @@ function build(){
     rasterize(shape, grid, codeOf.get(id));
   }
   spread(grid);
-  const landRings = features(land).flatMap(f => f.rings).map(simplify).filter(shapely);
+  const landRings = features(land).flatMap(f => f.rings).map(r => simplify(r)).filter(shapely);
   const lakeRings = features(lakes).filter(f => f.props.name).flatMap(f => f.rings.map(r => ({name: f.props.name, ring: simplify(r)})))
     .filter(l => shapely(l.ring) && bboxArea(l.ring) > .25 && !saltPan(l.ring)).map(l => ({name: l.name, ring: hundredths(l.ring)}));
   // grids are run-length rows, [code, count, code, count, …], from the north pole down, starting at 180°W
@@ -228,4 +230,102 @@ function build(){
   writeFileSync(OUT, JSON.stringify(out));
   console.log(`wrote ${OUT}: ${ecoregions.length} ecoregions, ${(JSON.stringify(out).length/1024).toFixed(0)} KB`);
 }
+// ---------- geography.json: what people call things ----------
+// how finely countries are kept: fine enough that tapping near a border names the right side
+const COUNTRY_TOLERANCE = .03;
+// a country's English name, which spells out Natural Earth's short ones ('Dem. Rep. Congo'), but
+// not as far as a state's formal title
+const english = p => /^People's Republic of /.test(p.NAME_EN) ? p.NAME : p.NAME_EN;
+const nameOf = s => s.replace(/\s*\(.*\)$/, '');
+// Natural Earth shouts some names ('GOBI DESERT'); Wikipedia's title is the friendlier name when there is one
+const titleCase = s => s === s.toUpperCase() ? s.toLowerCase().replace(/(^|[\s-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase()) : s;
+
+// Wikidata ids to English Wikipedia titles, fifty at a time, remembered in the cache between builds
+async function wikiTitles(ids){
+  const p = join(CACHE, 'wiki-titles.json'), known = existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : {};
+  const want = [...new Set(ids)].filter(id => id && !(id in known));
+  for (let i = 0; i < want.length; i += 50) {
+    const batch = want.slice(i, i + 50);
+    const url = `https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&props=sitelinks&sitefilter=enwiki&ids=${batch.join('|')}`;
+    let r;
+    for (let tries = 0; (r = await fetch(url, {headers: {'User-Agent': 'LanternHill-earth-build/1.0 (educational game)'}})).status === 429 && tries < 6; tries++) {
+      const wait = 1000*(+r.headers.get('retry-after') || 30); console.log(`wikidata: asked to wait ${wait/1000}s`); await new Promise(ok => setTimeout(ok, wait));
+    }
+    if (!r.ok) throw new Error(`wikidata: ${r.status} ${await r.text()}`);
+    const d = await r.json();
+    for (const id of batch) known[id] = d.entities?.[id]?.sitelinks?.enwiki?.title || null;
+    console.log(`wikidata: ${Math.min(i + 50, want.length)} of ${want.length}`);
+    writeFileSync(p, JSON.stringify(known));
+    await new Promise(ok => setTimeout(ok, 1500));   // Wikidata turns away bursts
+  }
+  writeFileSync(p, JSON.stringify(known));
+  return known;
+}
+
+// where to write a region's name: the spot inside it farthest from its edge, found on a coarse grid
+function labelPoint(rings){
+  const big = rings.reduce((a, r) => bboxArea(r) > bboxArea(a) ? r : a);
+  let x0 = 180, x1 = -180, y0 = 90, y1 = -90;
+  for (let i = 0; i < big.length; i += 2) { x0 = Math.min(x0, big[i]); x1 = Math.max(x1, big[i]); y0 = Math.min(y0, big[i + 1]); y1 = Math.max(y1, big[i + 1]); }
+  const inside = (x, y) => rings.reduce((v, r) => { let c = false; for (let i = 0, j = r.length - 2; i < r.length; j = i, i += 2) { const xi = r[i], yi = r[i + 1], xj = r[j], yj = r[j + 1]; if ((yi > y) !== (yj > y) && x < (xj - xi)*(y - yi)/(yj - yi) + xi) c = !c; } return c ? !v : v; }, false);
+  const edge = (x, y) => { let d = Infinity; for (const r of rings) for (let i = 0; i + 3 < r.length; i += 2) { const ax = r[i], ay = r[i + 1], dx = r[i + 2] - ax, dy = r[i + 3] - ay, L = dx*dx + dy*dy, t = L ? Math.max(0, Math.min(1, ((x - ax)*dx + (y - ay)*dy)/L)) : 0; d = Math.min(d, Math.hypot(x - ax - t*dx, y - ay - t*dy)); } return d; };
+  let best = [(y0 + y1)/2, (x0 + x1)/2], far = -1;
+  for (let a = 0; a <= 24; a++) for (let b = 0; b <= 24; b++) {
+    const x = x0 + (x1 - x0)*(b + .5)/25, y = y0 + (y1 - y0)*(a + .5)/25;
+    if (!inside(x, y)) continue;
+    const d = edge(x, y); if (d > far) { far = d; best = [y, x]; }
+  }
+  return best.map(v => Math.round(v*100)/100);
+}
+
+// what kind of thing each Natural Earth feature class is, in a child's words; anything else is left out
+const REGION_KIND = {'Continent': 'continent', 'Range/mtn': 'mountains', 'Desert': 'desert', 'Plateau': 'plateau', 'Basin': 'basin', 'Plain': 'plain',
+  'Tundra': 'tundra', 'Delta': 'delta', 'Peninsula': 'peninsula', 'Pen/cape': 'peninsula', 'Valley': 'valley', 'Gorge': 'gorge', 'Wetlands': 'wetland',
+  'Island group': 'islands', 'Island': 'island', 'Isthmus': 'isthmus', 'Geoarea': 'region'};
+const MARINE_KIND = {ocean: 'ocean', sea: 'sea', bay: 'bay', gulf: 'gulf', strait: 'strait', channel: 'channel', sound: 'sound'};
+
+async function buildGeography(){
+  const ne = name => features(fetchOnce(NE + name + '.geojson', name + '.geojson'));
+  const lines = name => JSON.parse(readFileSync(fetchOnce(NE + name + '.geojson', name + '.geojson'), 'utf8')).features.map(f => ({props: f.properties,
+    parts: (f.geometry.type === 'LineString' ? [f.geometry.coordinates] : f.geometry.coordinates).map(l => Float64Array.from(l.flat()))}));
+  const countries = ne('ne_50m_admin_0_countries'), regions = ne('ne_50m_geography_regions_polys'), marine = ne('ne_50m_geography_marine_polys');
+  const peaks = JSON.parse(readFileSync(fetchOnce(NE + 'ne_10m_geography_regions_elevation_points.geojson', 'ne_10m_geography_regions_elevation_points.geojson'), 'utf8')).features;
+  const falls = JSON.parse(readFileSync(fetchOnce(NE + 'ne_50m_geography_regions_points.geojson', 'ne_50m_geography_regions_points.geojson'), 'utf8')).features.filter(f => f.properties.featurecla === 'waterfall');
+  const capitals = JSON.parse(readFileSync(fetchOnce(NE + 'ne_110m_populated_places.geojson', 'ne_110m_populated_places.geojson'), 'utf8')).features.filter(f => f.properties.FEATURECLA === 'Admin-0 capital');
+  const borders = lines('ne_50m_admin_0_boundary_lines_land'), rivers = lines('ne_50m_rivers_lake_centerlines');
+
+  const keptPeaks = peaks.filter(f => f.properties.scalerank <= 5 && f.properties.name && /mountain|depression/.test(f.properties.featurecla));
+  const titles = await wikiTitles([...countries.map(f => f.props.WIKIDATAID), ...regions.map(f => f.props.WIKIDATAID), ...marine.map(f => f.props.wikidataid),
+    ...keptPeaks.map(f => f.properties.wikidataid), ...falls.map(f => f.properties.wikidataid), ...capitals.map(f => f.properties.wikidataid)]);
+  const wiki = id => titles[id] || null;
+  const shown = (name, id) => wiki(id) ? nameOf(wiki(id)) : titleCase(name);
+  // Natural Earth's min_label is the web-map zoom a name first shows at; places carry it as `min`
+  const min = v => Math.round((+v || 0)*10)/10;
+
+  const places = [
+    ...regions.filter(f => REGION_KIND[f.props.FEATURECLA] && f.props.NAME).map(f => ({name: shown(f.props.NAME, f.props.WIKIDATAID), kind: REGION_KIND[f.props.FEATURECLA],
+      at: labelPoint(f.rings.map(r => simplify(r))), min: min(f.props.MIN_LABEL), wiki: wiki(f.props.WIKIDATAID)})),
+    ...marine.filter(f => MARINE_KIND[f.props.featurecla] && f.props.name).map(f => ({name: shown(f.props.name, f.props.wikidataid), kind: MARINE_KIND[f.props.featurecla],
+      at: labelPoint(f.rings.map(r => simplify(r))), min: min(f.props.min_label), wiki: wiki(f.props.wikidataid)})),
+    ...keptPeaks.map(f => ({name: shown(f.properties.name, f.properties.wikidataid), kind: f.properties.featurecla === 'depression' ? 'lowest' : 'peak',
+      at: [f.properties.lat_y, f.properties.long_x].map(v => Math.round(v*100)/100), min: min(f.properties.min_zoom || f.properties.scalerank), wiki: wiki(f.properties.wikidataid), elevation: +f.properties.elevation || null})),
+    ...falls.map(f => ({name: shown(f.properties.name, f.properties.wikidataid), kind: 'waterfall', at: [f.properties.lat_y, f.properties.long_x].map(v => Math.round(v*100)/100), min: min(f.properties.min_zoom), wiki: wiki(f.properties.wikidataid)})),
+    ...capitals.map(f => ({name: f.properties.NAME.replace(/\s+/g, ' '), kind: 'capital', at: [f.geometry.coordinates[1], f.geometry.coordinates[0]].map(v => Math.round(v*100)/100),
+      min: min(f.properties.MIN_LABEL || 3), wiki: wiki(f.properties.wikidataid)})),
+  ];
+  const capitalOf = new Map(capitals.map(f => [f.properties.ISO_A2, f.properties.NAME.replace(/\s+/g, ' ')]));
+  const out = {
+    credits: ['Countries, borders, rivers and place names: Natural Earth, public domain', 'Article links: Wikidata, CC0'],
+    countries: countries.map(f => ({name: english(f.props), ...(f.props.NAME !== english(f.props) && {short: f.props.NAME}), continent: f.props.CONTINENT, at: [f.props.LABEL_Y, f.props.LABEL_X].map(v => Math.round(v*100)/100),
+      min: min(f.props.MIN_LABEL), color: f.props.MAPCOLOR7, wiki: wiki(f.props.WIKIDATAID), capital: capitalOf.get(f.props.ISO_A2_EH) || null,
+      rings: f.rings.map(r => simplify(r, COUNTRY_TOLERANCE)).filter(shapely).map(hundredths)})),
+    borders: borders.flatMap(f => f.parts.map(l => hundredths(simplify(l, COUNTRY_TOLERANCE)))),
+    rivers: rivers.filter(f => f.props.name).map(f => ({name: titleCase(f.props.name_en || f.props.name), min: min(f.props.min_label || f.props.scalerank + 1), lines: f.parts.map(l => hundredths(simplify(l))).filter(l => l.length >= 4)})).filter(r => r.lines.length),
+    places,
+  };
+  writeFileSync(GEO_OUT, JSON.stringify(out));
+  console.log(`wrote ${GEO_OUT}: ${out.countries.length} countries, ${places.length} places, ${(JSON.stringify(out).length/1024).toFixed(0)} KB`);
+}
+
 build();
+await buildGeography();

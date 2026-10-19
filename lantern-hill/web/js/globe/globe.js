@@ -1,8 +1,12 @@
 // The Explorer's Globe in the Library Nook. There's no separate screen: the explorer steps up to the
-// real globe, the camera leans in, and Professor Hoot asks them to guess before he tells. Pick a
-// biome and he gives a riddle about its weather to find it by; open a food web and it pops up out
-// of the globe as a diorama with no arrows yet, for the explorer to guess who eats whom; then ask
-// what would happen if one animal disappeared. Tapping anywhere still just visits it.
+// real globe, the camera leans in, and Professor Hoot asks them to guess before he tells. It's two
+// globes in one, and the explorer picks which as they step up.
+//
+// The biome globe: pick a biome and Hoot gives a riddle about its weather to find it by; open a food
+// web and it pops up out of the globe as a diorama with no arrows yet, for the explorer to guess who
+// eats whom; then ask what would happen if one animal disappeared. Tapping anywhere just visits it.
+// The geography globe is the real Earth from space, and lives in real-earth.js; this file keeps
+// the room globe, the camera and the hands for both.
 // Loaded the first time someone uses the globe; once the map is painted, the globe keeps it.
 
 import * as THREE from 'three';
@@ -22,10 +26,11 @@ import { closeDialog, convo, endConvo, story } from '../ui/dialogue.js';
 import { clearMarks, dioramaSize, growArrows, hideDiorama, markAnimal, pickAnimal, restore, selectAnimal, showDiorama, spotlight, updateDiorama, vanish } from './diorama.js';
 import { eatenBy, hunter, makers, whatIf } from './food-web.js';
 import { earthMap, paintGlow } from './paint.js';
+import { makeRealEarth } from './real-earth.js';
 
 const css = document.createElement('style');
 css.textContent = `
-.globing .hud .plate,.globing .hud .keys,.globing #stick,.globing #talk,.globing .use,.globing #prompt{display:none!important}
+.globing .hud .plate,.globing .hud .keys,.globing .hud .hudbtns,.globing #stick,.globing #talk,.globing .use,.globing #prompt{display:none!important}
 #globeHud{position:fixed;inset:0;pointer-events:none;padding:calc(10px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) env(safe-area-inset-bottom,0px) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:8px;animation:fadein .4s ease-out}
 #globeHud button{pointer-events:auto;cursor:pointer;font-family:var(--body)}
 #globeHud button:focus-visible{outline:3px solid var(--parch);outline-offset:3px}
@@ -34,9 +39,18 @@ css.textContent = `
 .gh-title .sub{font-weight:900;font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--gold)}
 .gh-title h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(18px,4.4vw,23px);line-height:1.1;color:var(--parch);white-space:nowrap}
 .gh-btns{display:flex;justify-content:flex-end;gap:8px}
+.gmode{display:flex;gap:4px;margin-top:5px}
+.gmode button{font-weight:900;font-size:12px;color:var(--parch);background:rgba(26,19,32,.6);border:2px solid rgba(217,164,65,.5);border-radius:999px;padding:2px 9px}
+.gmode button[aria-pressed=true]{background:var(--gold);color:var(--ink);border-color:var(--gold)}
+#gCard .gpick{display:flex;flex-direction:column;gap:8px}
+#gCard .gpick button{text-align:left;font-family:var(--body);color:var(--ink);background:#fbf4e2;border:3px solid var(--ink);border-radius:14px;padding:9px 12px;box-shadow:0 3px 0 var(--ink)}
+#gCard .gpick button.last{border-color:var(--plum);box-shadow:0 0 0 3px var(--gold),0 3px 0 var(--ink)}
+#gCard .gpick b{display:block;font-family:var(--display);font-weight:400;font-size:19px}
+#gCard .gpick span{display:block;font-weight:800;font-size:13px;line-height:1.35;color:#5a4a5e}
 .gpill{white-space:nowrap;font-weight:900;font-size:13px;color:var(--parch);background:rgba(26,19,32,.82);border:2px solid var(--gold);border-radius:999px;padding:5px 12px;box-shadow:0 0 0 3px var(--ink)}
 #gCard{pointer-events:auto;position:absolute;right:max(16px,env(safe-area-inset-right,0px));top:calc(74px + env(safe-area-inset-top,0px));width:min(350px,38vw);max-height:calc(100% - 74px - 92px - env(safe-area-inset-top,0px));overflow:auto;box-sizing:border-box;background:linear-gradient(180deg,#f6ecd6,#ecdcb8);color:var(--ink);border:3px solid var(--gold);border-radius:18px;box-shadow:0 0 0 4px var(--ink),0 14px 30px rgba(0,0,0,.4);padding:12px 15px 14px;display:flex;flex-direction:column;gap:8px}
 .talking #gCard{max-height:calc(100% - 74px - 210px - env(safe-area-inset-top,0px))}
+#gCard>*{flex-shrink:0}
 #gCard .gtop{display:flex;gap:11px;align-items:center}
 #gCard .gicon{flex:none;width:48px;height:48px;border-radius:50%;display:grid;place-items:center;font-size:26px;background:var(--c,#2a5b8c);border:3px solid var(--ink)}
 #gCard .gkind{font-size:12px;font-weight:900;letter-spacing:1.2px;text-transform:uppercase;color:#6d3b5e}
@@ -79,25 +93,28 @@ css.textContent = `
 #gtoast{position:absolute;left:50%;top:44%;transform:translateX(-50%);background:#efe0bf;color:var(--ink);border:3px solid var(--gold);border-radius:14px;box-shadow:0 0 0 4px var(--ink);padding:6px 18px 8px;text-align:center;white-space:nowrap;pointer-events:none;animation:bannerIn 3s ease both;z-index:2}
 #gtoast b{display:block;font-family:var(--display);font-weight:400;font-size:clamp(17px,4.5vw,22px)}
 #gtoast small{font-weight:900;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#6d3b5e}
-@media (max-aspect-ratio:1/1){#gCard{left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));width:auto;top:calc(68px + env(safe-area-inset-top,0px));max-height:38%}
+@media (max-aspect-ratio:1/1){#gCard{left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));width:auto;top:calc(96px + env(safe-area-inset-top,0px));max-height:36%}
   .talking #gCard{max-height:38%}#gCard{padding:9px 12px 11px;gap:6px}#gCard .gicon{width:36px;height:36px;font-size:19px}#gCard h3{font-size:18px}
   #gCard p{font-size:14px}#gCard .gask{font-size:15px}.gstrip button{width:34px;height:34px;font-size:18px}.gcredit{display:none}}
 @media (prefers-reduced-motion:reduce){#globeHud,#gtoast{animation:none}}`;
 document.head.appendChild(css);
 
 const hud = document.createElement('div'); hud.id = 'globeHud'; hud.hidden = true;
-hud.innerHTML = `<div class="gh-top"><div class="gh-title"><div class="sub">Library Nook</div><h2>Explorer's Globe</h2></div>
+hud.innerHTML = `<div class="gh-top"><div class="gh-title"><div class="sub">Library Nook</div><h2>Explorer's Globe</h2>
+    <div class="gmode" role="group" aria-label="Which globe"><button data-m="biomes">🌿 Biomes</button><button data-m="geo">🗺️ Geography</button></div></div>
     <div class="gh-btns"><button class="gpill" id="gBack" hidden aria-label="Back to the globe">← Globe</button><button class="gpill" id="gLeave">Step away</button></div></div>
   <aside id="gCard" aria-live="polite"></aside>
   <div class="gcredit" id="gCredit"></div>
-  <div class="gbar"><span class="gfound" id="gFound"></span><div class="gchips" id="gChips" role="group" aria-label="Biomes to find"></div></div>`;
+  <div class="gbar"><span class="gfound" id="gFound"></span><div class="gchips" id="gChips" role="group" aria-label="Riddles"></div></div>`;
 document.body.appendChild(hud);
 const $g = id => hud.querySelector('#' + id), card = $g('gCard');
 
 const stored = load('globe') || {}, list = v => Array.isArray(v) ? v : [];
 const found = new Set(list(stored.found)), learned = new Set(list(stored.webs));
 let met = !!stored.met;
-const keep = () => save('globe', {found: [...found], webs: [...learned], met});
+// what the geography globe keeps: the wonders found, its lens, and which globe was picked last
+const store = {wonders: new Set(list(stored.wonders)), lens: stored.lens, metGeo: !!stored.metGeo, mode: stored.mode === 'geo' ? 'geo' : 'biomes'};
+const keep = () => save('globe', {found: [...found], webs: [...learned], met, wonders: [...store.wonders], lens: store.lens, metGeo: store.metGeo, mode: store.mode});
 const ALL = Object.keys(BIOMES);
 const H = text => ['hoot', text];
 const tune = (notes, o = {}) => notes.forEach((f, i) => Sound.tone(f, {type: 'triangle', t: i*(o.gap || .08), dur: o.dur || .2, vol: o.vol || .06}));
@@ -121,24 +138,37 @@ function facing(lat, lon, d){
   const s = new THREE.Vector3(cl*Math.sin(phi), Math.sin(lat*RAD), cl*Math.cos(phi));
   return {pitch: Math.atan2(d.z, d.y) - Math.atan2(s.z, s.y), yaw: phi - Math.atan2(Math.cos(lon*RAD), -Math.sin(lon*RAD))};
 }
-const view = {yaw: -Math.PI/2, pitch: 20*RAD, zoom: 1, orbit: 0, vyaw: 0, vpitch: 0, fly: null, idle: true, shrink: 0};
+// zoom moves the camera in on the biome globe; mag narrows its lens on the geography globe, which
+// leans in far closer than the camera could go without passing through the room's near plane
+const view = {yaw: -Math.PI/2, pitch: 20*RAD, zoom: 1, mag: 1, orbit: 0, vyaw: 0, vpitch: 0, fly: null, idle: true, shrink: 0};
 
 // ---------- the world model and the map ----------
-let earth = null, here = null, glowFor = null;
+let earth = null, here = null, glowFor = null, biomeSkin = null;
 function loadMap(){
   earthMap().then(({earth: e, map}) => {
-    if (!earth) { earth = e; globeBall.material = T(0xffffff, {map}); $g('gCredit').textContent = e.credits.join(' · '); }
+    if (!earth) { earth = e; biomeSkin = T(0xffffff, {map}); }
+    if (G && G.kind === 'biomes') showBiomes();
     if (G) draw();
   }, () => { if (G) card.innerHTML = '<div class="ghint">The map is lost! Step away and try again.</div>'; });
 }
+function showBiomes(){ if (biomeSkin) { globeBall.material = biomeSkin; $g('gCredit').textContent = earth.credits.join(' · '); } }
 
 // ---------- stepping up to the globe and away ----------
 let G = null;   // while the explorer is at the globe: {seated, mode: 'globe'|'web', hunt, lesson}
 export function openGlobe(){
   if (G || !sitDown({x: GLOBE.x, z: GLOBE.z + .95, angle: Math.PI, pose: () => {}, seated})) return;
   closeDialog(); for (const k in keys) keys[k] = false;
-  G = {seated: false, mode: 'globe', hunt: null, lesson: null};
+  G = {seated: false, kind: store.mode, picking: true, mode: 'globe', hunt: null, lesson: null};
   if (!earth) loadMap();
+  smooth();
+}
+// the room's globe is a low-poly ball, which shows its corners once the geography globe leans in
+let smoothed = false;
+function smooth(){
+  if (smoothed) return; smoothed = true;
+  const ball = new THREE.SphereGeometry(R, 128, 96);
+  for (const m of [globeBall, ...globeBall.children]) if (m.geometry && m.geometry === globeBall.geometry && m !== globeBall) m.geometry = ball;
+  globeBall.geometry = ball;
 }
 function seated(){
   if (!G) return;
@@ -146,15 +176,45 @@ function seated(){
   // the explorer would stand between the camera and the globe; their view is the camera's now
   hero.root.visible = false; blob.visible = false; globeRing.rotation.y = 0;
   document.documentElement.classList.add('globing'); hud.hidden = false;
-  view.idle = !here; chips(); draw(); Sound.open();
-  if (!met) { met = true; keep();
-    story([H("Hoo-hoo! You found my Explorer's Globe, {name}. Every colour on it is a biome: a kind of home, with its own weather, plants and animals."),
-      H("Spin it and tap anywhere to see what lives there. Or pick a biome at the bottom, and I'll give you a riddle to find it!")]); }
+  view.idle = !here; modeButtons(); chips(); draw(); Sound.open();
+}
+// which globe: asked every time the explorer steps up, with the last one picked marked
+function pick(kind){
+  if (!G) return;
+  const was = G.picking ? null : G.kind;
+  G.picking = false; G.kind = store.mode = kind; keep(); modeButtons();
+  if (was === kind) return draw();
+  if (convo) endConvo(false);
+  view.vyaw += 9; view.idle = false; view.fly = null; tune(kind === 'geo' ? [523, 659, 784] : [784, 659, 523], {gap: .07, dur: .14, vol: .05});
+  if (kind === 'geo') {
+    stopHunt(); backToGlobe(); glow.visible = false; pin.visible = false; view.zoom = 1;
+    real.enter();
+  } else {
+    real.leave(); view.mag = 1; pin.visible = false; showBiomes();
+    if (!met) { met = true; keep();
+      story([H("Hoo-hoo! This is my biome globe, {name}. Every colour on it is a biome: a kind of home, with its own weather, plants and animals."),
+        H("Spin it and tap anywhere to see what lives there. Or pick a biome at the bottom, and I'll give you a riddle to find it!")]); }
+  }
+  chips(); draw();
+}
+function modeButtons(){
+  hud.querySelectorAll('.gmode button').forEach(b => b.setAttribute('aria-pressed', !!G && !G.picking && b.dataset.m === G.kind));
+  hud.querySelector('.gbar').hidden = !G || G.picking;
+}
+hud.querySelectorAll('.gmode button').forEach(b => b.addEventListener('click', () => pick(b.dataset.m)));
+function drawPick(){
+  card.style.removeProperty('--c');
+  const tile = (m, title, words) => `<button data-m="${m}" class="${store.mode === m ? 'last' : ''}"><b>${title}</b><span>${words}</span></button>`;
+  card.innerHTML = `<div class="gtop"><span class="gicon" aria-hidden="true">🦉</span><div><div class="gkind">Professor Hoot asks</div><h3>Which globe today?</h3></div></div>
+    <div class="gpick">${tile('biomes', '🌿 Biomes', 'Who lives where, and who eats whom. Riddles and pop-up food webs.')}
+      ${tile('geo', '🗺️ Geography', 'The real Earth from space: countries, mountains and rivers, wonders of the world, and real photos of the animals that live there.')}</div>`;
+  card.querySelectorAll('.gpick button').forEach(b => b.addEventListener('click', () => pick(b.dataset.m)));
 }
 function leave(){
   if (!G) return;
   if (convo) endConvo(true);
-  G = null; held.clear(); hideDiorama(); pin.visible = false; glow.visible = false;
+  G = null; held.clear(); hideDiorama(); pin.visible = false; glow.visible = false; real.leave(); view.mag = 1;
+  camera.zoom = 1; camera.updateProjectionMatrix();
   hud.hidden = true; document.documentElement.classList.remove('globing');
   hero.root.visible = true; blob.visible = true; globeRing.rotation.y = Math.PI/2; steer(false); standUp();
   Sound.close();
@@ -174,15 +234,18 @@ function openArea(){
   return a;
 }
 function aimCamera(){
-  const web = G.mode === 'web' && dioramaSize(), a = openArea();
+  const web = G.mode === 'web' && dioramaSize(), a = openArea(), geo = G.kind === 'geo' && !G.picking;
   const el = web ? .62 : .1, turn = web ? view.orbit : 0;
   if (web) camAt.set(GLOBE.x, .7 + web.top*.42, GLOBE.z); else camAt.copy(center);
-  const rho = (web ? web.radius*1.02 : .5)*view.zoom;
+  const rho = web ? web.radius*1.02*view.zoom : geo ? .5 : .5*view.zoom;
+  const mag = geo ? view.mag : 1;
+  if (camera.zoom !== mag) { camera.zoom = mag; camera.updateProjectionMatrix(); }
   back.set(Math.sin(turn)*Math.cos(el), Math.sin(el), Math.cos(turn)*Math.cos(el));
   right.set(Math.cos(turn), 0, -Math.sin(turn)); up.crossVectors(back, right);
   // far enough back that it fits the open area, and shifted so it sits in the middle of it; seen
-  // from above, the diorama is wider than it is tall on screen
-  const tanH = Math.tan(camera.fov*RAD/2), dist = rho*innerHeight/(Math.min(a.r - a.l, (a.b - a.t)/(web ? .78 : 1))*.94*tanH);
+  // from above, the diorama is wider than it is tall on screen. Leaning in on the geography globe
+  // narrows the lens and leaves the camera standing where the whole globe fits.
+  const tan0 = Math.tan(camera.fov*RAD/2), tanH = tan0/mag, dist = rho*innerHeight/(Math.min(a.r - a.l, (a.b - a.t)/(web ? .78 : 1))*.94*tan0);
   const nx = (a.l + a.r)/innerWidth - 1, ny = 1 - (a.t + a.b)/innerHeight, halfH = dist*tanH, halfW = halfH*camera.aspect;
   camLook.copy(camAt).addScaledVector(right, -nx*halfW).addScaledVector(up, -ny*halfH);
   camPos.copy(camLook).addScaledVector(back, dist);
@@ -192,6 +255,8 @@ function aimCamera(){
 function draw(){
   if (!G) return;
   $g('gBack').hidden = G.mode !== 'web';
+  if (G.picking) return drawPick();
+  if (G.kind === 'geo') return real.draw();
   if (!earth) { card.style.removeProperty('--c'); card.innerHTML = '<div class="ghint">Unrolling the map…</div>'; return; }
   if (G.mode === 'web') return drawWeb();
   if (G.hunt) return drawHunt();
@@ -211,13 +276,21 @@ const btn = (id, text, cls = 'gb') => `<button class="${cls}" id="${id}">${text}
 const on = (id, f) => { const b = $g(id); if (b) b.addEventListener('click', f); };
 
 function chips(){
+  if (G && G.kind === 'geo') return real.chips();
   $g('gFound').textContent = `${found.size} of ${ALL.length} found`;
-  $g('gChips').replaceChildren(...ALL.map(id => {
-    const b = BIOMES[id], c = document.createElement('button');
-    c.className = 'gchip' + (found.has(id) ? ' found' : '') + (G && G.hunt && G.hunt.id === id ? ' hunting' : ''); c.style.setProperty('--c', b.color);
-    c.innerHTML = `<i aria-hidden="true">${b.icon}</i>${b.name}`;
-    c.setAttribute('aria-label', found.has(id) ? `Go to the ${b.name}` : `Riddle: find the ${b.name}`);
-    c.addEventListener('click', () => { if (!earth || !G) return; if (found.has(id)) { stopHunt(); backToGlobe(); visitPlace(earth.placeAt(...visit(id))); } else startHunt(id); });
+  showChips(ALL.map(id => {
+    const b = BIOMES[id];
+    return {icon: b.icon, text: b.name, color: b.color, found: found.has(id), hunting: !!(G && G.hunt && G.hunt.id === id),
+      label: found.has(id) ? `Go to the ${b.name}` : `Riddle: find the ${b.name}`,
+      go: () => { if (!earth || !G) return; if (found.has(id)) { stopHunt(); backToGlobe(); visitPlace(earth.placeAt(...visit(id))); } else startHunt(id); }};
+  }));
+}
+function showChips(items){
+  $g('gChips').replaceChildren(...items.map(it => {
+    const c = document.createElement('button');
+    c.className = 'gchip' + (it.found ? ' found' : '') + (it.hunting ? ' hunting' : ''); if (it.color) c.style.setProperty('--c', it.color);
+    c.innerHTML = `<i aria-hidden="true">${it.icon}</i>${it.text}`;
+    c.setAttribute('aria-label', it.label); c.addEventListener('click', it.go);
     return c;
   }));
 }
@@ -226,7 +299,10 @@ function chips(){
 function dropPin(lat, lon){
   pin.position.copy(surface(lat, lon)).multiplyScalar(R); pin.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), surface(lat, lon)); pin.visible = true; pin.t = 0;
 }
-function flyTo(lat, lon){ view.fly = facing(lat, lon, camPos.clone().sub(center).normalize()); view.idle = false; }
+// The camera stands off to one side, to leave the globe in the middle of what the HUD leaves open.
+// Leaning in narrows the view onto the camera's own axis, so a place to lean in on is turned to face
+// along that axis, or the offset, magnified, would leave it off the side of the screen.
+function flyTo(lat, lon, mag){ view.fly = {...facing(lat, lon, mag ? back.clone() : camPos.clone().sub(center).normalize()), mag}; view.idle = false; }
 function visitPlace(p, fly = true){
   here = p; dropPin(p.lat, p.lon); if (fly) flyTo(p.lat, p.lon); view.idle = false;
   tune([660, 990], {gap: .07, dur: .12, vol: .05});
@@ -235,9 +311,13 @@ function visitPlace(p, fly = true){
 function discover(p){
   if (found.has(p.biomeId)) return;
   found.add(p.biomeId); keep(); chips();
-  const t = document.createElement('div'); t.id = 'gtoast'; t.innerHTML = `<small>New biome found · ${found.size} of ${ALL.length}</small><b>${p.biome.icon} ${p.biome.name}</b>`;
-  hud.querySelector('#gtoast')?.remove(); hud.append(t); setTimeout(() => t.remove(), 3100);
+  toast(`New biome found · ${found.size} of ${ALL.length}`, `${p.biome.icon} ${p.biome.name}`);
   tune([523, 659, 784, 1046], {dur: .25, vol: .07});
+}
+function toast(small, big){
+  const t = document.createElement('div'); t.id = 'gtoast'; t.innerHTML = '<small></small><b></b>';
+  t.querySelector('small').textContent = small; t.querySelector('b').textContent = big;
+  hud.querySelector('#gtoast')?.remove(); hud.append(t); setTimeout(() => t.remove(), 3100);
 }
 
 // ---------- Hoot's riddles: find a biome from its weather ----------
@@ -436,6 +516,17 @@ function runWhatIf(){
 }
 function endWhatIf(){ if (convo) endConvo(false); restore(); G.lesson = {step: 'explore', sel: null}; selectAnimal(null); draw(); }
 
+// ---------- the geography globe, and what it borrows from the room ----------
+const real = makeRealEarth({card, hud, globeBall, R, surface, store, view, keep, toast, tune, H, story, btn, on,
+  earth: () => earthMap().then(m => m.earth),
+  endTalk: () => { if (convo) endConvo(false); },
+  credit: text => { $g('gCredit').textContent = text; },
+  setColor: c => c ? card.style.setProperty('--c', c) : card.style.removeProperty('--c'),
+  dropPin, hidePin: () => { pin.visible = false; }, flyTo,
+  found: text => { $g('gFound').textContent = text; }, chips: showChips, redraw: () => draw(),
+  // the geography globe's way into a food web: over to the biome globe, at the same spot
+  openWebAt: p => { pick('biomes'); here = p; dropPin(p.lat, p.lon); openWeb(); }});
+
 // ---------- spinning, tapping and zooming ----------
 const pointers = new Map(), ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 let drag = null;
@@ -444,37 +535,43 @@ canvas.addEventListener('pointerdown', e => {
   if (!live()) return;
   try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
   pointers.set(e.pointerId, {x: e.clientX, y: e.clientY});
-  drag = {moved: 0, pinch: pointers.size > 1 ? pinchSpan() : 0, zoom: view.zoom};
+  drag = {moved: 0, pinch: pointers.size > 1 ? pinchSpan() : 0, zoom: view.zoom, mag: view.mag};
   view.fly = null; view.vyaw = view.vpitch = 0; view.idle = false; Sound.init();
 });
 canvas.addEventListener('pointermove', e => {
   const p = pointers.get(e.pointerId); if (!live() || !p || !drag) return;
   const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
   drag.moved += Math.hypot(dx, dy);
-  if (pointers.size > 1) { if (drag.pinch) view.zoom = clampZoom(drag.zoom*drag.pinch/pinchSpan()); return; }
+  if (pointers.size > 1) { if (drag.pinch) { if (geoOn()) view.mag = clampMag(drag.mag*pinchSpan()/drag.pinch); else view.zoom = clampZoom(drag.zoom*drag.pinch/pinchSpan()); } return; }
   if (G.mode === 'web') { view.orbit = Math.max(-1, Math.min(1, view.orbit - dx*.006)); return; }
   // a drag across the globe's width turns it about half a turn, whatever the zoom
-  const k = Math.PI/(innerHeight*.5)*view.zoom;
+  const k = Math.PI/(innerHeight*.5)*(geoOn() ? 1/view.mag : view.zoom);
   view.yaw += dx*k; view.pitch = Math.max(-PITCH, Math.min(PITCH, view.pitch + dy*k));
   view.vyaw = dx*k*60; view.vpitch = dy*k*60; view.idle = false;
 });
 const lift = e => {
   if (!pointers.delete(e.pointerId)) return;
   if (drag && drag.moved < 8 && pointers.size === 0) tap(e.clientX, e.clientY);
-  drag = pointers.size ? {moved: 99, pinch: pinchSpan(), zoom: view.zoom} : null;
+  drag = pointers.size ? {moved: 99, pinch: pinchSpan(), zoom: view.zoom, mag: view.mag} : null;
 };
 canvas.addEventListener('pointerup', lift); canvas.addEventListener('pointercancel', lift);
-canvas.addEventListener('wheel', e => { if (!live()) return; e.preventDefault(); view.zoom = clampZoom(view.zoom*(1 + Math.sign(e.deltaY)*.1)); }, {passive: false});
+canvas.addEventListener('wheel', e => {
+  if (!live()) return; e.preventDefault();
+  if (geoOn()) { view.fly = null; view.mag = clampMag(view.mag*(1 - Math.sign(e.deltaY)*.15)); } else view.zoom = clampZoom(view.zoom*(1 + Math.sign(e.deltaY)*.1));
+}, {passive: false});
 function pinchSpan(){ const [a, b] = [...pointers.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; }
 const clampZoom = z => Math.max(.4, Math.min(1, z));
+const clampMag = m => Math.max(1, Math.min(real.MAX_MAG, m));
+const geoOn = () => G && G.kind === 'geo' && !G.picking;
 function tap(x, y){
   if (!earth) return;
   const r = canvas.getBoundingClientRect(); ndc.set((x - r.left)/r.width*2 - 1, -(y - r.top)/r.height*2 + 1); ray.setFromCamera(ndc, camera);
   if (G.mode === 'web') { const name = pickAnimal(ray); if (name) tapAnimal(name); return; }
+  if (geoOn() && real.tap(x, y)) return;
   const hit = ray.intersectObject(globeBall, false)[0];
   if (hit) pressOn(earth.placeAt(hit.uv.y*180 - 90, hit.uv.x*360 - 180));
 }
-const pressOn = p => G.hunt ? guess(p) : visitPlace(p, false);
+const pressOn = p => geoOn() ? real.press(p.lat, p.lon) : G.hunt ? guess(p) : visitPlace(p, false);
 // whatever faces the explorer, for visiting from the keyboard
 function middle(){
   const c = center.clone().project(camera); ndc.set(c.x, c.y); ray.setFromCamera(ndc, camera);
@@ -490,7 +587,7 @@ hqAnims.push(dt => {
   updateDiorama(dt);
   if (!G || !G.seated) return;
   aimCamera();
-  const turn = 1.6*dt*view.zoom;
+  const turn = 1.6*dt*(geoOn() ? 1/view.mag : view.zoom);
   if (G.mode === 'globe') {
     if (held.has('ArrowLeft')) view.yaw += turn; if (held.has('ArrowRight')) view.yaw -= turn;
     if (held.has('ArrowUp')) view.pitch += turn; if (held.has('ArrowDown')) view.pitch -= turn;
@@ -499,15 +596,20 @@ hqAnims.push(dt => {
   if (view.fly) {
     const k = Math.min(1, dt*4), dy = wrap(view.fly.yaw - view.yaw), dp = view.fly.pitch - view.pitch;
     view.yaw += dy*k; view.pitch += dp*k;
-    if (Math.abs(dy) + Math.abs(dp) < .002) view.fly = null;
+    // swing round first, then lean in once it's turned to face the explorer
+    const dm = view.fly.mag && Math.abs(dy) + Math.abs(dp) < .3 ? Math.log(view.fly.mag/view.mag) : 0;
+    if (dm) view.mag *= Math.exp(dm*Math.min(1, dt*2.5));
+    if (Math.abs(dy) + Math.abs(dp) < .002 && Math.abs(dm) < .01) view.fly = null;
   } else if (!drag) {
     view.yaw += view.vyaw*dt; view.pitch += view.vpitch*dt;
     const f = Math.exp(-dt*3.5); view.vyaw *= f; view.vpitch *= f;
-    if (view.idle) view.yaw -= dt*.12;
+    if (view.idle) view.yaw -= dt*.12/view.mag;
   }
   view.pitch = Math.max(-PITCH, Math.min(PITCH, view.pitch));
   globeBall.rotation.set(view.pitch, view.yaw, 0);
-  if (pin.visible) { pin.t += dt; pin.scale.setScalar(1 + Math.max(0, 1 - pin.t*3)*Math.sin(pin.t*20)*.4); }
+  real.frame(dt, !drag && !view.fly && !held.size && Math.abs(view.vyaw) + Math.abs(view.vpitch) < .02);
+  // the pin keeps its size on screen as the geography globe leans in, or it would cover a country
+  if (pin.visible) { pin.t += dt; pin.scale.setScalar((1 + Math.max(0, 1 - pin.t*3)*Math.sin(pin.t*20)*.4)/(geoOn() ? view.mag : 1)); }
   if (glow.visible) glow.material.opacity = .55 + Math.sin(performance.now()/260)*.3;
 });
 
@@ -516,12 +618,13 @@ addEventListener('keydown', e => {
   if (!live() || convo) return;
   e.stopPropagation();
   const k = e.key;
-  if (k === 'Escape') { if (G.mode === 'web') { if (G.lesson.step.startsWith('whatif')) endWhatIf(); else backToGlobe(); } else if (G.hunt) stopHunt(); else leave(); return; }
+  if (k === 'Escape') { if (G.mode === 'web') { if (G.lesson.step.startsWith('whatif')) endWhatIf(); else backToGlobe(); } else if (G.hunt) stopHunt(); else if (!(geoOn() && real.back())) leave(); return; }
+  if (geoOn() && (k === '+' || k === '=' || k === '-' || k === '_')) { real.zoomBy(k === '+' || k === '=' ? 2 : .5); return; }
   if ((k === 'm' || k === 'M') && !e.repeat) { setSound(!Sound.isOn()); return; }
   if (k.startsWith('Arrow')) {
     e.preventDefault(); held.add(k);
     // a tap is over before the next frame sees it held, so each fresh press turns things a notch too
-    if (!e.repeat) { const n = .12*view.zoom; view.fly = null; view.idle = false;
+    if (!e.repeat) { const n = .12*(geoOn() ? 1/view.mag : view.zoom); view.fly = null; view.idle = false;
       if (G.mode === 'web') { if (k === 'ArrowLeft') view.orbit = Math.min(1, view.orbit + n); if (k === 'ArrowRight') view.orbit = Math.max(-1, view.orbit - n); }
       else { if (k === 'ArrowLeft') view.yaw += n; if (k === 'ArrowRight') view.yaw -= n; if (k === 'ArrowUp') view.pitch += n; if (k === 'ArrowDown') view.pitch -= n; } }
   }
