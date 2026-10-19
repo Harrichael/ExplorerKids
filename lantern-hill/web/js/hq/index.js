@@ -17,7 +17,7 @@ import { bFlush } from '../core/kit.js';
 import { addUsable } from '../core/world.js';
 import { game } from '../state.js';
 import { openWardrobe } from '../ui/wardrobe.js';
-import { LAB_DESK, WINDOW_SEAT } from './cottage.js';
+import { ARMCHAIRS, LAB_DESK, WINDOW_SEAT } from './cottage.js';
 import { BED } from '../garden/bed.js';
 import { BENCH } from './garden-life.js';
 import { PLAT, groundAt } from './garden.js';
@@ -53,6 +53,10 @@ async function borrowBook(){
 async function sitInWindow(){
   const { sitInWindow } = await import('../library/nook.js');
   sitInWindow();
+}
+async function sitInChair(c){
+  const { sitInChair } = await import('./armchairs.js');
+  sitInChair(c);
 }
 async function openTower(){
   const { openTower } = await import('../tower/block-tower.js');
@@ -93,6 +97,8 @@ HQ.read = async item => {
   const { openReader } = await import('../library/reader.js');
   openReader(item.id, game.reach.includes(windowSeat) ? 'window' : 'here');
 };
+for (const c of ARMCHAIRS) addUsable(HQ, {name:'Armchair', x:c.x + Math.sin(c.ry)*.95, z:c.z + Math.cos(c.ry)*.95, range:1.2, verb:'Sit by the fire', short:'Sit',
+  glow:[c.x, 1.2, c.z], action: () => sitInChair(c)});
 addUsable(HQ, {name:'Toy crane', x:PLAY.x, z:PLAY.z + 1.2, range:1.4, verb:'Build a block tower', short:'Build', glow:[PLAY.x, 1.0, PLAY.z], action:openTower});
 addUsable(HQ, {name:'Experiment desk', x:LAB_DESK.x, z:LAB_DESK.z + 1.05, range:1.2, verb:'Do an experiment', short:'Lab', glow:[LAB_DESK.x, 1.35, LAB_DESK.z + .1], action:openLab});
 addUsable(HQ, {name:'Wonder Bus', x:15.9, z:3.6, range:1.9, verb:'Board the Wonder Bus', short:'Board', glow:[15.6, 2.9, 5.5], action:boardWonderBus});
