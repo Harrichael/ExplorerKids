@@ -14,7 +14,7 @@ import { camera, canvas } from '../core/render.js';
 import { Sound } from '../core/sound.js';
 import { loadGeography } from '../earth/geography.js';
 import { makeCountries } from './countries.js';
-import { closeUp, wholeEarth } from './imagery.js';
+import { LENSES, closeUp, wholeEarth } from './imagery.js';
 import { makeNames } from './names.js';
 import { makeNature } from './nature.js';
 import { article, photoCredit, pictures } from './photos.js';
@@ -135,6 +135,14 @@ export function makeRealEarth(room){
     try {
       await load();
       if (!textures.has(key)) textures.set(key, wholeEarth(l, maps));
+      // a live lens waits on its data, which can be slow; NASA's plain photo of the Earth stands in
+      if (l.data) {
+        const base = LENSES[0];
+        if (!textures.has(base.id)) textures.set(base.id, wholeEarth(base, maps));
+        Promise.race([textures.get(key).then(() => null), textures.get(base.id)]).then(t => {
+          if (t && lens === l && g === was && g.on && globeBall.material !== skin) { skin.map = t; skin.needsUpdate = true; globeBall.material = skin; }
+        }, () => {});
+      }
       const t = await textures.get(key);
       if (lens !== l || g !== was || !g.on) return;
       skin.map = t; skin.needsUpdate = true; globeBall.material = skin;
