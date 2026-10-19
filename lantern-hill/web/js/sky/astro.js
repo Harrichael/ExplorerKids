@@ -101,3 +101,24 @@ export function topocentric(v, lat, lst){
   const p = lat*R, t = lst*R, me = [Math.cos(p)*Math.cos(t), Math.cos(p)*Math.sin(t), Math.sin(p)].map(x => x*6378.14);
   return v.map((x, i) => x - me[i]);
 }
+
+// Jupiter's four big moons (Meeus, Astronomical Algorithms ch. 44, the shorter method). For each, u
+// is how far round its orbit it has gone, counted from straight in front of Jupiter as the Earth sees
+// it, and r its distance from Jupiter's centre in Jupiter's equatorial radii.
+export function galilean(ms){
+  const d = days(ms), s = x => Math.sin(x*R), c = x => Math.cos(x*R);
+  const V = 172.74 + .00111588*d, M = 357.529 + .9856003*d;
+  const N = 20.02 + .0830853*d + .329*s(V), J = 66.115 + .9025179*d - .329*s(V);
+  const A = 1.915*s(M) + .02*s(2*M), B = 5.555*s(N) + .168*s(2*N), K = J + A - B;
+  const sunEarth = 1.00014 - .01671*c(M) - .00014*c(2*M), sunJupiter = 5.20872 - .25208*c(N) - .00611*c(2*N);
+  const away = Math.sqrt(sunJupiter**2 + sunEarth**2 - 2*sunJupiter*sunEarth*c(K)), psi = Math.asin(sunEarth/away*s(K))/R;
+  // seen as they were when the light left, the better part of an hour ago
+  const t = d - away/173;
+  const u = [163.8069 + 203.4058646*t, 358.414 + 101.2916335*t, 5.7176 + 50.234518*t, 224.8092 + 21.48798*t].map(x => x + psi - B);
+  const G = 331.18 + 50.310482*t, H = 87.45 + 21.569231*t;
+  return [
+    {u:u[0] + .473*s(2*(u[0] - u[1])), r:5.9057 - .0244*c(2*(u[0] - u[1]))},
+    {u:u[1] + 1.065*s(2*(u[1] - u[2])), r:9.3966 - .0882*c(2*(u[1] - u[2]))},
+    {u:u[2] + .165*s(G), r:14.9883 - .0216*c(G)},
+    {u:u[3] + .843*s(H), r:26.3627 - .1939*c(H)}];
+}

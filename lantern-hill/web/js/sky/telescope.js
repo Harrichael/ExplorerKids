@@ -19,7 +19,7 @@ import { load, save } from '../save.js';
 import { game } from '../state.js';
 import { closeDialog } from '../ui/dialogue.js';
 import { parallactic, siderealTime, sunAltitude, toHorizon, toSky } from './astro.js';
-import { BODIES, PLANETS, sight } from './bodies.js';
+import { BODIES, MOONS, PLANETS, sight } from './bodies.js';
 import { localTime, tonight, where } from './observer.js';
 import * as upClose from './up-close.js';
 
@@ -52,6 +52,11 @@ const LENSES = [
     tip:'The strongest light there is, from black holes and spinning dead stars.', credit:'Fermi (NASA, DOE)'}
 ];
 const lensBy = id => LENSES.find(l => l.id === id) || LENSES[0];
+// The lenses for light no eye can see open once a kid has spent a while at the telescope: the
+// treat for coming back, after Pip's magic trip at twelve minutes
+const DEEP = 22*60, UNSEEN = ['micro', 'ir', 'uv', 'xray', 'gamma'];
+const looked = () => view.seconds + (game.activity === 'telescope' ? (Date.now() - since)/1000 : 0);
+const locked = l => UNSEEN.includes(l.id) && looked() < DEEP;
 
 const COLOR = {O:'a blue-white star, far hotter than our Sun', B:'a blue-white star, far hotter than our Sun', A:'a white star, hotter than our Sun',
   F:'a yellow-white star, a little hotter than our Sun', G:'a yellow star, just like our Sun', K:'an orange star, a bit cooler than our Sun', M:'a red star, cooler than our Sun'};
@@ -103,6 +108,11 @@ css.textContent = `
 #scope .lenses::-webkit-scrollbar{display:none}
 #scope .lens{flex:none;font-family:var(--body);font-weight:900;font-size:14px;color:var(--parch);background:rgba(26,19,32,.82);border:2px solid rgba(217,164,65,.55);border-radius:999px;padding:7px 14px;cursor:pointer;box-shadow:0 0 0 2px var(--ink)}
 #scope .lens[aria-pressed=true]{background:var(--gold);color:var(--ink);border-color:var(--gold)}
+#scope .lens,#scope .mode{background-image:linear-gradient(var(--gold),var(--gold));background-repeat:no-repeat;background-size:0 100%;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
+#scope .lens.holding,#scope .mode.holding{background-size:100% 100%;transition:background-size .6s linear;color:var(--ink)}
+#scope .holdhint{width:max-content;margin:0 auto 6px;padding:4px 12px;border-radius:999px;background:rgba(26,19,32,.92);border:2px solid var(--gold);color:var(--parch);font-weight:900;font-size:13px;animation:fadein .2s ease-out}
+#scope .lens.locked{opacity:.45;border-style:dashed}
+#scope .lens.locked::after{content:' 🔒';font-size:11px}
 #scope .lens i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
 #scope .gap{flex:none;width:2px;height:24px;background:rgba(217,164,65,.4);margin:0 4px}
 #scope .lenses[hidden]{display:none}
@@ -128,30 +138,84 @@ el.innerHTML = `<div id="scopeSky"></div><canvas id="scopeNames"></canvas><div c
     <div class="tools"><button class="sb" id="sFind" hidden>Find in sky</button><button class="sb ghost" id="sNames" aria-pressed="true">Names</button><button class="sb ghost" id="sClose">Close</button></div></header>
   <div class="zoom"><button class="sb" id="sIn" aria-label="Zoom in">+</button><div class="like" id="sLike"></div><button class="sb" id="sOut" aria-label="Zoom out">−</button></div>
   <div class="info" id="sCard" hidden></div>
-  <footer><div class="modes" role="group" aria-label="Look at"><button class="mode" data-mode="stars">Stars</button><button class="mode" data-mode="moon">Moon</button><button class="mode" data-mode="planets">Planets</button></div>
+  <footer><div class="holdhint" id="sHold" hidden>Press and hold to switch</div><div class="modes" role="group" aria-label="Look at"><button class="mode" data-mode="stars">Stars</button><button class="mode" data-mode="moon">Moon</button><button class="mode" data-mode="planets">Planets</button></div>
     <div class="lenses" id="sLenses"></div><div class="lenses" id="sPlanets" hidden></div><div class="credit" id="sCredit"></div></footer>`;
 document.body.appendChild(el);
 const $s = id => el.querySelector('#' + id);
 const skyEl = $s('scopeSky'), namesCv = $s('scopeNames'), glass = $s('scopeGlass'), card = $s('sCard');
 upClose.canvas.id = 'scopeNear'; upClose.canvas.hidden = true; skyEl.after(upClose.canvas);
 
+// Switching what the telescope shows takes a press held until the button fills, so a kid tapping
+// down the row as fast as they can changes nothing, while one who wants a view gets it. A quick
+// tap says to hold. The keyboard holds Space or Enter the same way (see the key handlers below).
+const HOLD = 600;
+function holdToPick(b, pick, now){
+  let timer = 0;
+  const start = () => {
+    if (timer || b.getAttribute('aria-pressed') === 'true') return;
+    if (now && now()) return;
+    b.classList.add('holding'); Sound.tone(440, {type:'sine', dur:.5, vol:.025});
+    timer = setTimeout(() => { timer = 0; b.classList.remove('holding'); pick(); }, HOLD);
+  };
+  const stop = () => {
+    if (!timer) return;
+    clearTimeout(timer); timer = 0; b.classList.remove('holding'); holdHint();
+  };
+  b.addEventListener('pointerdown', start);
+  for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, stop);
+  b.addEventListener('contextmenu', e => e.preventDefault());
+  b.hold = {start, stop};
+}
+let hintTimer = 0;
+function holdHint(){
+  const hint = $s('sHold'); hint.hidden = false;
+  clearTimeout(hintTimer); hintTimer = setTimeout(() => { hint.hidden = true; }, 1600);
+}
+
 const BAND_DOT = {micro:'#c0392b', ir:'#e67e22', uv:'#8e44ad', xray:'#3c6fd1', gamma:'#20b2aa'};
 for (const l of LENSES) {
   if (l.id === 'micro') { const g = document.createElement('span'); g.className = 'gap'; $s('sLenses').append(g); }
   const b = document.createElement('button'); b.className = 'lens'; b.dataset.id = l.id;
   b.innerHTML = (BAND_DOT[l.id] ? `<i style="background:${BAND_DOT[l.id]}"></i>` : '') + l.name;
-  b.addEventListener('click', () => { setLens(l.id); Sound.tone(880, {type:'triangle', dur:.08, vol:.05}); });
+  // a locked lens answers straight away; it only says why it won't turn
+  holdToPick(b, () => { setLens(l.id); Sound.tone(880, {type:'triangle', dur:.08, vol:.05}); },
+    () => { if (!locked(l)) return false; lockedCard(); return true; });
   $s('sLenses').append(b);
+}
+let shut = null;   // whether the unseen-light lenses were locked when last looked at
+function lenses(){
+  const now = locked(LENSES.find(l => l.id === 'micro'));
+  if (shut === now) return;
+  if (shut && !now) openedCard();
+  shut = now;
+  el.querySelectorAll('#sLenses .lens').forEach(b => b.classList.toggle('locked', now && UNSEEN.includes(b.dataset.id)));
+}
+function lockedCard(){
+  const left = Math.max(1, Math.ceil((DEEP - looked())/60));
+  card.innerHTML = `<em>Still locked</em><h3>Light no eye can see</h3>
+    <p>Pip’s telescope has special lenses for microwaves, infrared, ultraviolet, X-rays and gamma rays.</p>
+    <p>Keep exploring! They open after ${left} more minute${left === 1 ? '' : 's'} at the telescope.</p>
+    <div class="row"><button class="sb ghost" data-x>OK</button></div>`;
+  card.querySelector('[data-x]').addEventListener('click', () => { card.hidden = true; });
+  card.hidden = false; Sound.tone(330, {type:'triangle', dur:.15, vol:.05});
+}
+function openedCard(){
+  card.innerHTML = `<em>New lenses!</em><h3>Light no eye can see</h3>
+    <p>You’ve spent so long at Pip’s telescope that its special lenses are open: microwaves, infrared, ultraviolet, X-rays and gamma rays.</p>
+    <p>Each one shows the same sky in a light your eyes can’t see. Try them!</p>
+    <div class="row"><button class="sb ghost" data-x>OK</button></div>`;
+  card.querySelector('[data-x]').addEventListener('click', () => { card.hidden = true; });
+  card.hidden = false; [523, 659, 784, 1047].forEach((f, i) => Sound.tone(f, {type:'triangle', t:i*.1, dur:.4, vol:.05}));
 }
 
 const TINT = {mercury:'#c9b8a6', venus:'#fff1cf', mars:'#e8845a', jupiter:'#ead6ad', saturn:'#e3cf94', uranus:'#a9e2e6', neptune:'#7c98ec'};
 for (const b of PLANETS) {
   const c = document.createElement('button'); c.className = 'lens'; c.dataset.id = b.id;
   c.innerHTML = `<i style="background:${TINT[b.id]}"></i>${b.name}`;
-  c.addEventListener('click', () => { setMode('planets', b.id); Sound.tone(880, {type:'triangle', dur:.08, vol:.05}); });
+  holdToPick(c, () => { setMode('planets', b.id); Sound.tone(880, {type:'triangle', dur:.08, vol:.05}); });
   $s('sPlanets').append(c);
 }
-el.querySelectorAll('.mode').forEach(m => m.addEventListener('click', () => { setMode(m.dataset.mode); Sound.tone(660, {type:'triangle', dur:.1, vol:.05}); }));
+el.querySelectorAll('.mode').forEach(m => holdToPick(m, () => { setMode(m.dataset.mode); Sound.tone(660, {type:'triangle', dur:.1, vol:.05}); }));
 
 let A = null, aladin = null, stars = [], deepSky = [], lens = null, moc = null;
 const mocs = {}, stack = new Map();   // survey id -> {layer, at: its opacity now}
@@ -180,8 +244,8 @@ async function boot(){
 }
 
 function setLens(id){
-  const l = lensBy(id); view.lens = l.id; card.hidden = true;
-  el.querySelectorAll('.lens').forEach(b => b.setAttribute('aria-pressed', b.dataset.id === l.id));
+  const l = locked(lensBy(id)) ? LENSES[0] : lensBy(id); view.lens = l.id; card.hidden = true;
+  el.querySelectorAll('#sLenses .lens').forEach(b => b.setAttribute('aria-pressed', b.dataset.id === l.id));
   $s('sLens').textContent = l.name; $s('sTip').textContent = l.tip;
   $s('sCredit').textContent = `${l.credit} · Sky tiles: CDS Strasbourg, Aladin Lite · Star names: HYG Database (CC BY-SA)`;
   if (!aladin || lens === l) return;
@@ -232,7 +296,8 @@ function setMode(mode, planet){
   if (BODIES[planet] && planet !== 'moon') view.planet = planet;
   card.hidden = true; drawn = told = '';
   el.querySelectorAll('.mode').forEach(m => m.setAttribute('aria-pressed', m.dataset.mode === view.mode));
-  el.querySelectorAll('#sPlanets .lens').forEach(c => c.setAttribute('aria-pressed', c.dataset.id === view.planet));
+  const parent = BODIES[view.planet].around || view.planet;
+  el.querySelectorAll('#sPlanets .lens').forEach(c => c.setAttribute('aria-pressed', c.dataset.id === parent));
   const b = bodyShown();
   $s('sLenses').hidden = !!b; $s('sPlanets').hidden = view.mode !== 'planets'; $s('sLike').hidden = !!b; $s('sFind').hidden = true;
   // hidden, not removed: Aladin keeps its size and tiles for the trip back
@@ -266,10 +331,12 @@ function travelled(s){
   const m = s.late/60;
   return m < 90 ? `The light you see left it ${Math.round(m)} minutes ago.` : `The light you see left it ${Math.round(m/6)/10} hours ago.`;
 }
-function bodyCard(b, fromStars){
-  const s = sight(b, skyNow(), place), lines = [status(b, skyNow()), ...(fromStars ? b.facts.slice(0, 1) : b.facts), travelled(s)];
-  card.innerHTML = `<em>${b.id === 'moon' ? 'Our Moon' : 'Planet'}</em><h3></h3>${lines.map(t => `<p>${t}</p>`).join('')}
-    <div class="row">${fromStars ? '<button class="sb" data-go>Look closer</button>' : ''}<button class="sb ghost" data-x>OK</button></div>`;
+// closer: offer to fly up to it, from the star view or from Jupiter to one of its moons
+function bodyCard(b, closer){
+  const s = sight(b, skyNow(), place), lines = [status(b, skyNow()), ...(closer ? b.facts.slice(0, 1) : b.facts), travelled(s)];
+  const kind = b.id === 'moon' ? 'Our Moon' : b.around ? 'Moon of Jupiter' : 'Planet';
+  card.innerHTML = `<em>${kind}</em><h3></h3>${lines.map(t => `<p>${t}</p>`).join('')}
+    <div class="row">${closer ? `<button class="sb" data-go>${b.around && bodyShown() ? `Visit ${b.name}` : 'Look closer'}</button>` : ''}<button class="sb ghost" data-x>OK</button></div>`;
   card.querySelector('h3').textContent = b.name;
   card.querySelector('[data-go]')?.addEventListener('click', () => setMode(b.id === 'moon' ? 'moon' : 'planets', b.id));
   card.querySelector('[data-x]').addEventListener('click', () => { card.hidden = true; });
@@ -284,7 +351,8 @@ function placeCard(b, q){
 $s('sFind').addEventListener('click', () => {
   const b = bodyShown(); if (!b) return;
   const s = sight(b, skyNow(), place);
-  setMode('stars'); flyTo(s.ra, s.dec, Math.max(.003, s.radius*(b.rings ? 16 : 7)));
+  // a moon of Jupiter is found with Jupiter and its family in view
+  setMode('stars'); flyTo(s.ra, s.dec, b.around ? .25 : Math.max(.003, s.radius*(b.rings ? 16 : 7)));
 });
 
 // ---------- tonight, from here ----------
@@ -329,7 +397,7 @@ function drawOverlay(lst, sunAlt, ms){
     if (m.alt < hill(m.az)) continue;
     placed.push({box:[m.x - m.r, m.y - m.r, m.x + m.r, m.y + m.r], o:m.b, body:true, x:m.x, y:m.y});
     const tx = m.x + Math.max(m.r, 4) + 6, tw = g.measureText(m.b.name).width, box = [tx - 4, m.y - 10, tx + tw + 4, m.y + 10];
-    if (m.r > w/3 || placed.some(q => !q.body && box[0] < q.box[2] && box[2] > q.box[0] && box[1] < q.box[3] && box[3] > q.box[1])) continue;
+    if (m.r > w/3 || placed.some(q => q.o !== m.b && box[0] < q.box[2] && box[2] > q.box[0] && box[1] < q.box[3] && box[3] > q.box[1])) continue;
     placed.push({box, o:m.b, body:true, x:m.x, y:m.y});
     g.font = '900 14px Nunito, system-ui, sans-serif'; g.textBaseline = 'middle'; g.lineJoin = 'round';
     g.lineWidth = 3; g.strokeStyle = 'rgba(5,4,10,.85)'; g.strokeText(m.b.name, tx, m.y);
@@ -357,13 +425,22 @@ function drawOverlay(lst, sunAlt, ms){
 // The Moon and planets, drawn where they are tonight from the same picture the close-up shows,
 // turned so the zenith at their spot on the screen is up. The Moon is always drawn as a disc you can
 // see the phase of, a little bigger than life when zoomed far out; a planet is a dot until it grows.
+// Jupiter's moons are dots too, once zoomed in enough to see them apart from Jupiter.
 function drawBodies(g, w, h, lst, ms){
   const out = [];
-  for (const b of [BODIES.moon, ...PLANETS]) {
+  let jupiter = null;
+  for (const b of [BODIES.moon, ...PLANETS, ...MOONS]) {
     const s = sight(b, ms, place), p = aladin.world2pix(s.ra, s.dec);
     const r = s.radius*w/view.fov, reach = b.rings ? r*2.4 : r;
     if (!p || p[0] < -reach - 40 || p[1] < -reach - 40 || p[0] > w + reach + 40 || p[1] > h + reach + 40) continue;
     const [x, y] = p;
+    if (b.id === 'jupiter') jupiter = {x, y, r};
+    if (b.around) {
+      if (!jupiter || Math.hypot(x - jupiter.x, y - jupiter.y) < Math.max(jupiter.r, 3) + 8) continue;
+      out.push({b, x, y, r:2, alt:s.alt, az:s.az});
+      g.fillStyle = '#f3ead2'; g.beginPath(); g.arc(x, y, Math.max(1.6, r), 0, 7); g.fill();
+      continue;
+    }
     out.push({b, x, y, r:Math.max(r, b.id === 'moon' ? 6 : 3), alt:s.alt, az:s.az});
     if (b.id !== 'moon' && r < 3) {
       g.fillStyle = TINT[b.id]; g.shadowColor = TINT[b.id]; g.shadowBlur = 8;
@@ -411,7 +488,7 @@ function tap(x, y){
   const b = bodyShown();
   if (b) {
     const hit = upClose.tapped(x, y, el.clientWidth, el.clientHeight);
-    if (hit === true) bodyCard(b, false); else if (hit) placeCard(b, hit); else card.hidden = true;
+    if (!hit) card.hidden = true; else if (hit.moon) bodyCard(hit.moon, true); else if (hit.place) placeCard(b, hit.place); else bodyCard(b, false);
     return;
   }
   const hit = placed.find(q => x >= q.box[0] - 6 && x <= q.box[2] + 6 && y >= q.box[1] - 6 && y <= q.box[3] + 6);
@@ -485,7 +562,7 @@ glass.addEventListener('pointerup', lift); glass.addEventListener('pointercancel
 glass.addEventListener('wheel', e => { e.preventDefault(); zoom(e.deltaY > 0 ? 1.15 : 1/1.15); }, {passive:false});
 
 $s('sIn').addEventListener('click', () => zoom(.5)); $s('sOut').addEventListener('click', () => zoom(2));
-$s('sNames').addEventListener('click', () => { view.names = !view.names; $s('sNames').setAttribute('aria-pressed', view.names); });
+$s('sNames').addEventListener('click', () => { view.names = !view.names; $s('sNames').setAttribute('aria-pressed', view.names); upClose.refresh(); });
 $s('sClose').addEventListener('click', () => close());
 
 // Aladin redraws every frame for as long as it lives and has no off switch, so closing the telescope
@@ -506,11 +583,12 @@ function loop(now){
   if (shown !== clockShown) { clockShown = shown; $s('sWhere').textContent = `Tonight · ${place.name} · ${shown}`; }
   // the time spent looking is saved as it goes, so closing the tab doesn't lose it
   if (now - kept > 20000) { keep(); kept = now; }
+  lenses();
   raf = requestAnimationFrame(loop);
 }
 function closeUp(b, ms, dt){
   const w = el.clientWidth, h = el.clientHeight;
-  if (upClose.draw(ms, place, w, h, dt)) { const g = overlay(w, h); if (view.names) upClose.names(g, ms, place, w, h); }
+  if (upClose.draw(ms, place, w, h, dt)) upClose.names(overlay(w, h), ms, place, w, h, view.names);
   const minute = `${b.id}:${Math.floor(ms/60000)}`;
   if (minute !== told) {
     told = minute; $s('sTip').textContent = status(b, ms);
@@ -552,7 +630,7 @@ export async function openTelescope(){
   place = where(); opened = since = Date.now(); t0 = tonight(place, opened); fly = null; wantFov = view.fov;
   look(view.alt, view.az); nightNote(); clockShown = '';
   Sound.duck(true); [392, 523, 659].forEach((f, i) => Sound.tone(f, {type:'sine', t:i*.12, dur:.5, vol:.05}));
-  setMode(view.mode);
+  lenses(); setMode(view.mode);
   // the Moon and planets ship with the game, so they still work when the sky's tiles can't come down
   const sky = await boot();
   if (game.activity !== 'telescope') return;
@@ -570,10 +648,15 @@ const TURN = {ArrowLeft:[-1, 0], ArrowRight:[1, 0], ArrowUp:[0, -1], ArrowDown:[
 addEventListener('keydown', e => {
   if (game.activity !== 'telescope') return;
   e.stopPropagation();
-  if (e.key === 'Escape') { if (!card.hidden) card.hidden = true; else close(); }
+  if ((e.key === ' ' || e.key === 'Enter') && e.target.hold) { e.preventDefault(); if (!e.repeat) e.target.hold.start(); }
+  else if (e.key === 'Escape') { if (!card.hidden) card.hidden = true; else close(); }
   else if (e.key === '+' || e.key === '=') zoom(.5);
   else if (e.key === '-' || e.key === '_') zoom(2);
   // arrows turn the telescope a fifth of a screen
   else if (TURN[e.key] && bodyShown()) { e.preventDefault(); upClose.orbit(-TURN[e.key][0]*el.clientHeight/8, -TURN[e.key][1]*el.clientHeight/8); }
   else if (TURN[e.key] && aladin) { e.preventDefault(); fly = null; turn(-TURN[e.key][0]*el.clientWidth/5, -TURN[e.key][1]*el.clientWidth/5); }
+}, true);
+addEventListener('keyup', e => {
+  if (game.activity !== 'telescope' || !e.target.hold || (e.key !== ' ' && e.key !== 'Enter')) return;
+  e.preventDefault(); e.target.hold.stop();
 }, true);

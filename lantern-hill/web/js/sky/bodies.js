@@ -7,7 +7,7 @@
 // Spin comes from the IAU's rotation elements (Archinal et al. 2018), so the face a planet turns
 // toward the treehouse tonight is the face it really turns. Maps run east from 180°W, as tools/sky_maps.py makes them.
 
-import { LIGHT, geocentric, radec, siderealTime, toHorizon, topocentric } from './astro.js';
+import { LIGHT, galilean, geocentric, radec, siderealTime, toHorizon, topocentric } from './astro.js';
 
 const R = Math.PI/180;
 
@@ -74,15 +74,34 @@ export const BODIES = {
       return [299.36 + .7*Math.sin(N), 43.46 - .51*Math.cos(N), 249.978 + 541.1397757*d - .48*Math.sin(N)];
     }, map:'neptune',
     credit:'Neptune: NASA Voyager 2, via CDS',
-    facts:['The windiest planet, with winds faster than a jet plane.', 'The dark spot is a storm Voyager 2 flew past in 1989.']}
+    facts:['The windiest planet, with winds faster than a jet plane.', 'The dark spot is a storm Voyager 2 flew past in 1989.']},
+  // Jupiter's moons keep one face to Jupiter, so their spin comes from where they are, not from a rate
+  io: {id:'io', name:'Io', km:1821.6, around:'jupiter', map:'io', credit:'Io: NASA Galileo (SSI), via CDS',
+    facts:['The most volcanic world we know. Its volcanoes throw sulfur fountains hundreds of kilometres high.']},
+  europa: {id:'europa', name:'Europa', km:1560.8, around:'jupiter', map:'europa', credit:'Europa: NASA Voyager and Galileo (SSI), via CDS',
+    facts:['Under its cracked shell of ice is a deep, salty ocean, with more water than all of Earth’s oceans.']},
+  ganymede: {id:'ganymede', name:'Ganymede', km:2634.1, around:'jupiter', map:'ganymede', credit:'Ganymede: NASA Voyager and Galileo (SSI), via CDS',
+    facts:['The biggest moon in the solar system, bigger than the planet Mercury.']},
+  callisto: {id:'callisto', name:'Callisto', km:2410.3, around:'jupiter', map:'callisto', credit:'Callisto: NASA Voyager and Galileo (SSI), via CDS',
+    facts:['One of the most cratered places anywhere. Its face has hardly changed in four billion years.']}
 };
 export const PLANETS = ['mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune'].map(id => BODIES[id]);
+export const MOONS = ['io', 'europa', 'ganymede', 'callisto'].map(id => BODIES[id]);
+BODIES.jupiter.moons = MOONS;
+for (const m of MOONS) m.facts.push('Galileo spotted Jupiter’s four big moons through his own small telescope in 1610.');
+// a world's radius at its equator, which is the globe's radius in the close-up
+export const equatorial = b => b.km/(1 - (b.flat || 0)/3);
 
 // Saturn's rings, in km from its centre; the same span tools/sky_maps.py samples them over
 export const RINGS = {inner:74000, outer:140500};
 
 // the body's own axes, as directions among the stars: x through longitude 0 on its equator, y through 90°E, z its north pole
 export function axes(body, ms){
+  if (body.around) {
+    // longitude 0 is the point that faces Jupiter
+    const z = axes(BODIES[body.around], ms).z, p = aroundJupiter(body, ms), x = unit(along(p.map(v => -v), z));
+    return {x, y:cross(z, x), z};
+  }
   const d = ms/86400000 - 10957.5, [ra, dec, w] = body.spin(d, d/36525).map(v => v*R);
   const z = [Math.cos(dec)*Math.cos(ra), Math.cos(dec)*Math.sin(ra), Math.sin(dec)];
   const node = [-Math.sin(ra), Math.cos(ra), 0], ahead = cross(z, node);
@@ -99,13 +118,25 @@ export function surface(ax, lat, lon){
 }
 const cross = (a, b) => [a[1]*b[2] - a[2]*b[1], a[2]*b[0] - a[0]*b[2], a[0]*b[1] - a[1]*b[0]];
 const dot = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+const unit = a => { const n = Math.hypot(...a); return a.map(x => x/n); };
+// a with the part along the unit direction n taken out
+const along = (a, n) => { const k = dot(a, n); return a.map((x, i) => x - k*n[i]); };
+
+// where one of Jupiter's moons is, in km from Jupiter's centre, as the Earth sees it now
+export function aroundJupiter(moon, ms){
+  const m = galilean(ms)[MOONS.indexOf(moon)], jupiter = geocentric('jupiter', ms), z = axes(BODIES.jupiter, ms).z;
+  // straight in front of Jupiter, toward the Earth, along Jupiter's equator; the moons go round anticlockwise from above
+  const front = unit(along(jupiter.map(v => -v), z)), ahead = cross(z, front), k = m.r*equatorial(BODIES.jupiter), u = m.u*R;
+  return front.map((f, i) => k*(f*Math.cos(u) + ahead[i]*Math.sin(u)));
+}
 
 // how a body looks from a spot on the Earth: where it stands in the sky, how far, how big, how much
 // of the face we see is sunlit, and how far from the Sun it seems (planets close to it are lost in its glare)
 const ECLIPTIC_POLE = [0, -Math.sin(23.43928*R), Math.cos(23.43928*R)];
 export function sight(body, ms, place){
   const lst = siderealTime(ms, place.lon), sun = geocentric('sun', ms);
-  let v = geocentric(body.id, ms);
+  const off = body.around && aroundJupiter(body, ms);
+  let v = off ? geocentric(body.around, ms).map((x, i) => x + off[i]) : geocentric(body.id, ms);
   if (body.id === 'moon') v = topocentric(v, place.lat, lst);
   const at = radec(v), km = Math.hypot(...v), toSun = sun.map((s, i) => s - v[i]);
   return {v, sun, ...at, ...toHorizon(at.ra, at.dec, place.lat, lst), km, late:km/LIGHT,
