@@ -66,7 +66,7 @@ const HARNESS = `(async () => {
   const click = async p => { point('pointermove', p); await sleep(100); point('pointerdown', p); await sleep(60); cv.dispatchEvent(new PointerEvent('pointerup', {...O, buttons:0, clientX:p[0], clientY:p[1]})); await sleep(100); };
   const right = () => /prediction was right|got all/.test(status());
   window.lab = {sleep, until, carry, move, tip, shake, stir, open, choose, status, listen, click, screen, right, D, C, chem, pos};
-  localStorage.setItem('lantern-hill-lab', JSON.stringify({done:['sinkfloat', 'magnets', 'volcano', 'rainbow', 'egg', 'dissolve', 'balloon', 'lava', 'fizztest']}));
+  localStorage.setItem('lantern-hill-lab', JSON.stringify({done:['sinkfloat', 'magnets', 'volcano', 'rainbow', 'egg', 'dissolve', 'balloon', 'lava', 'fizztest', 'makemagnet']}));
   return true;
 })()`;
 
@@ -220,6 +220,47 @@ const STORIES = [
       await move(h, {x:c.x - .036, z:c.z}); await sleep(1000); await move(h, {x:c.x - .2, z:c.z + .05}); await sleep(600);
     });
     return await until(right, 2000) ? '' : 'the nail got to ' + Math.abs(D.find('nail').mag || 0).toFixed(2) + ': ' + lab.status();
+  })()`],
+  ['a balance tips toward the apple, and a small rock outweighs a big duck', `(async () => { const {open, choose, carry, until, right, listen, D} = lab;
+    await open('balance'); await choose(0);
+    const pan = s => { const t = D.find('balance').beam.translation(); return {x:t.x + s*.22, y:0, z:t.z}; };
+    await carry('apple', pan(-1)); await carry('rock', pan(1));
+    const how = () => { const w = D.weighing('balance'); return 'tilt ' + w.tilt.toFixed(3) + ' calm ' + w.calm.toFixed(1) + ' left ' + w.left.map(o => o.id) + ' right ' + w.right.map(o => o.id); };
+    if (!await until(right, 15000)) return 'apple and rock: ' + lab.status() + ' (' + how() + ')';
+    await listen(); await choose(1);
+    await carry('apple', {x:-.5, y:0, z:.38}); await carry('duck', pan(-1));
+    return await until(right, 15000) ? '' : 'duck and rock: ' + lab.status() + ' (' + how() + ')';
+  })()`],
+  ['a foil boat carries a few pennies, and a wider one carries more', `(async () => { const {open, choose, carry, until, sleep, right, listen, D, chem} = lab;
+    await open('boat'); await choose(1);
+    const load = async (boat, tub, coins) => {
+      await carry(boat, tub); await sleep(1500);
+      for (const c of coins) { if (right()) break; await carry(c, boat); await sleep(2500); }
+      await until(right, 5000);
+    };
+    const how = id => { const b = D.find(id); return id + ' water ' + chem.liquidVol(b.c).toFixed(0) + ' coins ' + D.desk.items.filter(c => c.type === 'coin' && D.restingIn(c.id) === id).length; };
+    await load('boat', 'tub1', ['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6']);
+    if (!right()) return 'the little boat: ' + lab.status() + ' (' + how('boat') + ')';
+    await listen(); await choose(0);
+    await load('wideboat', 'tub2', ['q0', 'q1', 'q2', 'q3', 'q4', 'q5', 'q6']);
+    return right() ? '' : 'the wide boat: ' + lab.status() + ' (' + how('wideboat') + ')';
+  })()`],
+  ['unlike magnet poles snap together, like poles shove apart, and the pull goes through glass', `(async () => { const {open, choose, carry, move, sleep, until, right, listen, pos, D} = lab;
+    await open('poles'); await choose(0);
+    const meets = () => D.poleMeets().map(m => m.a + '-' + m.b + ' ' + m.d.toFixed(3) + (m.like ? ' like' : ' unlike')).join(', ');
+    // slide in end first; the held magnet points north to the left, so from the left its blue south end leads
+    const approach = async (to, side) => { const t = pos(to); await carry('bar', {x:t.x + side*.33, y:0, z:t.z}, async h => {
+      for (const dx of [.3, .22, .18, .16, .15]) { await move(h, {x:t.x + side*dx, z:t.z}); await sleep(500); if (right()) break; }
+      await sleep(800); await move(h, {x:-.5, z:.3}); }); };
+    await approach('b1', -1);
+    if (!await until(right, 3000)) return 'south to north: ' + lab.status() + ' (' + meets() + ')';
+    await listen(); await choose(1);
+    await approach('b2', 1);
+    if (!await until(right, 3000)) return 'south to south: ' + lab.status() + ' (' + meets() + ')';
+    await listen(); await choose(0);
+    const d = pos('dish');
+    await carry('magnet', {x:d.x + .4, y:0, z:d.z}, async h => { for (const dx of [.3, .22, .2, .19]) { await move(h, {x:d.x + dx, z:d.z}); await sleep(700); } });
+    return await until(right, 4000) ? '' : 'through the glass: ' + lab.status() + ' clip at ' + JSON.stringify(pos('clip'));
   })()`],
   ['the Free Lab cabinet holds only what finished experiments used, and hands it out', `(async () => { const {open, click, screen, until, sleep, D, C} = lab;
     await open('free');

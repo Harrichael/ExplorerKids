@@ -12,7 +12,7 @@
 // Lab's cabinet.
 
 import * as chem from './chem.js';
-import { desk, find, isVessel, totalGas } from './desk.js';
+import { desk, find, isVessel, poleMeets, restingIn, totalGas, weighing } from './desk.js';
 import { ITEMS } from './stuff.js';
 
 const S = text => ['sparks', text];
@@ -57,6 +57,25 @@ const apart = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 // a powder needs water to be tested in), once it had finished dissolving and fizzing
 const TESTS = ['lemon', 'vinegar', 'water', 'soap', 'soda'];
 const PH_BIN = p => p < 6.5 ? 'acid' : p > 7.5 ? 'base' : 'neutral';
+const magnets = () => desk.items.filter(it => !it.gone && it.def.tool === 'magnet');
+// which way a thing lying on the mat points, as an angle around the up axis
+const yaw = it => { const q = it.body.rotation(); return Math.atan2(-2*(q.x*q.z - q.w*q.y), 1 - 2*(q.y*q.y + q.z*q.z)); };
+const turned = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+// a balance with one thing in each pan that has stopped swinging: which side is down, if either
+function weighed(){
+  const w = weighing('balance'); if (!w || w.calm < 1 || w.left.length !== 1 || w.right.length !== 1) return null;
+  const [l, r] = [w.left[0], w.right[0]];
+  return Math.abs(w.tilt) < .02 ? {level:true, l, r} : w.tilt > 0 ? {down:r, up:l} : {down:l, up:r};
+}
+// How many pennies a boat carried while it still floated steady, once it has gone under (null till then).
+// A penny that lands and sinks it at once never floated with it, so it doesn't count.
+function carried(id, run, key){
+  const b = find(id); if (!b) return null;
+  if (chem.liquidVol(b.c) > b.cap*.5) return run[key] === undefined ? null : run[key];
+  if (b.still > .5 && b.settled && b.settled.floating) run[key] = desk.items.filter(c => !c.gone && c.type === 'coin' && restingIn(c.id) === id).length;
+  return null;
+}
+const HOW_MANY = n => n <= 2 ? 'few' : n <= 5 ? 'some' : 'lots';
 
 export const EXPERIMENTS = [
   {id:'sinkfloat', after:[], title:'Sink or Float?', grade:'K–1', blurb:'Which treasures float in a tub of water?',
@@ -91,6 +110,25 @@ export const EXPERIMENTS = [
         observe: () => mixed('red', 'blue'), say:{purple:"Purple! Red and blue make purple."}}],
     explain:[S("Red, yellow and blue are called primary colors. Mix any two and you get a brand new color."),
              S("Each color in the water soaks up some of the light. What's left over for your eyes is the new color!")]},
+
+  {id:'balance', after:['sinkfloat'], title:'Balance Scale', grade:'K–2', blurb:'Which is heavier?',
+    setup:[['balance', 'balance', .12, .1], ['apple', 'apple', -.52, .38], ['rock', 'rock', -.3, .4], ['duck', 'duck', .3, .4], ['coin', 'coin', .52, .4]],
+    rounds:[
+      {q:"Which is heavier, the apple or the rock?", ask:[S("This is a balance, {name}. The heavier side goes down, and when both sides weigh the same, it sits level."), S("Which is heavier: the apple, or the rock?")],
+        choose:[{id:'apple', label:'The apple', icon:'🍎'}, {id:'rock', label:'The rock', icon:'🪨'}, {id:'same', label:'They weigh the same', icon:'⚖️'}],
+        test:[S("Put the apple in one pan and the rock in the other. Wait for the balance to stop swinging.")],
+        hints:[[S("Carry the apple over one pan and let go. Then the rock over the other pan.")], [S("Just one thing in each pan. Then wait until it stops swinging.")]],
+        observe: () => { const w = weighed(), ids = w && [w.l || w.down, w.r || w.up].map(o => o.id).sort().join(); return ids !== 'apple,rock' ? null : w.level ? 'same' : w.down.id; },
+        say:{apple:"The apple is heavier! It's big and full of juice. You can't always tell by looking: that's why we weigh things.", rock:"The rock is heavier. Small, but packed tight.", same:"They balance! Just the same."}},
+      {q:"Is the bigger thing always the heavier one?", ask:[S("Here's a tricky one. Is the bigger thing always heavier?")],
+        choose:[{id:'yes', label:'Yes, always', icon:'🐘'}, {id:'no', label:'No, not always', icon:'🪶'}],
+        test:[S("Test it! Put something big in one pan and something small in the other. Try the duck!")],
+        hints:[[S("Take out the apple. Then try the big duck against the little rock.")], [S("One thing in each pan, and wait for it to stop swinging.")]],
+        // one small thing outweighing a bigger one shows it; any number of big ones winning can't show "always"
+        observe: () => { const w = weighed(); return w && !w.level && w.down.size < w.up.size*.8 ? 'no' : null; },
+        say:{no:"The smaller thing is heavier! Being big doesn't make something heavy. What it's made of matters too."}}],
+    explain:[S("A balance compares weights. The heavier side goes down, and when both sides weigh the same, the beam sits level."),
+             S("Big things can be light, like a duck full of air. Small things can be heavy, like a rock packed tight. To know for sure, weigh it!")]},
 
   {id:'magnets', after:['sinkfloat'], title:'Magnet Hunt', grade:'1', blurb:'What will a magnet pick up?',
     setup:[['yes', 'tray', -.46, .34, {label:'STICKS?', color:0xd8303a}], ['no', 'tray', -.1, .34, {label:'NOPE?', color:0x34406b}], ['magnet', 'magnet', .6, .3],
@@ -132,6 +170,55 @@ export const EXPERIMENTS = [
     explain:[S("Steel is full of tiny magnetic regions called domains. Usually they point every which way, so they cancel out."),
              S("Stroking with a magnet, always the same way, lines them up. Rubbing back and forth mixes them up again, so it barely works."),
              S("Your nail magnet is weaker than the real one, because only some of its domains lined up.")]},
+
+  {id:'poles', after:['makemagnet'], title:'Magnet Poles', grade:'2–3', blurb:'Do magnets pull, or push?',
+    setup:[['bar', 'bar', -.45, .3], ['b1', 'bar', -.05, .02], ['b2', 'bar', .45, .02, {rot:Math.PI}], ['dish', 'dish', .38, .27, {fill:{water:90}}], ['clip', 'paperclip', .445, .27, {y:.008}], ['magnet', 'magnet', .66, .44]],
+    rounds:[
+      {q:"What happens when a north pole meets a south pole?", ask:[S("These are bar magnets, {name}. Each end is a pole: the red end is north, N, and the blue end is south, S."),
+          S("What will happen if the north end of one magnet meets the south end of another?")],
+        choose:[{id:'pull', label:'They pull together', icon:'🧲'}, {id:'push', label:'They push apart', icon:'↔️'}, {id:'nothing', label:'Nothing happens', icon:'😶'}],
+        test:[S("Pick up a magnet and slide it end first, slowly, toward the other color end of another magnet.")],
+        hints:[[S("Slide your magnet along the mat, end first, toward the end of another one.")], [S("Red goes to blue! Bring them really close.")]],
+        observe: () => poleMeets().some(m => !m.like && m.d < .025) ? 'pull' : null,
+        say:{pull:"Click! A north pole and a south pole pull each other together."}},
+      {q:"What happens when two north poles meet?", ask:[S("Now, what if two north poles meet? Or two south poles?")],
+        choose:[{id:'pull', label:'They pull together', icon:'🧲'}, {id:'push', label:'They push apart', icon:'↔️'}, {id:'nothing', label:'Nothing happens', icon:'😶'}],
+        test:[S("Find two red ends, or two blue ends, and slowly bring them together. Watch the magnet you're not holding!")],
+        hints:[[S("The magnet on the right is turned around: its red end is on its right.")], [S("Go slowly, end first, and watch the other magnet closely.")]],
+        baseline: () => Object.fromEntries(magnets().map(m => { const t = m.body.translation(); return [m.id, {x:t.x, z:t.z, yaw:yaw(m)}]; })),
+        // a free magnet that slid or turned while a like pole was close, and isn't stuck on anything
+        observe: r => {
+          const meets = poleMeets(), stuck = id => meets.some(m => !m.like && m.d < .03 && (m.a === id || m.b === id));
+          for (const m of meets) {
+            if (!m.like || m.d > .08) continue;
+            for (const id of [m.a, m.b]) {
+              const it = find(id), b = r.base[id]; if (!it || it === desk.held || !b || stuck(id)) continue;
+              const t = it.body.translation(); if (Math.hypot(t.x - b.x, t.z - b.z) > .03 || turned(yaw(it), b.yaw) > .5) return 'push';
+            }
+          }
+          return null;
+        },
+        say:{push:"Whoa! Like poles push each other away. Two norths, or two souths, always push apart."}},
+      {q:"Can a magnet pull through glass and water?", ask:[S("There's a paperclip lying in this dish of water. Can a magnet pull it through the side of the glass, and through the water too?")],
+        choose:[{id:'yes', label:'Yes, right through', icon:'✅'}, {id:'no', label:'No, the glass blocks it', icon:'🚫'}],
+        test:[S("Slide the horseshoe magnet along the mat, right up against the outside of the dish, next to the paperclip.")],
+        hints:[[S("Pick up the red horseshoe magnet and slide it along the mat until it touches the dish, near the paperclip.")], [S("Now move the magnet slowly around the dish. Does the paperclip follow?")]],
+        // a paperclip resting under water starts moving with a magnet close by, outside its cup
+        observe: run => {
+          run.at = run.at || {};
+          for (const p of desk.items.filter(it => !it.gone && it.type === 'paperclip')) {
+            if (!p.soakIn || p === desk.held) { delete run.at[p.id]; continue; }
+            const t = p.body.translation();
+            if (!run.at[p.id]) { if (p.soakT > 1) run.at[p.id] = {x:t.x, z:t.z}; continue; }
+            const near = magnets().some(m => { const mt = m.body.translation(); return restingIn(m.id) !== p.soakIn.id && Math.hypot(mt.x - t.x, mt.z - t.z) < .14; });
+            if (near && Math.hypot(t.x - run.at[p.id].x, t.z - run.at[p.id].z) > .02) return 'yes';
+          }
+          return null;
+        },
+        say:{yes:"It moves! A magnet's pull goes right through glass and water."}}],
+    explain:[S("Every magnet has a north pole and a south pole. Unlike poles pull together, and like poles push apart."),
+             S("A magnet's pull goes through glass, water, paper and plastic. Only things made of iron or steel get in its way, because the magnet pulls on them instead."),
+             S("The whole Earth is a giant magnet too. That's what a compass needle lines up with!")]},
 
   {id:'volcano', after:['sinkfloat'], title:'Fizzy Volcano', grade:'1–2', blurb:'What happens when vinegar meets baking soda?',
     setup:[['volcano', 'volcano', 0, -.08], ['soda', 'soda', -.55, -.25], ['vinegar', 'vinegar', .55, -.22], ['soap', 'soap', .45, .2], ['red', 'red', -.5, .24]],
@@ -193,6 +280,27 @@ export const EXPERIMENTS = [
         observe: () => { const s = settled('egg'); return s && s.floating && chem.amount(s.v.c, 'salt') > 3 ? 'float' : null; },
         say:{float:"It floats! Salt makes the water heavier for its size, so it pushes up on the egg harder."}}],
     explain:[S("That's why it's easier to float in the salty ocean than in a swimming pool!")]},
+
+  {id:'boat', after:['egg'], title:'Foil Boat', grade:'2–4', blurb:'How many pennies can a foil boat carry?',
+    setup:[['tub1', 'tub', -.34, .08, {fill:{water:1050}}], ['tub2', 'tub', .34, .08, {fill:{water:1050}}], ['boat', 'boat', -.34, -.3], ['wideboat', 'wideboat', .34, -.3],
+           ...[-.6, -.4, -.2, 0, .2, .4, .6].flatMap((x, i) => [['p' + i, 'coin', x, .36], ['q' + i, 'coin', x, .46]])],
+    rounds:[
+      {q:"How many pennies can the foil boat carry?", ask:[S("Here's a little boat folded from foil, {name}, and a tub of water."), S("How many pennies do you think it can carry before it sinks?")],
+        choose:[{id:'few', label:'1 or 2', icon:'🪙'}, {id:'some', label:'3 to 5', icon:'🪙'}, {id:'lots', label:'6 or more', icon:'💰'}],
+        test:[S("Set the little boat on the water. Then add pennies one at a time, and count!")],
+        hints:[[S("Carry the little foil boat over a tub and let go.")], [S("Drop a penny right into the middle of the boat. Then another.")], [S("Keep going until the water spills in!")]],
+        observe: run => { const n = carried('boat', run, 'small'); return n === null ? null : HOW_MANY(n); },
+        say:{few:"Glug! It only carried a couple before the water rushed in.", some:"Glug! It carried a few pennies, then the water rushed in over the edge.", lots:"Glug! It carried lots of pennies before the water rushed in."}},
+      {q:"Will a wider boat carry more pennies?", ask:[S("Now the wide boat. Will it carry more pennies than the little one, or fewer?")],
+        choose:[{id:'more', label:'More pennies', icon:'⬆️'}, {id:'same', label:'The same', icon:'🟰'}, {id:'fewer', label:'Fewer pennies', icon:'⬇️'}],
+        test:[S("Float the wide boat in the other tub, and count pennies again.")],
+        hints:[[S("Put the wide boat in the tub that doesn't have a sunken boat in it.")], [S("Add pennies one at a time, right in the middle.")], [S("Out of pennies? Fish some out of the first tub.")]],
+        observe: run => { const n = carried('wideboat', run, 'wide'); return n === null || run.small === undefined ? null : n > run.small ? 'more' : n < run.small ? 'fewer' : 'same'; },
+        say:{more:"More! The wide boat pushes aside more water before its edge goes under, so the water pushes up on it harder.",
+             same:"The same this time! Were the pennies piled near one edge? That tips a boat so its edge goes under sooner.", fewer:"Fewer! Were the pennies piled near one edge? That tips a boat so its edge goes under sooner."}}],
+    explain:[S("A boat sinks into the water until the water it pushes aside weighs as much as the boat and everything in it."),
+             S("Each penny makes it sit a little lower. When the edge dips under, water pours in, and down it goes!"),
+             S("A wider boat pushes aside more water before its edge goes under, so it can carry more. That's one reason big ships are so wide.")]},
 
   {id:'dissolve', after:['egg'], title:'Dissolve Detective', grade:'3', blurb:'What disappears in water?',
     setup:[['c1', 'cup', -.45, .02, {fill:{water:110}}], ['c2', 'cup', -.15, .02, {fill:{water:110}}], ['c3', 'cup', .15, .02, {fill:{water:110}}],

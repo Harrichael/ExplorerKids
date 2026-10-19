@@ -3,7 +3,7 @@
 //
 // kind 'vessel' holds contents and pours from its mouth when tipped (flow: liquid, drops or shake);
 // kind 'solid' sinks or floats by its density; kind 'tool' is a spoon, swab, test strip or magnet; kind
-// 'tray' holds things to show a prediction.
+// 'tray' holds things to show a prediction; kind 'balance' is a beam that swings on its post.
 
 import * as THREE from 'three';
 import { C, T, add, box, cyl, grad, outline, sph, tex } from '../core/kit.js';
@@ -57,6 +57,30 @@ function flat(b, mesh){ mesh.rotation.x = Math.PI/2; return mesh; }
 const own = c => { const m = new THREE.MeshToonMaterial({gradientMap:grad, color:c}); m.userData.own = true; return m; };
 // an old penny is brown with copper oxide; scrubbed off, the bright copper underneath shows
 const COPPER = 0xf07a2a, OXIDE = 0x4a3a2e;
+// a folded foil box: it floats by how much water it pushes aside, and fills once its rim goes under
+function foilBoat(w, d, h){
+  return b => { const m = T(0xdfe4ea, {emissive:0x555a60, emissiveIntensity:.3});
+    box(w, .002, d, m, 0, .001, 0, b);
+    for (const [bw, bd, x, z, tilt] of [[w, .002, 0, d/2, .06], [w, .002, 0, -d/2, -.05], [.002, d, w/2, 0, .07], [.002, d, -w/2, 0, -.06]]) {
+      const p = outline(box(bw, h, bd, m, x, h/2, z, b), 1.05); if (bd < bw) p.rotation.x = tilt; else p.rotation.z = -tilt; }
+    // the crumpled fold along the rim
+    for (const [x, z, bw, bd] of [[0, d/2, w, .005], [0, -d/2, w, .005], [w/2, 0, .005, d], [-w/2, 0, .005, d]]) box(bw, .004, bd, m, x, h, z, b, false); };
+}
+function balance(b){
+  const iron = T(0x3a3440), brass = T(0xd9a441), B = ITEMS.balance.beam;
+  outline(box(.16, .02, .1, iron, 0, .01, 0, b), 1.03); outline(box(.016, B.y - .02, .016, iron, 0, B.y/2 + .01, 0, b), 1.06);
+  const beam = new THREE.Group(); beam.position.y = B.y; b.add(beam);
+  outline(box(2*(B.arm + B.pan.w/2), .012, .02, brass, 0, 0, 0, beam), 1.04); outline(sph(.011, iron, 0, 0, .012, beam, 10), 1.08);
+  // the needle stands straight up when the two sides weigh the same
+  box(.005, .07, .003, T(0xd8303a), 0, .035, .012, beam);
+  for (const s of [-1, 1]) {
+    const x = s*B.arm, y = B.pan.y, {w, h, d} = B.pan;
+    box(w, .004, d, brass, x, y + .002, 0, beam);
+    for (const [bw, bd, dx, dz] of [[w, .004, 0, d/2], [w, .004, 0, -d/2], [.004, d, w/2, 0], [.004, d, -w/2, 0]]) outline(box(bw, h, bd, brass, x + dx, y + h/2, dz, beam), 1.04);
+    for (const dx of [-w/2, w/2]) box(.004, -y - h, .004, brass, x + dx, (y + h)/2, 0, beam);
+  }
+  return {beam};
+}
 function chart(b){
   const t = tex(512, 168, (g, W, H) => {
     g.fillStyle = '#fbf4e2'; g.fillRect(0, 0, W, H);
@@ -186,8 +210,16 @@ export const ITEMS = {
     build: b => { outline(box(.013, .11, .0018, T(0xf7f5ee), 0, .085, 0, b), 1.08); const pad = outline(box(.02, .032, .005, own(0xf2dfa6), 0, .016, 0, b), 1.08); return {pad}; }},
   bar:    {name:'Bar magnet', kind:'tool', tool:'magnet', r:.07, h:.026, grip:.018, density:7.3, pull:.5,
     build: b => { for (const [x, col, n] of [[-.035, 0xd8303a, 'N'], [.035, 0x3f63c8, 'S']]) { outline(box(.07, .026, .024, T(col), x, .013, 0, b), 1.03);
-      const f = add(new THREE.PlaneGeometry(.022, .018), label(n, col === 0xd8303a ? '#d8303a' : '#3f63c8', '#ffffff', 64, 52, 46), x*1.5, .0262, 0, b, false); f.rotation.x = -Math.PI/2; } }}
+      const f = add(new THREE.PlaneGeometry(.03, .022), label(n, col === 0xd8303a ? '#d8303a' : '#3f63c8', '#ffffff', 64, 48, 48), x*1.45, .0262, 0, b, false); f.rotation.x = -Math.PI/2; } }},
+  // a few times heavier than real foil, which is too light for the physics to float smoothly at its step size
+  boat:   {name:'Foil boat', kind:'vessel', afloat:true, w:.13, d:.1, r:.082, h:.03, ri:.048, floor:.002, hi:.028, flow:'liquid', rate:60, density:.8, build: foilBoat(.13, .1, .03)},
+  wideboat: {name:'Wide foil boat', kind:'vessel', afloat:true, w:.16, d:.12, r:.1, h:.03, ri:.058, floor:.002, hi:.028, flow:'liquid', rate:70, density:.8, build: foilBoat(.16, .12, .03)},
+  balance: {name:'Balance', kind:'balance', r:.27, h:.15, density:7.8, build: balance}
 };
+// a balance's beam: swung on the top of its post, in its own frame centred on the hinge, with a pan
+// hanging from each end of its arm
+ITEMS.balance.beam = {y:.14, density:2.7, arm:.22, pan:{y:-.1, w:.13, h:.022, d:.11}};
+for (const k of ['boat', 'wideboat']) { const d = ITEMS[k]; d.cap = UNITS_PER_M3*(d.w - .004)*(d.d - .004)*d.hi; }
 
 // what each supply comes filled with, and how much it holds; Free Lab tops them up whenever they're set down
 const STOCK = {pitcher:[340, {water:340}], vinegar:[250, {vinegar:250}], lemon:[150, {lemon:150}], milk:[300, {milk:300}],
@@ -221,8 +253,13 @@ const SHAPE = {
   tray: [['hollow-box', .28, .035, .17, .008]],
   spoon: [['box', .01, .17, .005, .03], ['ball', .016, .016]], swab: [['bar', .15, .012, 'y', 0]],
   magnet: [['box', .085, .03, .022, .05], ['box', .022, .05, .022, 0, -.03], ['box', .022, .05, .022, 0, .03]],
-  strip: [['bar', .14, .012, 'y', 0]], bar: [['box', .14, .026, .024, 0]]
+  strip: [['bar', .14, .012, 'y', 0]], bar: [['box', .14, .026, .024, 0]],
+  boat: [['hollow-box', .13, .03, .1, .002]], wideboat: [['hollow-box', .16, .03, .12, .002]],
+  balance: [['box', .16, .02, .1, 0], ['box', .016, .12, .016, .02]]
 };
+{ const B = ITEMS.balance.beam, {w, h, d, y} = B.pan, inner = B.arm - w/2;
+  // the arm stops short of the pans so things dropped in don't land on it; the wires either side of each pan are solid
+  B.shape = [['box', 2*inner, .012, .02, -.006], ...[-1, 1].flatMap(s => [['hollow-box', w, h, d, .004, s*B.arm, y], ['box', .004, -y - h, .006, y + h, s*inner], ['box', .004, -y - h, .006, y + h, s*(B.arm + w/2)]])]; }
 // Where a magnet pulls from, [x, y, z, which way round], in its own frame. Steel has poles at its two
 // ends too, but they only pull once it's been made into a magnet, and which end is which depends on how.
 const POLES = {magnet: [[-.03, .004, 0, 1], [.03, .004, 0, -1]], bar: [[-.066, .02, 0, 1], [.066, .02, 0, -1]],
@@ -232,9 +269,9 @@ for (const k in POLES) ITEMS[k].poles = POLES[k].map(([x, y, z, n]) => ({x, y, z
 const OPEN = {bottle: {y:.19, r:.022, neckY:.12}, volcano: {y:.17, r:.03, neckY:.14}, soda: {y:.13, r:.04}, sugar: {y:.13, r:.04}, saltbox: {y:.13, r:.04}, balloon: {y:.11, r:.03}};
 // what each thing is made of, which is how it sounds when it's set down or knocked
 const MATTER = {
-  glass: ['cup', 'jar', 'dish', 'bottle', 'pitcher', 'cabbage', 'oil'], clay: ['saucer', 'volcano'], metal: ['coin', 'paperclip', 'nail', 'key', 'spoon', 'magnet', 'bar'],
+  glass: ['cup', 'jar', 'dish', 'bottle', 'pitcher', 'cabbage', 'oil'], clay: ['saucer', 'volcano'], metal: ['coin', 'paperclip', 'nail', 'key', 'spoon', 'magnet', 'bar', 'balance'],
   plastic: ['tub', 'vinegar', 'soap', 'red', 'yellow', 'blue', 'salt', 'pepper', 'lemon', 'sand', 'button', 'crayon'], card: ['milk', 'soda', 'sugar', 'saltbox', 'chart'],
-  wood: ['tray', 'cork'], rubber: ['duck', 'balloon'], stone: ['rock'], food: ['apple', 'egg'], foil: ['foil'], chalk: ['tablet'], soft: ['swab', 'strip']};
+  wood: ['tray', 'cork'], rubber: ['duck', 'balloon'], stone: ['rock'], food: ['apple', 'egg'], foil: ['foil', 'boat', 'wideboat'], chalk: ['tablet'], soft: ['swab', 'strip']};
 for (const m in MATTER) for (const k of MATTER[m]) ITEMS[k].matter = m;
 // glass weighs what glass weighs; plastic tubs and trays are lighter
 for (const k of ['cup', 'jar', 'dish', 'bottle', 'pitcher', 'cabbage']) ITEMS[k].glass = true;

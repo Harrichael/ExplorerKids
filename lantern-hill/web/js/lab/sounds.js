@@ -92,6 +92,10 @@ export const labSound = {
     Sound.hiss({dur:.1, vol:.014, type:'bandpass', freq:rnd(5000, 6500), q:3, attack:.02, pan:p});
     if (k > .04) Sound.ring(note(Math.round(k*9) + 3), {type:'triangle', dur:.25, vol:.006 + k*.01, attack:.004, pan:p});
   },
+  // two magnets meeting pole to pole: a hard little clack, felt more than heard
+  snap(x){ const p = pan(x); VOICE.metal(1, p); Sound.tone(rnd(160, 190), {type:'triangle', dur:.05, vol:.06, f2:110, pan:p}); },
+  // a boat going under: one big gulp of air let go, and a gurgle after it
+  sink(x){ const p = pan(x); bubble(.007, .07, p); bubble(.004, .04, p, .12); bubble(.0028, .03, p, .22); Sound.hiss({t:.05, dur:.5, vol:.04, type:'lowpass', freq:700, f2:300, attack:.05, pan:p}); },
   // paper drinking up a drop: a soft wet touch
   dip(x){ const p = pan(x); Sound.hiss({dur:.09, vol:.022, type:'lowpass', freq:900, attack:.01, pan:p}); bubble(rnd(.0025, .0035), .012, p, .03); },
   // the last of the dull oxide lets go and the copper gleams

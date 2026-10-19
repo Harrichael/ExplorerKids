@@ -10,7 +10,7 @@ import { clamp01, grad } from '../core/kit.js';
 import * as chem from './chem.js';
 import { makeFluid, spread } from './fluid.js';
 import { makeFx } from './fx.js';
-import { P, STEP, THING, ghost, makeBody, makeWorld, retire, rot, toLocal, toWorld, upOf } from './physics.js';
+import { P, STEP, THING, ghost, hinge, makeBody, makeWorld, retire, rot, toLocal, toWorld, upOf } from './physics.js';
 import { labSound } from './sounds.js';
 import { ITEMS, UNITS_PER_M3, capacity } from './stuff.js';
 
@@ -38,7 +38,14 @@ const localOf = (v, p) => toLocal(v.body, p.x, p.y, p.z, _l);
 // is a point (in v's frame) inside v's open space?
 function within(v, l, pad = 0){
   const o = v.def.open, r = o.neckY && l.y > o.neckY ? o.r : Math.max(o.r, v.def.ri);
-  return l.y > v.def.floor - .006 && l.y < o.y + pad && Math.hypot(l.x, l.z) < r;
+  if (!(l.y > v.def.floor - .006 && l.y < o.y + pad)) return false;
+  return v.def.w ? Math.abs(l.x) < v.def.w/2 && Math.abs(l.z) < v.def.d/2 : Math.hypot(l.x, l.z) < r;
+}
+// the container something is in: the innermost one, so a penny in a boat in a tub is in the boat
+function holder(it, p, pad){
+  let best = null;
+  for (const v of vessels()) if (v !== it && uprightness(v) >= .6 && within(v, localOf(v, p), pad) && (!best || v.def.ri < best.def.ri)) best = v;
+  return best;
 }
 const balloonOn = v => desk.items.find(b => !b.gone && b.attached === v);
 const corkIn = v => desk.items.find(c => !c.gone && c.plugged === v);
@@ -156,7 +163,7 @@ function makeItem(id, type, x, z, o, i){
   // got: when each substance first arrived; spoons: spoonfuls of each powder put in
   const it = {id, type, def, g, pop:-i*.04, stats:{gas:0, stir:0, bursts:0, blobs:0, dye:new Set(), got:{}, spoons:{}}, vy:0, still:0, tilt:0, lastDir:{x:0, z:0}, shakeT:0};
   it.refs = def.build(g, o) || {};
-  it.body = makeBody(def, x, .002, z, it);
+  it.body = makeBody(def, x, .002 + (o.y || 0), z, it);
   if (o.rot) it.body.setRotation({x:0, y:Math.sin(o.rot/2), z:0, w:Math.cos(o.rot/2)}, false);
   it.grip = def.grip !== undefined ? def.grip : def.h*.7;
   if (isVessel(it)) {
@@ -168,6 +175,13 @@ function makeItem(id, type, x, z, o, i){
   if (def.fizz) it.stock = def.fizz;
   if (def.balloon) it.inflate = 0;
   if (o.tarnish !== undefined) it.tarnish = it.drawnT = o.tarnish;
+  if (def.beam) {
+    // the beam is its own body, swinging on the post; its group lives in the desk's frame, not the base's
+    const B = def.beam; desk.root.add(it.refs.beam);
+    it.beam = makeBody({kind:'solid', shape:B.shape, density:B.density}, x, .002 + B.y, z, it); it.beam.setAngularDamping(1.5);
+    hinge(it.body, it.beam, {x:0, y:B.y, z:0}, {x:0, y:0, z:0}, {x:0, y:0, z:1}, .02);
+    it.calm = 0; it.swing = 0;
+  }
   return it;
 }
 export function setupDesk(layout, {endless=false}={}){
@@ -192,9 +206,10 @@ export function bring(type, o, near){
   desk.items.push(it); return it;
 }
 export function clearDesk(){
-  for (const it of desk.items) {
-    desk.root.remove(it.g);
-    it.g.traverse(m => { if (!m.isMesh) return;
+  for (const it of desk.items) for (const g of [it.g, it.refs.beam]) {
+    if (!g) continue;
+    desk.root.remove(g);
+    g.traverse(m => { if (!m.isMesh) return;
       if (m.geometry !== UNIT_CYL && m.geometry !== HEMI) m.geometry.dispose();
       if (m.material.map) { m.material.map.dispose(); m.material.dispose(); } else if (m.userData.own) m.material.dispose(); });
   }
@@ -262,6 +277,13 @@ export function release(){
     it.body.setTranslation({x:into.m.x, y:Math.max(t.y, into.m.y + it.def.h + .01), z:into.m.z}, true);
     it.body.setLinvel({x:0, y:0, z:0}, true); it.body.setAngvel({x:0, y:0, z:0}, true);
   }
+  // a boat let go over water is set down on it, as anyone would, not dropped in
+  if (it.def.afloat) for (const v of vessels()) {
+    const t = it.body.translation(), sea = v !== it && chem.waterVol(v.c) > 0 && toWorld(v.body, 0, waterTop(v), 0, {});
+    if (!sea || !within(v, localOf(v, {x:t.x, y:sea.y, z:t.z}))) continue;
+    it.body.setTranslation({x:t.x, y:sea.y - .002, z:t.z}, true); it.body.setLinvel({x:0, y:0, z:0}, true); it.body.setAngvel({x:0, y:0, z:0}, true);
+    break;
+  }
   it.body.setGravityScale(1, true);
   if (it.def.dips) { it.resting = vessels().find(v => insideOf(v, it)) || null; ghost(it.body, it.resting ? 'resting' : false); }
   const v = it.body.linvel(), s = Math.hypot(v.x, v.y, v.z);
@@ -291,8 +313,8 @@ function carryHeight(it, x, z){
   for (const o of live()) {
     if (o === it || insideOf(it, o)) continue;
     const ot = o.body.translation();
-    // things clinging to the magnet travel with it, so they're no obstacle
-    if (low && (o.clingTo === it || it.def.tool === 'magnet' && o.stuck && Math.hypot(ot.x - t.x, ot.y - t.y, ot.z - t.z) < .09)) continue;
+    // things clinging to the magnet travel with it, so they're no obstacle; another magnet is met end to end, down on the mat
+    if (low && (o.clingTo === it || it.def.tool === 'magnet' && (o.def.tool === 'magnet' || o.stuck && Math.hypot(ot.x - t.x, ot.y - t.y, ot.z - t.z) < .09))) continue;
     const reach = it.def.r + Math.max(o.def.r, (o.def.w || 0)/2) + .015;
     if (low && Math.hypot(x - ot.x, z - ot.z) > reach && Math.hypot(t.x - ot.x, t.z - ot.z) > reach) continue;
     // how tall it stands right now: its height upright, its width once it's tipped over
@@ -410,38 +432,57 @@ function stopper(c){
 function overlap(a0, a1, b0, b1){ return Math.max(0, Math.min(a1, b1) - Math.max(a0, b0)); }
 function volumeOf(it){
   if (it.def.kind === 'solid') return it.body.mass()/(it.def.density*1000);
+  if (it.def.w) return it.def.w*it.def.d*it.def.h;
   return Math.PI*it.def.r*it.def.r*it.def.h*(it.def.shape[0][0].startsWith('hollow') ? 1 : .8);
 }
 // what a thing is lying in the liquid of, and for how long
 function soak(it, v){ if (it.soakIn !== v) { it.soakIn = v; it.soakT = 0; } else if (v) it.soakT += STEP; }
+// A thing floats by the weight of the water it pushes aside, so a hull's lift grows with how deep it sits.
 function buoyancy(it){
   if (it === desk.held && !it.attached) { it.still = 0; soak(it, null); return; }
-  const com = it.body.worldCom();
-  for (const v of vessels()) {
-    if (v === it || uprightness(v) < .6 || !chem.liquidVol(v.c)) continue;
-    const l = localOf(v, com); if (!within(v, l, .02)) continue;
-    const hh = Math.max(.004, it.def.h/2), lo = l.y - hh, hi = l.y + hh, wt = waterTop(v), ot = oilTop(v);
-    // h is how tall a thing looks, which can reach below its collider and so through the floor; that
-    // part is still under water, or an egg on the bottom loses a tenth of its lift and never comes up
-    const fw = overlap(lo, hi, lo, wt)/(hi - lo), fo = overlap(lo, hi, wt, ot)/(hi - lo), f = fw + fo;
-    if (f <= 0) { it.wet = false; soak(it, null); return; }
-    soak(it, fw > .5 ? v : null);
-    if (!it.wet) { it.wet = true; if (it.body.linvel().y < -.15) labSound.plop(com.x, it.def.r); }
-    // water drags on what it pushes aside, so a light cork is slowed as much as a heavy rock of its size
-    const m = it.body.mass(), displaced = (chem.density(v.c)*fw + chem.OIL_DENSITY*fo)*1000*volumeOf(it);
-    const lift = displaced*9.81*STEP, lv = it.body.linvel(), drag = (displaced + m)*7*STEP;
-    it.body.applyImpulse({x:-lv.x*drag, y:lift - lv.y*drag, z:-lv.z*drag}, true);
-    const av = it.body.angvel(), k = 1 - .08*f; it.body.setAngvel({x:av.x*k, y:av.y*k, z:av.z*k}, true);
-    // a spoon going round drags everything in the cup along with it
-    if (v.stir > .05) { const vt = v.body.translation(), dx = com.x - vt.x, dz = com.z - vt.z, d = Math.hypot(dx, dz) || 1; it.body.applyImpulse({x:-dz/d*v.stir*m*.6*STEP, y:0, z:dx/d*v.stir*m*.6*STEP}, true); }
-    // a thing sitting still in liquid has shown whether it floats
-    const sp = Math.hypot(lv.x, lv.y, lv.z);
-    it.still = sp < .03 ? it.still + STEP : 0;
-    const floating = hi > wt + .002 && l.y > v.def.floor + hh + .006;
-    if (it.still > .6) it.settled = {v, floating};
-    return;
+  const com = it.body.worldCom(), v = holder(it, com, .02);
+  if (!v || !chem.liquidVol(v.c)) { it.still = 0; soak(it, null); return; }
+  const l = localOf(v, com), hull = isVessel(it), wt = waterTop(v), ot = oilTop(v);
+  // h is how tall a thing looks, which can reach below its collider and so through the floor; that
+  // part is still under water, or an egg on the bottom loses a tenth of its lift and never comes up
+  const hh = Math.max(.004, it.def.h/2), lo = hull ? localOf(v, it.body.translation()).y : l.y - hh, hi = hull ? lo + it.def.h : l.y + hh;
+  const fw = overlap(lo, hi, lo, wt)/(hi - lo), fo = overlap(lo, hi, wt, ot)/(hi - lo), f = fw + fo;
+  if (f <= 0) { it.wet = false; soak(it, null); return; }
+  soak(it, fw > .5 ? v : null);
+  if (!it.wet) { it.wet = true; if (it.body.linvel().y < -.15) labSound.plop(com.x, it.def.r); }
+  // water drags on what it pushes aside, so a light cork is slowed as much as a heavy rock of its size;
+  // it can slow a thing to a stop in one step but never throw it back, however light (a foil boat)
+  const m = it.body.mass(), displaced = (chem.density(v.c)*fw + chem.OIL_DENSITY*fo)*1000*volumeOf(it);
+  const lift = displaced*9.81*STEP, lv = it.body.linvel(), drag = Math.min((displaced + m)*7*STEP, m*.6);
+  if (hull) {
+    // Tipped, a hull pushes aside more water on its low side, so its lift moves that way and rights it.
+    // Lifting at the metacentre (draft/2 + width²/(12 draft) up a box hull's middle) does just that.
+    const draft = Math.max(it.def.h*f, .004), wide = Math.min(it.def.w || 2*it.def.ri, it.def.d || 2*it.def.ri);
+    it.body.applyImpulse({x:-lv.x*drag, y:-lv.y*drag, z:-lv.z*drag}, true);
+    it.body.applyImpulseAtPoint({x:0, y:lift, z:0}, toWorld(it.body, 0, draft/2 + wide*wide/(12*draft), 0, _w), true);
   }
-  it.still = 0; soak(it, null);
+  else it.body.applyImpulse({x:-lv.x*drag, y:lift - lv.y*drag, z:-lv.z*drag}, true);
+  const av = it.body.angvel(), k = 1 - .08*f; it.body.setAngvel({x:av.x*k, y:av.y*k, z:av.z*k}, true);
+  // a spoon going round drags everything in the cup along with it
+  if (v.stir > .05) { const vt = v.body.translation(), dx = com.x - vt.x, dz = com.z - vt.z, d = Math.hypot(dx, dz) || 1; it.body.applyImpulse({x:-dz/d*v.stir*m*.6*STEP, y:0, z:dx/d*v.stir*m*.6*STEP}, true); }
+  if (hull) flood(it, v);
+  // a thing sitting still in liquid has shown whether it floats
+  const sp = Math.hypot(lv.x, lv.y, lv.z);
+  it.still = sp < .03 ? it.still + STEP : 0;
+  const floating = hi > wt + .002 && lo > v.def.floor + .006;
+  if (it.still > .6) it.settled = {v, floating};
+}
+// Once a floating container's rim dips under, the water around it pours in over the rim, faster the
+// deeper the rim goes (a weir's flow, as depth to the power 1.5).
+const WEIR = .15*1.8*UNITS_PER_M3;
+function flood(it, v){
+  if (capOn(it)) return;
+  const sea = toWorld(v.body, 0, waterTop(v), 0, {}).y, rim = lowRim(it).p.y, deep = sea - rim;
+  if (deep <= 0 || chem.liquidVol(it.c) >= it.cap) return;
+  const was = chem.liquidVol(it.c), n = Math.min(it.cap - was, chem.waterVol(v.c), WEIR*deep**1.5*STEP);
+  chem.merge(it.c, chem.take(v.c, n));
+  labSound.fill(it, it.body.translation().x, Math.max(0, it.def.open.y - top(it)));
+  if (was < it.cap*.5 && chem.liquidVol(it.c) >= it.cap*.5) labSound.sink(it.body.translation().x);
 }
 // an acid a tarnished penny lies in eats the dull oxide away
 const SHINY = .25;
@@ -474,6 +515,26 @@ function magnetism(m){
     o.body.applyImpulse({x:ix, y:iy, z:iz}, true);
     if (m !== held) m.body.applyImpulse({x:-ix, y:-iy, z:-iz}, true);
     if (holds && bd < .03 && !o.stuck) { o.stuck = true; labSound.magnet(c.x); }
+  }
+}
+// Two magnets push and pull pole on pole: unlike poles attract and like poles repel, each pole pushing
+// like a point charge, weaker with the square of the distance. Pushed at its poles, a free magnet
+// slides, or swings round until its other end faces the way it's pulled and snaps on. Steel made into
+// a magnet here is too weak to push back: a real magnet just remagnetizes it and pulls.
+const POLE_K = .035, POLE_NEAR = .02;
+const _pa = {}, _pb = {};
+function poleToPole(a, b){
+  const s = strength(a)*strength(b), held = desk.held;
+  for (const p of a.def.poles) {
+    const pw = toWorld(a.body, p.x, p.y, p.z, _pa);
+    for (const q of b.def.poles) {
+      const qw = toWorld(b.body, q.x, q.y, q.z, _pb), dx = qw.x - pw.x, dy = qw.y - pw.y, dz = qw.z - pw.z, d = Math.hypot(dx, dy, dz);
+      if (d > .3) continue;
+      const k = POLE_K*s*p.n*q.n/Math.max(d, POLE_NEAR)**2*STEP/d;
+      if (b !== held) b.body.applyImpulseAtPoint({x:dx*k, y:dy*k, z:dz*k}, qw, true);
+      if (a !== held) a.body.applyImpulseAtPoint({x:-dx*k, y:-dy*k, z:-dz*k}, pw, true);
+      if (p.n*q.n < 0 && d < .025) { if (desk.t - (b.snapT || -1) > .3) labSound.snap(qw.x); b.snapT = a.snapT = desk.t; }
+    }
   }
 }
 // A pole sliding along steel turns its tiny magnetic domains to line up one way round, a little more
@@ -682,6 +743,7 @@ function draw(it, dt){
   const t = it.body.translation(), r = it.body.rotation();
   it.g.position.set(t.x, t.y, t.z); it.g.quaternion.set(r.x, r.y, r.z, r.w);
   if (it.tarnish !== undefined && Math.abs(it.tarnish - it.drawnT) > .004) { it.def.shade(it.refs, it.tarnish); it.drawnT = it.tarnish; }
+  if (it.beam) { const bt = it.beam.translation(), br = it.beam.rotation(), bm = it.refs.beam; bm.position.set(bt.x, bt.y, bt.z); bm.quaternion.set(br.x, br.y, br.z, br.w); bm.scale.copy(it.g.scale); }
   if (it.liq) {
     const L = levels(it), lk = chem.look(it.c), ri = it.def.ri*.97, fl = it.def.floor, q = it.liq;
     q.w.visible = L.w > .0008 && !!lk;
@@ -694,10 +756,15 @@ function draw(it, dt){
     if (q.f.visible) { const base = fl + Math.min(it.def.hi, L.w + L.o); q.f.scale.set(ri, it.head, ri); q.f.position.y = base + it.head/2; q.f.material.color.setHex(0xfbfaf4); q.f.material.opacity = .95; }
   }
 }
-function clack(it){
+function clack(it, dt){
   const vy = it.body.linvel().y;
   if (it.vy < -.45 && vy > -.1) labSound.land(it, it.body.translation().x, -it.vy/2);
   it.vy = vy;
+  if (!it.beam) return;
+  // a beam swinging down onto the mat knocks; one that has stopped moving has weighed what's in its pans
+  const w = Math.abs(it.beam.angvel().z);
+  if (it.swing > .8 && w < .2) labSound.land(it, it.body.translation().x, it.swing/3);
+  it.swing = w; it.calm = w < .03 ? it.calm + dt : 0;
 }
 
 let acc = 0;
@@ -716,14 +783,17 @@ export function updateDesk(dt){
       // Small things dropped from the hand would fall a container's floor-thickness in one step and
       // pass straight through it (the engine's sweep misses thin, fast things). A step that ends past
       // the middle of a floor gets pushed out the far side, so inside a container they fall no faster
-      // than half a thin floor and half a thin thing per step.
+      // than half its floor and half the thing per step; a foil floor is very thin.
       if (it !== H && !isVessel(it) && it.def.r < .035) {
-        const lv = it.body.linvel(), c = it.body.worldCom(), most = vessels().some(v => within(v, localOf(v, c), .02)) ? .5 : 1.1;
+        const lv = it.body.linvel(), c = it.body.worldCom();
+        let most = 1.1; for (const v of vessels()) if (v !== it && within(v, localOf(v, c), .02)) most = Math.min(most, .5, (v.def.floor + it.def.h)*30);
         if (lv.y < -most) it.body.setLinvel({x:lv.x, y:-most, z:lv.z}, true);
       }
     }
     for (const it of live()) { it.clingTo = null; if (it.tarnish > 0 && it.soakIn) polish(it); }
     for (const m of live()) if (pulls(m)) magnetism(m);
+    const mags = live().filter(m => m.def.tool === 'magnet');
+    for (let i = 0; i < mags.length; i++) for (let j = i + 1; j < mags.length; j++) poleToPole(mags[i], mags[j]);
     while (leaving.length) retire(leaving.pop());
     P.world.step();
     for (const v of vessels()) spill(v, STEP);
@@ -736,7 +806,7 @@ export function updateDesk(dt){
     else if (it.good) { it.body.setTranslation(it.good, true); it.body.setRotation({x:0, y:0, z:0, w:1}, true); it.body.setLinvel({x:0, y:0, z:0}, true); it.body.setAngvel({x:0, y:0, z:0}, true); }
     if (it.stock !== undefined) tablet(it, dt);
     if (it.resting && it !== desk.held && !insideOf(it.resting, it)) { it.resting = null; ghost(it.body, false); }
-    clack(it);
+    clack(it, dt);
   }
   for (const v of vessels()) chemStep(v, dt);
   catchers = vessels().filter(v => !v.attached && uprightness(v) >= .35).map(v => ({v, seal:capOn(v)}));
@@ -752,11 +822,37 @@ export const totalGas = () => vessels().reduce((s, v) => s + v.stats.gas, 0) + d
 // the tray or container a thing is sitting in, by id
 export function restingIn(id){
   const it = find(id); if (!it) return null;
-  const c = it.body.worldCom();
+  const c = it.body.worldCom(), v = holder(it, c, .02);
+  if (v) return v.id;
   for (const o of live()) {
-    if (o === it) continue;
+    if (o === it || o.def.kind !== 'tray') continue;
     const l = localOf(o, c);
-    if (o.def.kind === 'tray' ? Math.abs(l.x) < o.def.w/2 && Math.abs(l.z) < o.def.d/2 && l.y > -.01 && l.y < .12 : isVessel(o) && within(o, l, .02)) return o.id;
+    if (Math.abs(l.x) < o.def.w/2 && Math.abs(l.z) < o.def.d/2 && l.y > -.01 && l.y < .12) return o.id;
   }
   return null;
+}
+// A balance by id: how far its beam leans (positive when the right pan is lower), how long it has been
+// still, and what's in each pan with how big each thing is.
+export function weighing(id){
+  const it = find(id); if (!it || !it.beam) return null;
+  const B = it.def.beam, ax = rot(it.beam.rotation(), {x:1, y:0, z:0}), pans = {left:[], right:[]};
+  for (const o of live()) {
+    if (o === it) continue;
+    const c = o.body.worldCom(), l = toLocal(it.beam, c.x, c.y, c.z, {});
+    if (Math.abs(Math.abs(l.x) - B.arm) < B.pan.w/2 && Math.abs(l.z) < B.pan.d/2 && l.y > B.pan.y && l.y < B.pan.y + .1) pans[l.x < 0 ? 'left' : 'right'].push({id:o.id, size:volumeOf(o)});
+  }
+  return {tilt: -Math.asin(Math.max(-1, Math.min(1, ax.y))), calm: it.calm, ...pans};
+}
+// for every two magnets, their nearest poles: how far apart, and whether they're alike
+export function poleMeets(){
+  const mags = live().filter(m => m.def.tool === 'magnet'), out = [];
+  for (let i = 0; i < mags.length; i++) for (let j = i + 1; j < mags.length; j++) {
+    let best = null;
+    for (const p of mags[i].def.poles) for (const q of mags[j].def.poles) {
+      const a = toWorld(mags[i].body, p.x, p.y, p.z, {}), b = toWorld(mags[j].body, q.x, q.y, q.z, {}), d = Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+      if (!best || d < best.d) best = {a:mags[i].id, b:mags[j].id, d, like:p.n === q.n};
+    }
+    out.push(best);
+  }
+  return out;
 }

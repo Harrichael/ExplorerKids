@@ -41,10 +41,10 @@ function parts(shape, density){
       for (let i = 0; i < n; i++) { const t = i/n*Math.PI*2; d(R.ColliderDesc.cuboid(.003, (y1 - y0 - .015)/2, L/2), Math.cos(t)*(r + .003), (y0 + .015 + y1)/2, Math.sin(t)*(r + .003), yRot(-t)); }
       for (let i = 0; i < 10; i++) { const t = i/10*Math.PI*2; d(R.ColliderDesc.cuboid((rOut - r)/2, .006, SL/2), Math.cos(t)*sr, y0 + .008, Math.sin(t)*sr, yRot(-t)); }
     } else if (k === 'hollow-box') {
-      const [w, h, dd, wall] = a;
-      d(R.ColliderDesc.cuboid(w/2, wall/2, dd/2), 0, wall/2, 0);
-      d(R.ColliderDesc.cuboid(w/2, h/2, wall/2), 0, h/2, dd/2 - wall/2); d(R.ColliderDesc.cuboid(w/2, h/2, wall/2), 0, h/2, -dd/2 + wall/2);
-      d(R.ColliderDesc.cuboid(wall/2, h/2, dd/2), w/2 - wall/2, h/2, 0); d(R.ColliderDesc.cuboid(wall/2, h/2, dd/2), -w/2 + wall/2, h/2, 0);
+      const [w, h, dd, wall, x = 0, y = 0] = a;
+      d(R.ColliderDesc.cuboid(w/2, wall/2, dd/2), x, y + wall/2, 0);
+      d(R.ColliderDesc.cuboid(w/2, h/2, wall/2), x, y + h/2, dd/2 - wall/2); d(R.ColliderDesc.cuboid(w/2, h/2, wall/2), x, y + h/2, -dd/2 + wall/2);
+      d(R.ColliderDesc.cuboid(wall/2, h/2, dd/2), x + w/2 - wall/2, y + h/2, 0); d(R.ColliderDesc.cuboid(wall/2, h/2, dd/2), x - w/2 + wall/2, y + h/2, 0);
     } else if (k === 'cyl') { const [r, h, y0] = a; d(R.ColliderDesc.cylinder(h/2, r), 0, y0 + h/2, 0); }
     else if (k === 'box') { const [w, h, dd, y0, x = 0] = a; d(R.ColliderDesc.cuboid(w/2, h/2, dd/2), x, y0 + h/2, 0); }
     else if (k === 'ball') { const [r, y] = a; d(R.ColliderDesc.ball(r), 0, y, 0); }
@@ -76,6 +76,13 @@ export function makeBody(def, x, y, z, item){
   return body;
 }
 export function retire(b){ b.setEnabled(false); }
+// b2 swings on b1 about an axis through a1 (in b1's frame) and a2 (in b2's), like a balance beam on its
+// post; `friction` is how much the pivot resists turning
+export function hinge(b1, b2, a1, a2, axis, friction){
+  const j = P.world.createImpulseJoint(P.R.JointData.revolute(a1, a2, axis), b1, b2, true);
+  j.setContactsEnabled(false); j.configureMotorVelocity(0, friction);
+  return j;
+}
 export function ghost(b, how){ const g = how === 'held' ? HELD : how === 'resting' ? RESTING : THING; for (let i = 0; i < b.numColliders(); i++) b.collider(i).setCollisionGroups(g); }
 
 // ---------- queries ----------
