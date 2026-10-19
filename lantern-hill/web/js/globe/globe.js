@@ -3,8 +3,8 @@
 // globes in one, and the explorer picks which as they step up.
 //
 // The biome globe: pick a biome and Hoot gives a riddle about its weather to find it by; open a food
-// web and it pops up out of the globe as a diorama with no arrows yet, for the explorer to guess who
-// eats whom; then ask what would happen if one animal disappeared. Tapping anywhere just visits it.
+// web and it pops up as a diorama on the floor beside the globe, built a guess at a time as the
+// explorer works out who eats whom; then ask what would happen if one animal disappeared. Tapping anywhere just visits it.
 // The geography globe is the real Earth from space, and lives in real-earth.js; this file keeps
 // the room globe, the camera and the hands for both.
 // Loaded the first time someone uses the globe; once the map is painted, the globe keeps it.
@@ -132,6 +132,11 @@ const and = words => words.length < 2 ? words.join('') : words.slice(0, -1).join
 // ---------- the globe in the room, steered while the explorer is at it ----------
 const RAD = Math.PI/180, R = .4, PITCH = 1.35, wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 const center = new THREE.Vector3(GLOBE.x, GLOBE.y, GLOBE.z);
+// Food webs pop up on the floor at the globe's right, a little toward the explorer to clear the potted
+// plant beyond. The diorama and the camera both turn to face along the line from the globe, so the globe
+// stands beside the web on screen rather than behind it.
+const WEB_AT = new THREE.Vector3(GLOBE.x + 1.3, 0, GLOBE.z + .9), WEB_TURN = Math.atan2(-(WEB_AT.z - GLOBE.z), WEB_AT.x - GLOBE.x);
+const WEB_GAP = Math.hypot(WEB_AT.x - GLOBE.x, WEB_AT.z - GLOBE.z);
 const pin = new THREE.Group(); pin.visible = false; globeBall.add(pin);
 { const stick = new THREE.Mesh(new THREE.CylinderGeometry(.003, .003, .055, 6), T(C.ink)); stick.position.y = .027; pin.add(stick);
   const head = new THREE.Mesh(new THREE.SphereGeometry(.013, 14, 10), T(0xe0453a)); head.position.y = .055; outline(head, 1.25); pin.add(head); }
@@ -148,7 +153,7 @@ function facing(lat, lon, d){
 }
 // zoom moves the camera in on the biome globe; mag narrows its lens on the geography globe, which
 // leans in far closer than the camera could go without passing through the room's near plane
-const view = {yaw: -Math.PI/2, pitch: 20*RAD, zoom: 1, mag: 1, orbit: 0, vyaw: 0, vpitch: 0, fly: null, idle: true, shrink: 0};
+const view = {yaw: -Math.PI/2, pitch: 20*RAD, zoom: 1, mag: 1, orbit: 0, vyaw: 0, vpitch: 0, fly: null, idle: true};
 
 // ---------- the world model and the map ----------
 let earth = null, here = null, glowFor = null, biomeSkin = null;
@@ -243,9 +248,12 @@ function openArea(){
 }
 function aimCamera(){
   const web = G.mode === 'web' && dioramaSize(), a = openArea(), geo = G.kind === 'geo' && !G.picking;
-  const el = web ? 1.15 : .1, turn = web ? view.orbit : 0;
-  if (web) camAt.set(GLOBE.x, .7 + web.top*.42, GLOBE.z); else camAt.copy(center);
-  const rho = web ? web.radius*1.02*view.zoom : geo ? .5 : .5*view.zoom;
+  const el = web ? 1.15 : .1, turn = web ? WEB_TURN + view.orbit : 0;
+  // the diorama with the globe it came from beside it, a little of the globe allowed off the edge;
+  // on a narrow screen there's only room for the diorama
+  const from = web && (a.r - a.l > a.b - a.t ? -WEB_GAP + .1 : -web.radius), to = web && web.radius;
+  if (web) camAt.set(web.at.x + Math.cos(WEB_TURN)*(from + to)/2, web.top*.42, web.at.z - Math.sin(WEB_TURN)*(from + to)/2); else camAt.copy(center);
+  const rho = web ? (to - from)/2*1.02*view.zoom : geo ? .5 : .5*view.zoom;
   const mag = geo ? view.mag : 1;
   if (camera.zoom !== mag) { camera.zoom = mag; camera.updateProjectionMatrix(); }
   back.set(Math.sin(turn)*Math.cos(el), Math.sin(el), Math.cos(turn)*Math.cos(el));
@@ -380,7 +388,7 @@ function openWeb(){
   stopHunt(); if (convo) endConvo(false);
   G.mode = 'web'; view.zoom = 1; view.orbit = 0; pin.visible = false; loadPhotos();
   const web = here.web;
-  showDiorama(scene, new THREE.Vector3(GLOBE.x, .7, GLOBE.z), web, here.biomeId);
+  showDiorama(scene, WEB_AT, web, here.biomeId, .9, WEB_TURN);
   tune([523, 784], {dur: .14}); [880, 1175, 1568].forEach((f, i) => Sound.tone(f, {type: 'sine', t: .25 + i*.06, dur: .3, vol: .035}));
   if (learned.has(web.id)) { G.lesson = {step: 'explore'}; enter(web.species.map(s => s.name)); growArrows(); }
   else {
@@ -621,8 +629,6 @@ function middle(){
 // ---------- every frame, in the room ----------
 const held = new Set();
 hqAnims.push(dt => {
-  view.shrink += ((G && G.mode === 'web' ? 1 : 0) - view.shrink)*Math.min(1, dt*6);
-  const s = Math.max(.001, 1 - view.shrink); globeBall.scale.setScalar(s); globeRing.scale.setScalar(s);
   updateDiorama(dt);
   if (!G || !G.seated) return;
   aimCamera();

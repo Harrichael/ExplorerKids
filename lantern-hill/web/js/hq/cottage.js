@@ -2,6 +2,7 @@
 
 import * as THREE from 'three';
 import { C, T, add, box, col, cyl, glowM, glowTex, grad, grp, occluder, outline, rand, rr, rrect, sph, tex } from '../core/kit.js';
+import { camera } from '../core/render.js';
 import { Sound } from '../core/sound.js';
 import { player } from '../player.js';
 import { dressing } from '../ui/wardrobe.js';
@@ -397,4 +398,77 @@ hqAnims.push((dt, t) => {
   mobile.rotation.y += dt * .12; planets.forEach(p => p.g.rotation.y += dt * p.speed);
   hand1.rotation.z = -t * .1;
   bubbles.forEach(b => { b.t += dt; const k = (b.t % 1.5) / 1.5; b.m.position.set(b.x, b.y0 + k * .45, b.z); b.m.material.opacity = 1 - k; });
+});
+
+// ---------- Roof ----------
+// A steep shingled gable over the whole cottage. It is there whenever it hides nothing: seen from
+// the yard, or from under it (sat on the rug with the crane, say). It fades away while the camera
+// looks down through it at the explorer indoors, or over it at them behind the cottage.
+const EX = 10.4, EZ = 7.4, PITCH = Math.tan(27*Math.PI/180), SLAB = .32;
+const RIDGE = WH + SLAB*Math.hypot(1, PITCH) + EZ*PITCH;
+const roof = grp();
+// no rand() here: the cottage shares the seeded layout RNG with the areas built after it
+const shingleTex = tex(256, 256, (g, w, h) => {
+  const tones = ['#b5552f', '#a8492a', '#c0623a', '#9c4326'], rh = h/4, sw = w/8;
+  for (let r = 0; r < 4; r++) for (let i = -1; i < 8; i++) {
+    const x = i*sw + (r%2)*sw/2, k = Math.abs(Math.sin(r*12.9 + i*78.2))*4 | 0;
+    g.fillStyle = tones[k]; rrect(g, x + 2, r*rh, sw - 4, rh - 3, 10); g.fill();
+    g.fillStyle = 'rgba(255,220,180,.12)'; g.fillRect(x + 6, r*rh + 4, sw - 12, 5);
+  }
+  g.globalCompositeOperation = 'destination-over'; g.fillStyle = '#4a2018'; g.fillRect(0, 0, w, h);
+}, 5.5, 5);
+const eaveMat = T(C.woodDk), underMat = T(0xb89a88, {map:plankTex});
+// the kit's outline grows a mesh evenly, which on a long thin slab is a fat rim at the ends and none on top
+function ink(m, w, h, d, e = .05){ outline(m).children[0].scale.set(1 + 2*e/w, 1 + 2*e/h, 1 + 2*e/d); return m; }
+const slabs = [], slabLen = (EZ + .7)*Math.hypot(1, PITCH);
+for (const s of [1, -1]) {
+  const side = grp(0, RIDGE, 0, 0, roof); side.rotation.x = s*Math.atan(PITCH);
+  slabs.push(ink(box(2*EX + 1.2, SLAB, slabLen, [eaveMat, eaveMat, T(0xffffff, {map:shingleTex}), underMat, eaveMat, eaveMat], 0, -SLAB/2, s*slabLen/2, side), 2*EX + 1.2, SLAB, slabLen));
+}
+const cap = cyl(.22, .22, 2*EX + 1.4, T(0x8a3a22), 0, RIDGE + .02, 0, roof, 10); cap.rotation.z = Math.PI/2; outline(cap, 1.04);
+
+const gableTex = tex(256, 256, (g, w, h) => { g.fillStyle = '#8c6b55'; g.fillRect(0, 0, w, h); g.fillStyle = 'rgba(40,20,10,.35)'; for (let y = 0; y < h; y += 32) g.fillRect(0, y, w, 4); }, .55, .55);
+const gableGeo = new THREE.ExtrudeGeometry(new THREE.Shape([new THREE.Vector2(-EZ, 0), new THREE.Vector2(EZ, 0), new THREE.Vector2(0, EZ*PITCH)]), {depth:.4, bevelEnabled:false});
+for (const s of [1, -1]) {
+  add(gableGeo, T(0xffffff, {map:gableTex}), s*10.2 - .2, WH, 0, roof).rotation.y = Math.PI/2;
+  // a round attic window, lit from inside
+  const win = grp(s*10.42, WH + 1.35, 0, s*Math.PI/2, roof);
+  add(new THREE.CircleGeometry(.42, 20), glowM(0xffcf73, .9), 0, 0, .01, win, false);
+  outline(add(new THREE.TorusGeometry(.42, .07, 6, 20), T(C.woodLt), 0, 0, 0, win), 1.06);
+  box(.84, .05, .04, T(C.woodLt), 0, 0, .03, win, false); box(.05, .84, .04, T(C.woodLt), 0, 0, .03, win, false);
+}
+
+// the hearth's chimney, coming up through the north slope
+const CH = {x:0, z:-6.6, top:RIDGE - 1.3};
+outline(box(1.3, CH.top - WH, .9, stoneMat, CH.x, (CH.top + WH)/2, CH.z, roof), 1.03);
+outline(box(1.6, .26, 1.2, T(0x4e4656), CH.x, CH.top + .13, CH.z, roof), 1.04);
+const puffs = [0, 1, 2, 3, 4].map(i => ({t:i/5, m:sph(1, new THREE.MeshToonMaterial({color:C.cream, gradientMap:grad, transparent:true, depthWrite:false}), CH.x, CH.top, CH.z, roof, 10, false)}));
+
+let roofShown = 1;
+const roofMats = new Map();
+roof.traverse(m => { if (!m.isMesh || puffs.some(p => p.m === m)) return;
+  if (!roofMats.has(m.material)) roofMats.set(m.material, Array.isArray(m.material) ? m.material.map(x => x.clone()) : m.material.clone());
+  m.material = roofMats.get(m.material); });
+const fadeMats = [...roofMats.values()].flat(); fadeMats.forEach(m => m.transparent = true);
+const indoors = (x, z) => Math.abs(x) < EX && Math.abs(z) < EZ;
+const underRoof = p => indoors(p.x, p.z) && p.y < WH + (EZ - Math.abs(p.z))*PITCH;
+const roofRay = new THREE.Raycaster(), chestAt = new THREE.Vector3();
+function roofInTheWay(){
+  const cam = camera.position;
+  if (indoors(player.x, player.z)) return !underRoof(cam);
+  // a ray from inside the roof meets only the backs of its faces, which it doesn't see
+  if (underRoof(cam)) return true;
+  chestAt.set(player.x, player.y + 1, player.z).sub(cam);
+  roofRay.set(cam, chestAt.clone().normalize()); roofRay.far = chestAt.length();
+  return roofRay.intersectObjects(slabs, false).length > 0;
+}
+hqAnims.push(dt => {
+  roofShown += ((roofInTheWay() ? 0 : 1) - roofShown) * Math.min(1, dt * 6);
+  roof.visible = roofShown > .02;
+  fadeMats.forEach(m => { m.opacity = roofShown; m.depthWrite = roofShown > .95; });
+  for (const p of puffs) {
+    p.t = (p.t + dt/4.5) % 1;
+    p.m.position.set(CH.x + p.t*.9, CH.top + .3 + p.t*2.4, CH.z + p.t*.3); p.m.scale.setScalar(.22 + p.t*.5);
+    p.m.material.opacity = .7 * Math.sin(Math.min(1, p.t*4)*Math.PI/2) * (1 - p.t) * roofShown;
+  }
 });
