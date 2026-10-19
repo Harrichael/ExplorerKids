@@ -8,20 +8,18 @@ import * as THREE from 'three';
 import { T, XF, add, bAdd, bFlush, clamp01, ease, fr, glowTex, outline, sph, tex } from '../../core/kit.js';
 import { Sound } from '../../core/sound.js';
 import { inWorld } from '../../core/world.js';
-import { player } from '../../player.js';
+import { save } from '../../save.js';
 import { game } from '../../state.js';
 import { tripBus } from '../bus.js';
 import { classmates } from '../class.js';
 import { goggles } from '../goggles.js';
-import { puffs, signpost, tripWorld } from '../stop-kit.js';
+import { puffs, tripWorld } from '../stop-kit.js';
 import { worries } from './worries.js';
 
 // the ledge is the floor of the heat bubble, an ellipse; the cliff stands across the chasm to the north
 const BX = 12.5, BZ = 6, BC = 3, CLIFF = -14, EDGE = -2.6;
 const BUS = [-8, 6.2], ROOF = 16;
 const ROCK = [-5.6, .4], PUTTY = [5.2, .9];
-// where the bus can be called to along the chasm edge: over the sinking rock, the rising, the sinking
-const CALLS = [-6, 0, 6];
 // the cliff's painting: 34 x 18 world units drawn on a 1024 x 512 canvas
 const CW = 1024, CH = 512, WW = 34, WH = 18;
 // the two loops of rock, side by side, rising together up the middle and sinking at the outer edges
@@ -36,7 +34,7 @@ export function buildMantle(t){
   w.area = (x, z) => z < .6 ? 'The Chasm Edge' : 'The Mantle';
   w.spawn = [BUS[0] + 1.6, BUS[1] - 1.8, Math.PI];
   const S = {phase:0, apart:0};
-  let wallCtx, wallTex, dome, ring, current, putty, flash, stops;
+  let wallCtx, wallTex, dome, ring, current, putty, flash;
   const chunks = [];
   for (const c of CELLS) for (let i = 0; i < 44; i++) chunks.push({c, a:Math.random()*Math.PI*2, r:.35 + Math.random()*.65, s:9 + Math.random()*8,
     shape:Array.from({length:6}, () => .7 + Math.random()*.4)});
@@ -73,7 +71,6 @@ export function buildMantle(t){
     const ct = tex(64, 256, (c, cw, ch) => { const g = c.createLinearGradient(0, 0, cw, 0); g.addColorStop(0, 'rgba(255,150,80,0)'); g.addColorStop(.5, 'rgba(255,170,90,.55)'); g.addColorStop(1, 'rgba(255,150,80,0)'); c.fillStyle = g; c.fillRect(0, 0, cw, ch);
       c.fillStyle = 'rgba(255,220,160,.35)'; for (let i = 0; i < 30; i++) c.fillRect(10 + Math.random()*44, Math.random()*ch, 3, 10 + Math.random()*20); }, 1, 2);
     current = add(new THREE.CylinderGeometry(2.2, 2.6, 34, 16, 1, true), new THREE.MeshBasicMaterial({map:ct, transparent:true, opacity:.4, depthWrite:false, side:THREE.DoubleSide, blending:THREE.AdditiveBlending}), 0, 2, CLIFF + 6, null, false);
-    stops = CALLS.map(x => { const g = signpost(x, EDGE + .7, 'Bus stop'); g.visible = false; return g; });
   });
   // the heat bubble, grown from the bus's own to cover the ledge, and its glowing edge on the floor
   dome = new THREE.Mesh(new THREE.SphereGeometry(1, 40, 20, 0, Math.PI*2, 0, Math.PI/2), new THREE.MeshBasicMaterial({color:0x8fe0ff, transparent:true, opacity:.07, depthWrite:false, blending:THREE.AdditiveBlending}));
@@ -164,7 +161,9 @@ export function buildMantle(t){
       await say([['pip', pick === 0 ? "You guessed it! The hot rock rose up." : "Whoa! The hot rock rose up."],
                  ['pip', "Then it cooled off at the top and sank. Round and round!"],
                  ['basil', "And look on the side! A cool slab of plate sank down."],
-                 ['sparks', "The moving mantle drags the plates along. That's why plates move!"]]);
+                 ['sparks', "The moving mantle drags the plates along. That's why plates move!"],
+                 ['sparks', "Hot things rise. Hot air does it too! Try it at the science desk when we get home."]]);
+      save('trips', {heatRises:true});
     }});
   cls.find('mo', {name:'heat', at:[8.6, 4.6, -2.2], pose:'cheer', call:"Phew! Come here!", after:["Hot like the sun. Wow."],
     async scene(){
@@ -173,7 +172,7 @@ export function buildMantle(t){
       await say([['mo', pick === 1 ? "Yes! As hot as the surface of the sun!" : "Even hotter! As hot as the surface of the sun!"],
                  ['mo', "Good thing we have the heat bubble. My snacks would melt."]]);
     }});
-  cls.hint = () => cls.saw('goggles') ? "Call the bus from a stop, {name}. Where will the rock carry us up?" :
+  cls.hint = () => cls.saw('goggles') ? "Hop on the bus when you're ready, {name}. We're riding the rock up!" :
     "Basil has a question, Juniper has putty, and Pip has my time goggles!";
 
   // ---------- the place's scenes, run by the trip's script ----------
@@ -199,43 +198,38 @@ export function buildMantle(t){
       t.play(w, [dx, dz - .2, Math.PI]);
       t.goal('Visit anyone who waves!');
     },
-    // the drill is gone, so the explorer calls the bus to the edge, where a current can carry it up
     async explore(){
       await t.until(() => cls.saw('goggles') && !game.cutscene);
       await t.wait(.6);
       await say([['sparks', cls.saw('tap') || cls.saw('putty') ? "Solid rock that flows, round and round, and carries the plates. That's the mantle!" :
                               "Hot rock rises, cool rock sinks, round and round, and it carries the plates. That's the mantle!"],
-                 ['sparks', "Let's ride a current up! Call the bus where the rock will carry us."], ...cls.stillWaving('call the bus')]);
-      cls.gather([1.6, 5.6, Math.PI]);
-      stops.forEach(g => { g.visible = true; });
-      const watchBus = (pos, look) => { pos.set(player.x*.5 + 2, 7.5, player.z + 7.5); look.set(bus.root.position.x*.8, Math.max(-1.5, bus.root.position.y), bus.root.position.z); };
-      for (let miss = 0; ; miss++) {
-        t.goal('Call the bus from a stop at the chasm edge');
-        const i = await t.use(w, ...CALLS.map(x => ({name:'Bus stop', x, z:EDGE + 1.3, verb:'Call the bus here', short:'Call', glow:[x, 1.9, EDGE + .7]})));
-        t.goal(''); game.cutscene = true; t.cut(watchBus);
-        bus.gear('bubble'); Sound.tone(523, {type:'triangle', dur:.15, vol:.07}); Sound.tone(784, {type:'triangle', t:.12, dur:.25, vol:.07});
-        const p = bus.root.position, to = [CALLS[i], .4, EDGE - 2.4];
-        await bus.fly([[p.x, p.y, p.z], [(p.x + to[0])/2, 3, (p.z + to[2])/2], [to[0], to[1], to[2] + 1.4], to], 2.6, {roll:.5});
-        if (CALLS[i] === 0) break;
-        // over sinking rock, the bus sinks too, and wobbles
-        Sound.tone(220, {type:'sawtooth', dur:1.4, vol:.05, f2:90, cut:600});
-        await t.tween(1.6, k => { p.y = to[1] - 2*ease(k); bus.body.rotation.z = Math.sin(k*20)*.14*(1 - k*.6); });
-        await say(miss ? [['pip', "That rock's sinking too!"], ['sparks', "Look at the cliff, {name}. Where does the hot rock go up?"]] : [['pip', "That rock's sinking!"]]);
-        await t.tween(1, k => { p.y = to[1] - 2*(1 - ease(k)); bus.body.rotation.z = 0; });
-        t.play(w);
-      }
-      await say([['pip', "It's going up! Right where the hot rock rises."], ['sparks', "All aboard, class!"]]);
+                 ['sparks', "The drill's gone, but the mantle can carry us up instead."],
+                 ...(cls.leaving ? cls.leaving("who wants to ride a rock elevator?") : [['sparks', "Who wants to ride a rock elevator? Everyone aboard!"], ...cls.stillWaving()])]);
+      cls.gather([bus.root.position.x - .6, bus.root.position.z - 2.4, 0]);
+      await cls.board(bus);
     },
-    // the bubble shrinks back round the bus, out over the chasm, and it rides the current up
+    // the bubble shrinks back round the bus, which floats out over the chasm: over the cool, sinking rock it
+    // sinks too, so it drifts to the middle, where the hot rock rises, and rides that up
     async depart(){
       for (const id in cls.n) { cls.n[id].model.root.visible = false; cls.n[id].label.visible = false; }
-      stops.forEach(g => { g.visible = false; });
-      t.watch(w, (pos, look) => { pos.set(6, 3, 12); look.set(bus.root.position.x, Math.min(bus.root.position.y, 12), bus.root.position.z); });
       const p = bus.root.position, at = [p.x, p.z];
+      t.watch(w, (pos, look) => { pos.set(p.x*.4 + 3, 6, 15); look.set(p.x*.8, Math.min(Math.max(p.y, -1), 10), p.z); });
       await t.tween(1, k => grow(1 - ease(k), at));
-      dome.visible = false; bus.gear('bubble'); curFlow = .6; current.material.opacity = .65;
+      dome.visible = false; bus.gear('bubble');
+      Sound.tone(523, {type:'triangle', dur:.15, vol:.07}); Sound.tone(784, {type:'triangle', t:.12, dur:.25, vol:.07});
+      const over = [-7, 2.4, EDGE - 3.4];
+      await bus.fly([[p.x, p.y, p.z], [p.x + .5, 2.2, 2], [over[0], over[1] + .3, EDGE - 1], over], 2.8, {roll:.5});
+      Sound.tone(220, {type:'sawtooth', dur:1.4, vol:.05, f2:90, cut:600});
+      const sink = t.tween(1.6, k => { p.y = over[1] - 1.6*ease(k); bus.body.rotation.z = Math.sin(k*20)*.14*(1 - k*.6); });
+      await say([['basil', "Um. We're going DOWN."], ['sparks', "This rock has cooled off, so it sinks. To the middle, where it's hot!"]]);
+      await sink; bus.body.rotation.z = 0;
+      const mid = [0, 1.4, CLIFF + 6];
+      await bus.fly([[p.x, p.y, p.z], [-3.5, 1.2, (p.z + mid[2])/2], mid], 2.2, {roll:.5});
+      curFlow = .6; current.material.opacity = .65;
       Sound.hiss({dur:3, vol:.1, type:'bandpass', freq:500, f2:1600, q:.6}); Sound.tone(120, {type:'sawtooth', dur:3.4, vol:.04, f2:360, cut:800});
-      await bus.fly([[p.x, p.y, p.z], [0, 3.5, CLIFF + 7], [0, 10, CLIFF + 6], [0, ROOF + 10, CLIFF + 6]], 4.6, {roll:.5});
+      const up = bus.fly([mid, [0, 4, CLIFF + 6], [0, 10, CLIFF + 6], [0, ROOF + 10, CLIFF + 6]], 4.6, {roll:.5});
+      await say([['pip', "It's going up! Right where the hot rock rises."]]);
+      await up;
       await t.wait(.3);
     },
   };

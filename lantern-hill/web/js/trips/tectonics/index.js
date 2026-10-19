@@ -72,7 +72,13 @@ export const tectonics = {
       t.cut(cab.shot('teacher'));
       await t.say([['sparks', "This is the crust, Earth's rocky skin. It's thin, like the skin of a peach."]]);
       cab.view('magma'); t.cut(cab.shot('window'));
-      await t.say([['juniper', "Look! A cave full of melted rock!"], ['sparks', "The magma chamber. That's where the volcano gets its lava."]]);
+      await t.say([['juniper', "Look! A cave full of melted rock!"], ['sparks', "The magma chamber! This is where the volcano's lava comes from."],
+                   ['pip', "Wait. Is it magma or lava?"],
+                   ['sparks', "Both! Melted rock is called magma while it's still under the ground."],
+                   ['sparks', "When it comes out of the ground, we call it lava. Same stuff, new name."],
+                   ['mo', "Like me! Indoor Mo, outdoor Mo. Still Mo."]]);
+      await check(t, 'mo', "So this melted rock, deep under the ground. What do we call it?", ["Magma", "Lava"], 0,
+        "Is it under the ground, or out in the open air?", "Magma! It only gets called lava once it's out.");
       cab.view('mantle');
       const thick = await t.ask('juniper', "Next is the mantle. Which layer do you think is thicker?", ["The crust", "The mantle"]);
       t.watch(dg.world, dg.frame(800, 560, 1));
@@ -103,12 +109,13 @@ export const tectonics = {
         "Remember the time goggles? The hot rock went up, and the cool rock went down.", "It rises! And we're riding it!");
       S.gear = null; t.watch(dg.world, dg.frame(990, 520, 1.25));
       const rise = dg.travel([[dg.VOLCANO + 10, 520], [960, 790], [1160, 700], [1250, 420], [dg.RIDGE, dg.surfaceY(dg.RIDGE) + 12], [dg.RIDGE + 4, dg.surfaceY(dg.RIDGE) - 26]], 7);
-      await t.say([['sparks', "Hot rock rises, all the way up to the bottom of the sea."], ['mo', "Wait. The SEA?"]]);
-      await rise; S.gear = 'sub'; S.labels.add('ridge');
-      cab.view('bubbles'); t.watch(cab.world, cab.shot('window'), seat);
-      await t.say([['pip', "Bubbles! We're a submarine now?!"]]);
-      cab.view('deep'); t.cut(cab.shot('teacher'));
-      await t.say([['sparks', "Lights on! Welcome to a ridge on the ocean floor."]]);
+      await t.say([['sparks', "Hot rock rises, all the way up to the bottom of the sea."], ['mo', "Wait. The SEA?"],
+                   ['sparks', "Near the top, there's less rock pressing down on it. So the hot rock melts into magma!"]]);
+      await rise; S.labels.add('ridge');
+      cab.view('magmaUp'); t.watch(cab.world, cab.shot('window'), seat);
+      await t.say([['juniper', "We're riding the magma up! It's whooshing down past us!"]]);
+      t.cut(cab.shot('teacher'));
+      await t.say([['sparks', "Hold on tight, class! We're about to burst out through the sea floor!"]]);
     }],
     ['the ridge', async (t, {cab, dg, rim, seat, places}) => {
       const ridge = buildRidge(t);
@@ -122,10 +129,10 @@ export const tectonics = {
       cab.view('sky'); t.watch(cab.world, cab.shot('class'), seat);
       await check(t, 'basil', "What happened to your pebble at the ridge?", ["The crack swallowed it", "New rock carried it away", "Nothing at all"], 1,
         "Think back to the time goggles. Where did your pebble end up?", "New rock carried it away from the crack. Slowly!");
-      await t.say([['sparks', "Now let's see that ridge from way up high."]]);
+      await t.say([['sparks', "Here we are, way up high! Look down."]]);
       S.mode = 'map'; S.sep = 1; S.gear = null; S.depth = false; S.labels.clear(); S.labels.add('ridge'); S.bus = [1500, 900];
       t.watch(dg.world, dg.frame(800, 500, 1));
-      const over = dg.travel([[1500, 900], [1100, 760], [820, 560], [700, 260]], 9, false);
+      const over = dg.travel([[1500, 900], [1100, 760], [820, 560], [580, 250]], 9, false);
       await t.say([['sparks', "That glowing line is the ridge. It runs right down the middle of the ocean."]]);
       if (await t.more('sparks', "Want to see what this ocean looked like long, long ago?")) {
         S.labels.add('years');

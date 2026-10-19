@@ -15,7 +15,9 @@ import '../garden/bed.js';
 import './daylight.js';
 import { bFlush } from '../core/kit.js';
 import { addUsable } from '../core/world.js';
+import { load } from '../save.js';
 import { game } from '../state.js';
+import { story } from '../ui/dialogue.js';
 import { openWardrobe } from '../ui/wardrobe.js';
 import { ARMCHAIRS, LAB_DESK, WINDOW_SEAT } from './cottage.js';
 import { BED } from '../garden/bed.js';
@@ -82,7 +84,12 @@ async function lookThroughTelescope(){
   const { openTelescope } = await import('../sky/telescope.js');
   openTelescope();
 }
+// the trip lands on a real volcano, so it waits until the explorer has fizzed one at the science desk
 async function boardWonderBus(){
+  if (!(load('lab')?.done || []).includes('volcano')) {
+    story([['sparks', "The Wonder Bus is itching to visit a real volcano, {name}! But first, try the Fizzy Volcano at my science desk."]]);
+    return;
+  }
   const [{ startTrip }, { tectonics }] = await Promise.all([import('../trips/field-trip.js'), import('../trips/tectonics/index.js')]);
   startTrip(tectonics);
 }

@@ -12,6 +12,10 @@
 // A place needs only its key find seen; the rest are the explorer's to choose. When Dr. Sparks calls
 // everyone back to the bus, anyone with a find not yet seen stays and keeps calling, and heads for
 // the bus once the explorer has been to see it, or the explorer can just climb aboard.
+//
+//   await t.say(cls.leaving("next stop: down!"));   // Dr. Sparks calls everyone back
+//   cls.gather([x, z, facing]);                      // where they wait for the bus
+//   await cls.board(bus);                            // in through the door, Dr. Sparks and the explorer last
 
 import * as THREE from 'three';
 import { tex } from '../core/kit.js';
@@ -20,7 +24,7 @@ import { Sound } from '../core/sound.js';
 import { player } from '../player.js';
 import { game } from '../state.js';
 import { convo } from '../ui/dialogue.js';
-import { spawnNPC } from './stop-kit.js';
+import { heroHopIn, hopIn, spawnNPC } from './stop-kit.js';
 
 export const CLASS = ['sparks', 'pip', 'juniper', 'basil', 'mo'];
 const bang = tex(128, 128, (c, w, h) => {
@@ -41,9 +45,13 @@ export function classmates(w, t, door){
       f.mark.scale.set(.6, .6, 1); f.mark.visible = false; w.scene.add(f.mark); finds.push(f); return f; },
     saw: name => [...found].some(f => f.name === name),
     tally: () => ({seen:found.size, of:finds.length}),
-    // what Dr. Sparks adds when she calls everyone back, if some still have something to show
+    // Dr. Sparks calls everyone back, teasing what's next; those still with something to show stay out
+    leaving(next){
+      const who = [...waving(), '{name}'], names = who.slice(0, -1).join(', ') + (who.length > 2 ? ', and ' : ' and ') + '{name}';
+      return [['sparks', `Alright class, ${next}`], ['sparks', who.length > 1 ? `${names}, when you're done, come to the bus!` : 'Everyone back on the bus!']];
+    },
     stillWaving(or = 'hop on the bus'){
-      const who = [...new Set(finds.filter(f => !found.has(f) && (!f.when || f.when())).map(f => f.who.name))];
+      const who = waving();
       if (!who.length) return [];
       const names = who.length > 1 ? who.slice(0, -1).join(', ') + ' and ' + who.at(-1) : who[0];
       return [['sparks', `${names} ${who.length > 1 ? 'still want' : 'still wants'} to show you something. Go and see, or ${or}!`]];
@@ -54,16 +62,48 @@ export function classmates(w, t, door){
         const k = n[id], f = finds.find(f => f.id === id), at = spots[id] || (f && f.at);
         k.x = door[0] + (i - 2)*.35; k.z = door[1]; k.model.root.position.set(k.x, w.ground(k.x, k.z), k.z); k.model.root.visible = true; k.label.visible = true;
         // each spots their find a moment after getting there, so the calls come one by one
-        if (at) k.goal = {x:at[0], z:at[1], angle:at[2], run:true, then: () => { k.pose = (f && f.at === at && f.pose) || null; k.spotted = game.elapsed + 1 + i*1.6; }};
+        if (at) k.goal = {...clear(at[0], at[1]), angle:at[2], run:true, then: () => { k.pose = (f && f.at === at && f.pose) || null; k.spotted = game.elapsed + 1 + i*1.6; }};
       });
     },
     // everyone back to the bus door to wait for the explorer
     gather(at){ bus = at; },
-    // until the explorer climbs aboard; never in the middle of a find, whose scene would be left running
-    board: b => b.boarding(t, () => !running),
+    // until the explorer climbs aboard; never in the middle of a find, whose scene would be left running.
+    // The class files in through the door as they get there; the explorer climbing aboard calls in
+    // anyone still out, then Dr. Sparks, then the explorer last of all.
+    async board(b){
+      aboard = b;
+      await b.boarding(t, () => !running);
+      game.cutscene = true;
+      const out = CLASS.filter(id => n[id].model.root.visible && !n[id].in);
+      for (const id of out) if (id !== 'sparks') goIn(n[id], true);
+      const end = game.elapsed + 5, kids = CLASS.filter(id => id !== 'sparks').map(id => n[id]);
+      await t.until(() => game.elapsed > end || kids.every(k => !k.model.root.visible));
+      // anyone from the far side of the place is taken as already aboard, so Dr. Sparks is still last
+      for (const k of kids) { k.goal = null; k.model.root.visible = false; }
+      if (n.sparks.model.root.visible) { goIn(n.sparks, true); await t.until(() => game.elapsed > end + 3 || !n.sparks.model.root.visible); }
+      let inside = false; heroHopIn(b.door(-.2)).then(() => { inside = true; });
+      await t.until(() => inside);
+    },
   };
-  let bus = null;
-  const ready = f => !found.has(f) && !f.who.goal && game.elapsed > (f.who.spotted || 0) && (!f.when || f.when());
+  let bus = null, aboard = null, nextIn = 0;
+  // nobody stands where the explorer couldn't: inside the parked bus, a boulder
+  const clear = (x, z) => {
+    for (let pass = 0; pass < 3; pass++) { let moved = false;
+      for (const c of w.colliders) { const m = .45, y = w.ground(x, z);
+        if (y < c.minY || y > c.maxY || x <= c.minX - m || x >= c.maxX + m || z <= c.minZ - m || z >= c.maxZ + m) continue;
+        const [dx, dz] = [[c.minX - m - x, 0], [c.maxX + m - x, 0], [0, c.minZ - m - z], [0, c.maxZ + m - z]].sort((a, b) => Math.hypot(...a) - Math.hypot(...b))[0];
+        x += dx; z += dz; moved = true; }
+      if (!moved) break; }
+    return {x, z};
+  };
+  const waving = () => [...new Set(finds.filter(f => !found.has(f) && (!f.when || f.when()) && f.id !== 'sparks').map(f => f.who.name))];
+  // up to the door and in with a hop
+  function goIn(k, run){
+    const [x, z] = aboard.door(.35), [ix, iz] = aboard.door(-.2);
+    k.in = true; k.pose = null; k.calling = false;
+    k.goal = {x, z, run, then: () => hopIn(k, [ix, aboard.root.position.y + .3, iz])};
+  }
+  const ready = f => !found.has(f) && !f.who.goal && !f.who.in && game.elapsed > (f.who.spotted || 0) && (!f.when || f.when());
   let running = false, callAt = 0;
   async function play(f){
     if (running) return; running = true; game.cutscene = true;
@@ -78,7 +118,12 @@ export function classmates(w, t, door){
     let near = null, nd = Infinity;
     for (const id of CLASS) {
       const k = n[id], f = finds.find(f => f.who === k && ready(f));
-      if (bus && !f && !k.goal && !k.atBus && id !== 'sparks') { const i = CLASS.indexOf(id); k.atBus = true; k.pose = null; k.goal = {x:bus[0] + (i - 2.5)*.8, z:bus[1] + (i % 2)*.6, angle:bus[2] || 0}; }
+      if (k.in) { k.onTalk = null; k.calling = false; k.range = 0; continue; }
+      if (bus && !f && !k.goal && !k.atBus && id !== 'sparks') { const i = CLASS.indexOf(id); k.atBus = true; k.pose = null; k.goal = {...clear(bus[0] + (i - 2.5)*.8, bus[1] + (i % 2)*.6), angle:bus[2] || 0}; }
+      // with the bus here, those waiting file in one by one, and Dr. Sparks waits by the door for the explorer
+      if (aboard && k.atBus && !k.goal && id !== 'sparks' && tt > nextIn) { nextIn = tt + .6; goIn(k, false); continue; }
+      if (aboard && id === 'sparks' && !k.atBus && !f) { const a = aboard.root.rotation.y, [x, z] = aboard.door(.8);
+        k.atBus = true; k.pose = null; k.goal = {...clear(x + Math.cos(a)*1.1, z - Math.sin(a)*1.1), angle:a + Math.PI}; }
       // whoever has something to show is talked to through it; the rest just chat
       k.onTalk = f ? () => play(f) : id === 'sparks' ? sparksHint : null;
       // mid-find, with the explorer handed the controls to do something, nobody calls or talks
@@ -87,7 +132,7 @@ export function classmates(w, t, door){
       const d = Math.hypot(player.x - k.x, player.z - k.z); if (d < nd) { nd = d; near = f; }
     }
     for (const f of finds) {
-      f.mark.visible = ready(f) && f.who.onTalk && !convo && !running && finds.find(g => g.who === f.who && ready(g)) === f;
+      f.mark.visible = ready(f) && f.who.model.root.visible && f.who.onTalk && !convo && !running && finds.find(g => g.who === f.who && ready(g)) === f;
       if (f.mark.visible) f.mark.position.set(f.who.x, f.who.y + f.who.labelY + .55 + Math.abs(Math.sin(tt*3))*.12, f.who.z);
     }
     // a caller nobody has come to calls again now and then

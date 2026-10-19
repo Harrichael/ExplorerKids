@@ -2,7 +2,10 @@ import * as THREE from 'three';
 import { makeLabel } from '../characters/build.js';
 import { PERSONA } from '../characters/cast.js';
 import { C, T, XF, add, box, cyl, grp, leafCloud, mergeGeos, meshOf, outlineMat, rrect, tex } from '../core/kit.js';
+import { Sound } from '../core/sound.js';
 import { makeWorld } from '../core/world.js';
+import { blob, hero, player } from '../player.js';
+import { game } from '../state.js';
 
 // A field trip place: a world whose frame update runs whatever its builders pushed onto w.anims.
 export function tripWorld(o){
@@ -35,6 +38,28 @@ export function spawnNPC(w, pid, x, z, ry, lines = []){
     blinkAt:1 + Math.random()*3, name:p.name, role:p.role, dot:p.dot, voice:p.voice, kind:p.kind, persona:p, lines, walk:0};
   w.npcs.push(n); return n;
 }
+// with a little hop, through a door at [x, y, z] and gone from sight; resolves once they're in
+export function hopIn(n, [x, y, z], s = .35){
+  const x0 = n.x, y0 = n.y, z0 = n.z, t0 = game.elapsed, m = n.model.root, sc = m.scale.x;
+  n.range = 0; n.label.visible = false; n.pose = null; m.rotation.y = n.baseAngle = Math.atan2(x - x0, z - z0);
+  Sound.tone(440, {type:'triangle', dur:.14, vol:.05, f2:880});
+  return frames(() => { const u = Math.min(1, (game.elapsed - t0)/s);
+    n.x = x0 + (x - x0)*u; n.z = z0 + (z - z0)*u; n.y = y0 + (y - y0)*u + Math.sin(u*Math.PI)*.3;
+    m.position.set(n.x, n.y, n.z); m.scale.setScalar(sc*(1 - .45*u*u));
+    if (u < 1) return false; m.visible = false; m.scale.setScalar(sc); return true; });
+}
+// the explorer too: one bouncy leap from wherever they stand
+export function heroHopIn([x, z], s = .55){
+  const x0 = player.x, z0 = player.z, t0 = game.elapsed, sc = hero.root.scale.x;
+  player.angle = Math.atan2(x - x0, z - z0); player.y += .06; player.vy = 22*s/2;
+  Sound.tone(392, {type:'triangle', dur:.18, vol:.06, f2:880});
+  return frames(() => { const u = Math.min(1, (game.elapsed - t0)/s);
+    player.x = x0 + (x - x0)*u; player.z = z0 + (z - z0)*u; hero.root.scale.setScalar(sc*(1 - .3*u*u));
+    if (u < 1) return false; hero.root.visible = blob.visible = false; hero.root.scale.setScalar(sc);
+    // the bus faded to show them climbing in; with them gone it's solid again at once
+    game.world.occluders.forEach(o => { o.cur = 1; }); return true; });
+}
+const frames = test => new Promise(ok => { const f = () => test() ? ok() : requestAnimationFrame(f); f(); });
 export function signpost(x, z, text, y0 = 0, ry = 0){
   const g = grp(x, y0, z, ry);
   cyl(.06, .07, 1.4, T(C.woodDk), 0, .7, 0, g, 6);
