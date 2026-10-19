@@ -153,7 +153,7 @@ export function makeBook({desk = true} = {}){
     front.frustumCulled = back.frustumCulled = cast.frustumCulled = false;
     const turning = new THREE.Group(); turning.add(front, back); turning.visible = cast.visible = false; group.add(turning, cast);
     // the ribbon bookmark, tucked into the bottom of the page block by the spine, its tail out on the desk
-    const ribbon = new THREE.Mesh(new THREE.PlaneGeometry(.17, 1, 1, 24), new THREE.MeshLambertMaterial({map:ribbonT, side:THREE.DoubleSide, alphaTest:.5}));
+    const ribbon = new THREE.Mesh(new THREE.PlaneGeometry(.17, 1, 1, 64), new THREE.MeshLambertMaterial({map:ribbonT, side:THREE.DoubleSide, alphaTest:.5}));
     group.add(ribbon);
     meshes = {blockL:block(-1), blockR:block(1), left:page(-1, paper), right:page(1, paper), gutL:gutter(-1), gutR:gutter(1), turning, front, back, cast, ribbon,
       base:fg.attributes.position.array.slice(), boards:[cover(-1), cover(1)], spine, shadow};
@@ -183,13 +183,27 @@ export function makeBook({desk = true} = {}){
     meshes.spine.position.y = top/2; meshes.spine.scale.z = (top/2 + .04)/.1;
     const [l, r] = span();
     meshes.shadow.scale.x = ((l + r)*bw + 1.1)/(2*bw + 1.1); meshes.shadow.position.x = (r - l)*bw/2;
-    lay(meshes.ribbon, [[.28, meshes.right.position.y - .03, H/2 + .02], [.3, BOARD + .01, H/2 + MARGIN*.7], [.31, BOARD*.5, H/2 + MARGIN + .03],
-      [.36, .004, H/2 + MARGIN + .16], [.48, .004, H/2 + .55], [.42, .004, H/2 + .85], [.52, .004, H/2 + 1.12]]);
+    ribbon();
   }
-  // bend a strip along a path lying near the desk, its width across x
-  function lay(m, pts){
-    const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(...p))), a = m.geometry.attributes.position, n = a.count/2, hw = .085, q = new THREE.Vector3();
-    for (let i = 0; i < n; i++) { curve.getPointAt(i/(n - 1), q); a.setXYZ(2*i, q.x - hw, q.y, q.z); a.setXYZ(2*i + 1, q.x + hw, q.y, q.z); }
+  // The ribbon comes out from between the pages at their bottom edge, hangs down the page block, lies
+  // along the board, wraps over the board's edge and trails across the desk. It is laid as a polyline:
+  // a smooth curve through a few points cuts the corners, and through the board.
+  function ribbon(){
+    const V = (x, y, z) => new THREE.Vector3(x, y, z), k = .006, lip = H/2 + .02, edge = H/2 + MARGIN, ry = BOARD/2 + k, rz = BOARD/2 + BOARD*.32 + .045;
+    const pts = [V(.28, meshes.right.position.y - .02, lip), V(.28, BOARD + k, lip + .015), V(.29, BOARD + k, edge - BOARD/2)];
+    // bowing out over the board's edge, clear of its bevel and ink outline, then down to the desk
+    for (let i = 1; i <= 8; i++) { const a = i/8*Math.PI*.6; pts.push(V(.29, BOARD/2 + ry*Math.cos(a), edge - BOARD/2 + rz*Math.sin(a))); }
+    pts.push(V(.3, k, edge + .1));
+    const tail = new THREE.CatmullRomCurve3([V(.3, k, edge + .1), V(.36, k, edge + .3), V(.47, k, edge + .55), V(.42, k, edge + .8), V(.5, k, edge + .98)]);
+    pts.push(...tail.getSpacedPoints(24).slice(1));
+    // evenly along its length, so the satin's stripes don't bunch up round the edge
+    const len = [0]; for (let i = 1; i < pts.length; i++) len.push(len[i - 1] + pts[i].distanceTo(pts[i - 1]));
+    const m = meshes.ribbon, a = m.geometry.attributes.position, n = a.count/2, hw = .085, q = new THREE.Vector3();
+    for (let i = 0, j = 1; i < n; i++) {
+      const d = i/(n - 1)*len.at(-1); while (j < pts.length - 1 && len[j] < d) j++;
+      q.lerpVectors(pts[j - 1], pts[j], (d - len[j - 1])/(len[j] - len[j - 1] || 1));
+      a.setXYZ(2*i, q.x - hw, q.y, q.z); a.setXYZ(2*i + 1, q.x + hw, q.y, q.z);
+    }
     a.needsUpdate = true; m.geometry.computeVertexNormals(); m.geometry.computeBoundingSphere();
   }
   // Each row of the leaf bends on its own, turned by p, its free edge offset by the bend plus the twist
