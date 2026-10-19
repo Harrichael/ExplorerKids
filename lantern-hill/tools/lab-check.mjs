@@ -15,6 +15,8 @@ const args = process.argv.slice(2), url = args.find(a => /^https?:/.test(a)) || 
 // Runs in the page. Everything waits on the desk rather than on the clock, because headless Chrome
 // renders slowly and the physics only advances as fast as frames arrive.
 const HARNESS = `(async () => {
+  // the checks play sound effects but never the songs, which would come out of the speakers
+  HTMLMediaElement.prototype.play = () => Promise.resolve();
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const until = async (fn, ms = 20000) => { const t = performance.now(); while (performance.now() - t < ms) { const v = fn(); if (v) return v; await sleep(100); } return null; };
   document.getElementById('start').dispatchEvent(new PointerEvent('pointerdown'));
@@ -45,10 +47,10 @@ const HARNESS = `(async () => {
     point('pointerup', [0, 0]); await sleep(300);
   };
   const tip = ms => async () => { H.setTipKey(true); await sleep(ms); H.setTipKey(false); await sleep(600); };
-  const shake = n => async h => { H.setTipKey(true); await sleep(1200); const t = pos('jar');
+  const shake = (n, at = 'jar') => async h => { H.setTipKey(true); await sleep(1200); const t = pos(at);
     for (let i = 0; i < n*2; i++) { point('pointermove', screen(t.x + (i % 2 ? .04 : -.04), handY(h), t.z)); await sleep(180); }
     H.setTipKey(false); await sleep(600); };
-  const stir = ms => async h => { const t = pos('jar'); for (let k = 0; k < ms/30; k++) { point('pointermove', screen(t.x + Math.cos(k*.35)*.025, handY(h), t.z + Math.sin(k*.35)*.025)); await sleep(30); } };
+  const stir = (ms, at = 'jar') => async h => { const t = pos(at); for (let k = 0; k < ms/30; k++) { point('pointermove', screen(t.x + Math.cos(k*.35)*.025, handY(h), t.z + Math.sin(k*.35)*.025)); await sleep(30); } };
   const open = async id => {
     if (!document.getElementById('labHud').hidden) document.getElementById('lhBook').click();
     else { PL.player.x = 8.6; PL.player.z = -4.4; await sleep(200); LAB.openLab(); }
@@ -62,8 +64,9 @@ const HARNESS = `(async () => {
   // read through whatever Dr. Sparks is saying, as a player tapping along would
   const listen = async () => { for (let i = 0; i < 200 && dlg.convo; i++) { dlg.talk(); await sleep(40); } };
   const click = async p => { point('pointermove', p); await sleep(100); point('pointerdown', p); await sleep(60); cv.dispatchEvent(new PointerEvent('pointerup', {...O, buttons:0, clientX:p[0], clientY:p[1]})); await sleep(100); };
-  window.lab = {sleep, until, carry, move, tip, shake, stir, open, choose, status, listen, click, screen, D, C, chem, pos};
-  localStorage.setItem('lantern-hill-lab', JSON.stringify({done:['sinkfloat', 'magnets', 'volcano', 'rainbow', 'egg', 'dissolve', 'balloon', 'lava']}));
+  const right = () => /prediction was right|got all/.test(status());
+  window.lab = {sleep, until, carry, move, tip, shake, stir, open, choose, status, listen, click, screen, right, D, C, chem, pos};
+  localStorage.setItem('lantern-hill-lab', JSON.stringify({done:['sinkfloat', 'magnets', 'volcano', 'rainbow', 'egg', 'dissolve', 'balloon', 'lava', 'fizztest']}));
   return true;
 })()`;
 
@@ -127,6 +130,96 @@ const STORIES = [
     const linger = () => sleep(1200);
     await carry('magnet', 'paperclip', linger); await carry('magnet', 'coin', linger);
     return !D.find('paperclip').stuck ? 'the paperclip did not stick' : D.find('coin').stuck ? 'the coin stuck' : '';
+  })()`],
+  ['red and yellow drops make an orange cup', `(async () => { const {open, choose, carry, tip, until, right} = lab;
+    await open('colors'); await choose(0);
+    await carry('red', 'c1', tip(2200)); await carry('yellow', 'c1', tip(2200));
+    return await until(right, 8000) ? '' : 'no orange: ' + lab.status();
+  })()`],
+  ['pepper on water runs to the edges from a soapy swab', `(async () => { const {open, choose, carry, shake, until, sleep, right} = lab;
+    await open('pepper');
+    await carry('pepper', 'dish', shake(4, 'dish'));
+    if (!await until(() => !document.getElementById('lhChoose').hidden, 8000)) return 'the pepper never settled on the water: ' + lab.status();
+    await choose(1);
+    await carry('swab', 'saucer', () => sleep(800)); await carry('swab', 'dish', () => sleep(1500));
+    return await until(right, 6000) ? '' : 'the pepper stayed put: ' + lab.status();
+  })()`],
+  ['acids fizz with baking soda; soap and water do not', `(async () => { const {open, carry, tip, until, sleep, right, pos} = lab;
+    await open('fizztest');
+    const tray = (id, dx) => { const t = pos(id); return {x:t.x + dx, y:0, z:t.z}; };
+    await carry('vinegar', tray('fizz', -.06)); await carry('lemon', tray('fizz', .06)); await carry('soap', tray('none', -.07)); await carry('water', tray('none', .06));
+    if (!await until(() => !document.getElementById('lhLock').hidden, 4000)) return 'the guesses never locked in';
+    document.getElementById('lhLock').click(); await sleep(300); (await import('/js/ui/dialogue.js')).endConvo(true);
+    for (const [id, cup] of [['vinegar', 's1'], ['lemon', 's2'], ['soap', 's3'], ['water', 's4']]) await carry(id, cup, tip(1400));
+    return await until(right, 10000) ? '' : lab.status();
+  })()`],
+  ['a little cup holds a few spoonfuls of salt, and more of sugar', `(async () => { const {open, choose, carry, stir, until, sleep, right, listen} = lab;
+    await open('saturate'); await choose(1);
+    for (let i = 0; i < 8 && !right(); i++) { await carry('spoon', 'saltbox', () => sleep(500)); await carry('spoon', 'c1', stir(3500, 'c1')); }
+    if (!right()) return 'the salt never stopped dissolving: ' + lab.status();
+    await listen(); await choose(2);
+    for (let i = 0; i < 10 && !right(); i++) { await carry('spoon', 'sugar', () => sleep(500)); await carry('spoon', 'c2', stir(3500, 'c2')); }
+    return right() ? '' : 'sugar: ' + lab.status();
+  })()`],
+  ['gas sealed in a corked bottle pops the cork', `(async () => { const {open, choose, carry, tip, until, D} = lab;
+    await open('cork'); await choose(1);
+    await carry('t1', 'bottle');
+    await carry('cork', 'bottle');
+    const b = D.find('bottle'), at = () => JSON.stringify(b.c) + ' tablet at ' + ['x','y','z'].map(k => lab.pos('t1')[k].toFixed(3)) + ' bottle at ' + ['x','y','z'].map(k => lab.pos('bottle')[k].toFixed(3)) + ' gas ' + b.gas.toFixed(1) + ' made ' + b.stats.gas.toFixed(1);
+    if (!D.find('cork').plugged && !D.find('cork').popped) return 'the cork did not go in the neck: ' + at();
+    return await until(() => D.find('cork').popped, 10000) ? '' : 'the cork held: ' + at();
+  })()`],
+  ['gas from inside blows the balloon up', `(async () => { const {open, choose, carry, tip, until, sleep, D, listen} = lab;
+    await open('balloon'); await listen();
+    if (!document.getElementById('lhChoose').hidden) await choose(1);
+    await carry('vinegar', 'bottle', tip(1500));
+    await carry('soda', 'balloon', async h => { await tip(1200)(); await lab.move(h, {x:-.55, y:0, z:-.3}); });
+    await carry('balloon', 'bottle');
+    await carry('balloon', 'bottle', () => sleep(2000));
+    return await until(() => D.find('balloon').inflate >= .5, 10000) ? '' : 'the balloon only reached ' + D.find('balloon').inflate.toFixed(2);
+  })()`],
+  ['vinegar and salt shine a dull penny fastest; salt water alone does not', `(async () => { const {open, choose, carry, stir, until, sleep, right, listen, D} = lab;
+    await open('pennies'); await choose(2);
+    const salt = async dish => { await carry('spoon', 'saltbox', () => sleep(500)); await carry('spoon', dish, stir(3000, dish)); await carry('spoon', {x:.25, y:0, z:-.32}); };
+    await salt('d3');
+    for (const [p, d] of [['p1', 'd1'], ['p2', 'd2'], ['p3', 'd3']]) await carry(p, d);
+    const how = () => ['p1', 'p2', 'p3'].map(id => { const p = D.find(id); return id + ' ' + p.tarnish.toFixed(2) + ' in ' + (p.soakIn ? p.soakIn.id : '-'); }).join(', ');
+    if (!await until(right, 20000)) return 'the race: ' + lab.status() + ' (' + how() + ')';
+    await listen(); await choose(1);
+    await salt('d1');
+    return await until(right, 30000) ? '' : 'salt water: ' + lab.status() + ' (' + how() + ') d1 ' + JSON.stringify(D.find('d1').c);
+  })()`],
+  ['a test strip sorts acids, bases and water, and baking soda raises lemon juice', `(async () => { const {open, choose, carry, tip, until, sleep, right, listen, pos, D, chem} = lab;
+    const saved = localStorage.getItem('lantern-hill-lab'), rec = JSON.parse(saved);
+    localStorage.setItem('lantern-hill-lab', JSON.stringify({...rec, done:[...rec.done, 'cabbage']}));
+    try {
+      await open('ph');
+      const tray = (id, dx) => { const t = pos(id); return {x:t.x + dx, y:0, z:t.z}; };
+      await carry('lemon', tray('acid', -.07)); await carry('vinegar', tray('acid', .07)); await carry('water', tray('neutral', 0)); await carry('soap', tray('base', -.08)); await carry('soda', tray('base', .07));
+      if (!await until(() => !document.getElementById('lhLock').hidden, 4000)) return 'the guesses never locked in';
+      document.getElementById('lhLock').click(); await sleep(300); (await import('/js/ui/dialogue.js')).endConvo(true);
+      // a full cup glugs out fast, so the water only gets a short tip each time
+      for (const [id, cup, ms] of [['lemon', 'c1', 1400], ['vinegar', 'c2', 1400], ['water', 'c3', 500], ['soap', 'c4', 1400], ['water', 'c5', 900], ['soda', 'c5', 1400]]) await carry(id, cup, async h => { await tip(ms)(); await lab.move(h, {x:pos(cup).x, z:-.3}); });
+      const dip = async cup => { await until(() => chem.steady(D.find(cup).c), 15000); const at = pos(cup); await carry('strip', cup, async h => { await sleep(700); await lab.move(h, {x:at.x, z:at.z - .16}); }); };
+      for (const cup of ['c1', 'c2', 'c3', 'c4', 'c5']) await dip(cup);
+      const read = () => ['c1', 'c2', 'c3', 'c4', 'c5'].map(id => { const d = D.find(id).stats.dip; return id + ' ' + (d ? d.ph.toFixed(1) : '-'); }).join(', ');
+      if (!await until(right, 6000)) return 'sorting: ' + lab.status() + ' (' + read() + ')';
+      await listen(); await choose(0);
+      for (let i = 0; i < 3 && !right(); i++) { await carry('soda', 'c1', tip(1500)); await dip('c1'); await until(right, 3000); }
+      return right() ? '' : 'lemon with baking soda: ' + lab.status() + ' (' + read() + ')';
+    } finally { localStorage.setItem('lantern-hill-lab', saved); }
+  })()`],
+  ['a nail stroked one way across a magnet picks up a paperclip', `(async () => { const {open, choose, carry, move, until, sleep, right, listen, pos, D} = lab;
+    await open('makemagnet'); await choose(1);
+    await carry('nail', 'pc1', () => sleep(2600));
+    if (!await until(right, 2000)) return 'the plain nail: ' + lab.status();
+    await listen(); await choose(0);
+    const b = pos('bar'), z = b.z + .066, c = pos('pc1');
+    await carry('nail', {x:b.x - .12, y:0, z}, async h => {
+      for (let i = 0; i < 14; i++) { await move(h, {x:b.x + .12, z}); await move(h, {x:b.x + .12, z:z + .14}); await move(h, {x:b.x - .12, z:z + .14}); await move(h, {x:b.x - .12, z}); }
+      await move(h, {x:c.x - .036, z:c.z}); await sleep(1000); await move(h, {x:c.x - .2, z:c.z + .05}); await sleep(600);
+    });
+    return await until(right, 2000) ? '' : 'the nail got to ' + Math.abs(D.find('nail').mag || 0).toFixed(2) + ': ' + lab.status();
   })()`],
   ['the Free Lab cabinet holds only what finished experiments used, and hands it out', `(async () => { const {open, click, screen, until, sleep, D, C} = lab;
     await open('free');

@@ -69,7 +69,7 @@ export function makeBody(def, x, y, z, item){
   const body = w.createRigidBody(R.RigidBodyDesc.dynamic().setTranslation(x, y, z).setCcdEnabled(true).setLinearDamping(.15).setAngularDamping(.6));
   // containers are thin shells that get their weight from what's in them; supplies are approximated as
   // solid blocks, so they weigh almost nothing on their own
-  const density = def.kind === 'solid' ? def.density*1000 : def.kind === 'tool' ? 2500 : def.glass ? 2500 : def.shape[0][0].startsWith('hollow') ? 900 : 150;
+  const density = def.density ? def.density*1000 : def.kind === 'tool' ? 2500 : def.glass ? 2500 : def.shape[0][0].startsWith('hollow') ? 900 : 150;
   const group = def.kind === 'vessel' || def.kind === 'tray' ? VESSEL : THING;
   for (const c of parts(def.shape, density)) w.createCollider(c.setCollisionGroups(group), body);
   body.userData = item;

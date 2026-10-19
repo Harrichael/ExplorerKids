@@ -34,7 +34,12 @@ export const Sound = (() => {
     music.gain.linearRampToValueAtTime(awake ? MUSIC_VOL[mode] : 0, ctx.currentTime + 4);
     startMusic();
   }
-  function tone(f, {type='sine', t=0, dur=.2, vol=.2, bus, attack=.006, f2, cut, vib}={}){
+  // `pan` from -1 (left) to 1 (right) places a sound in the stereo field
+  function out(node, bus, pan){
+    if (pan && ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, pan)); node.connect(p); p.connect(bus || sfx); }
+    else node.connect(bus || sfx);
+  }
+  function tone(f, {type='sine', t=0, dur=.2, vol=.2, bus, attack=.006, f2, cut, vib, pan}={}){
     if (!ctx) return;
     const now = ctx.currentTime + t;
     const o = ctx.createOscillator(); o.type = type;
@@ -47,10 +52,10 @@ export const Sound = (() => {
     let node = o;
     if (cut) { const fl = ctx.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = cut; o.connect(fl); node = fl; }
     if (vib) { const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = vib[0]; lg.gain.value = vib[1]; lfo.connect(lg); lg.connect(o.frequency); lfo.start(now); lfo.stop(now + dur + .05); }
-    node.connect(g); g.connect(bus || sfx);
+    node.connect(g); out(g, bus, pan);
     o.start(now); o.stop(now + dur + .05);
   }
-  function hiss({t=0, dur=.08, vol=.1, type='lowpass', freq=800, f2, q=1, bus, attack}={}){
+  function hiss({t=0, dur=.08, vol=.1, type='lowpass', freq=800, f2, q=1, bus, attack, pan}={}){
     if (!ctx) return;
     const now = ctx.currentTime + t;
     const s = ctx.createBufferSource(); s.buffer = noise; s.loop = true; s.playbackRate.value = .8 + Math.random() * .4;
@@ -59,15 +64,15 @@ export const Sound = (() => {
     const g = ctx.createGain();
     if (attack) { g.gain.setValueAtTime(0.0001, now); g.gain.linearRampToValueAtTime(vol, now + attack); } else g.gain.setValueAtTime(vol, now);
     g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-    s.connect(f); f.connect(g); g.connect(bus || sfx);
+    s.connect(f); f.connect(g); out(g, bus, pan);
     s.start(now, Math.random() * .3); s.stop(now + dur + .02);
   }
   const semi = n => Math.pow(2, n / 12);
   // a struck bell: a pure fundamental under quickly fading inharmonic partials
-  function bell(f, t, dur, vol){
-    tone(f, {t, dur, vol, bus:air, attack:.003});
-    tone(f * 2.76, {t, dur:dur * .35, vol:vol * .3, bus:air, attack:.002});
-    tone(f * 5.4, {t, dur:dur * .15, vol:vol * .12, bus:air, attack:.001});
+  function bell(f, t, dur, vol, pan){
+    tone(f, {t, dur, vol, bus:air, attack:.003, pan});
+    tone(f * 2.76, {t, dur:dur * .35, vol:vol * .3, bus:air, attack:.002, pan});
+    tone(f * 5.4, {t, dur:dur * .15, vol:vol * .12, bus:air, attack:.001, pan});
   }
   // fairy dust: a few random high pings scattered over `span` seconds
   function sparkle(t, n, span = .5, vol = .025){
@@ -189,7 +194,12 @@ export const Sound = (() => {
     if (onEach) seqTimers.push(setTimeout(() => onEach(-1, 0), (t - ctx.currentTime) * 1000));
   }
   return {
-    init, blip, tone, hiss, playSeq, stopSeq, toggleMusic,
+    init, blip, tone, hiss, playSeq, stopSeq, toggleMusic, midi,
+    // the ringing, echoing voices magical cues are made of
+    bell(f, {t = 0, dur = 1, vol = .05, pan} = {}){ if (ctx) bell(f, t, dur, vol, pan); },
+    sparkle(n, {t = 0, span = .5, vol = .025} = {}){ if (ctx) sparkle(t, n, span, vol); },
+    ring(f, o = {}){ tone(f, Object.assign({bus:air}, o)); },
+    now(){ return ctx ? ctx.currentTime : 0; },
     setTheme(name){ if (MUSIC[name] && name !== theme) switchTo(name); },
     isOn(){ return on; },
     toggle(){ on = !on; if (ctx) master.gain.setTargetAtTime(on ? .9 : 0, ctx.currentTime, .05); return on; },

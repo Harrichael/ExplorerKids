@@ -2,20 +2,26 @@
 // and how to build it. Sizes are in world units, desk top at y = 0, each model's bottom at y = 0.
 //
 // kind 'vessel' holds contents and pours from its mouth when tipped (flow: liquid, drops or shake);
-// kind 'solid' sinks or floats by its density; kind 'tool' is a spoon, swab or magnet; kind 'tray'
-// holds things to show a prediction.
+// kind 'solid' sinks or floats by its density; kind 'tool' is a spoon, swab, test strip or magnet; kind
+// 'tray' holds things to show a prediction.
 
 import * as THREE from 'three';
-import { C, T, add, box, cyl, outline, sph, tex } from '../core/kit.js';
+import { C, T, add, box, cyl, grad, outline, sph, tex } from '../core/kit.js';
+import { UNIVERSAL, lerpCol } from './chem.js';
 
 export const UNITS_PER_M3 = 145000;
 export const capacity = d => d.cap || UNITS_PER_M3*Math.PI*d.ri*d.ri*d.hi;
 
 const GLASS = T(0xdff1f5, {transparent:true, opacity:.2, side:THREE.DoubleSide, depthWrite:false});
 const RIM = T(0xeef8fb, {transparent:true, opacity:.55, depthWrite:false});
+// What's inside draws between the glass's far side and its near side, so only the near wall veils it.
+const GLASS_FAR = T(0xdff1f5, {transparent:true, opacity:.2, side:THREE.BackSide, depthWrite:false});
+const GLASS_NEAR = T(0xdff1f5, {transparent:true, opacity:.2, side:THREE.FrontSide, depthWrite:false});
 function glass(b, ri, h, floor, wall=.006){
-  const w = add(new THREE.CylinderGeometry(ri + wall, ri + wall*.6, h, 24, 1, true), GLASS, 0, h/2, 0, b, false); w.renderOrder = 3;
-  const f = cyl(ri + wall*.6, ri + wall*.6, floor, GLASS, 0, floor/2, 0, b, 24, false); f.renderOrder = 3;
+  const geo = new THREE.CylinderGeometry(ri + wall, ri + wall*.6, h, 24, 1, true);
+  add(geo, GLASS_FAR, 0, h/2, 0, b, false).renderOrder = 0;
+  add(geo, GLASS_NEAR, 0, h/2, 0, b, false).renderOrder = 3;
+  const f = cyl(ri + wall*.6, ri + wall*.6, floor, GLASS, 0, floor/2, 0, b, 24, false); f.renderOrder = 0;
   const rim = add(new THREE.TorusGeometry(ri + wall*.5, wall*.5, 5, 24), RIM, 0, h, 0, b, false); rim.rotation.x = Math.PI/2; rim.renderOrder = 4;
 }
 function label(text, bg, fg, w=256, h=96, size=34){
@@ -48,6 +54,25 @@ function powderBox(text, bg, fg, fill){
     add(new THREE.PlaneGeometry(.086, .056), T(fill), 0, .12, 0, b, false).rotation.x = -Math.PI/2; };
 }
 function flat(b, mesh){ mesh.rotation.x = Math.PI/2; return mesh; }
+const own = c => { const m = new THREE.MeshToonMaterial({gradientMap:grad, color:c}); m.userData.own = true; return m; };
+// an old penny is brown with copper oxide; scrubbed off, the bright copper underneath shows
+const COPPER = 0xf07a2a, OXIDE = 0x4a3a2e;
+function chart(b){
+  const t = tex(512, 168, (g, W, H) => {
+    g.fillStyle = '#fbf4e2'; g.fillRect(0, 0, W, H);
+    const w = (W - 24)/14;
+    for (let i = 0; i < 14; i++) {
+      const col = UNIVERSAL[i + 1], x = 12 + i*w;
+      g.fillStyle = '#' + col.toString(16).padStart(6, '0'); g.fillRect(x + 2, 12, w - 4, 84);
+      g.fillStyle = i > 3 && i < 8 ? '#1a1320' : '#ffffff'; g.font = '900 30px Nunito, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(i + 1, x + w/2, 56);
+    }
+    g.fillStyle = '#1a1320'; g.font = '900 34px Nunito, sans-serif'; g.textBaseline = 'middle';
+    g.fillText('ACID', 12 + 3*w, 130); g.fillText('BASE', 12 + 10.5*w, 130);
+    g.font = '900 22px Nunito, sans-serif'; g.fillText('NEUTRAL', 12 + 6.5*w, 130);
+  });
+  box(.36, .004, .12, T(0xf4ecd8), 0, .002, 0, b);
+  const f = add(new THREE.PlaneGeometry(.35, .115), T(0xffffff, {map:t}), 0, .0042, 0, b, false); f.rotation.x = -Math.PI/2;
+}
 
 export const ITEMS = {
   // ---------- containers to pour into ----------
@@ -94,6 +119,7 @@ export const ITEMS = {
   blue:   {name:'Blue coloring', kind:'vessel', r:.021, h:.082, ri:.016, floor:.005, hi:.045, flow:'drops', mouth:.003, build: dropper(0x2f6fe0)},
   soda:   {name:'Baking soda', kind:'vessel', r:.06, h:.13, ri:.04, floor:.01, hi:.12, flow:'liquid', rate:22, mouth:.036, build: powderBox('BAKING SODA', '#e8752e', '#ffffff', 0xf6f4ee)},
   sugar:  {name:'Sugar', kind:'vessel', r:.06, h:.13, ri:.04, floor:.01, hi:.12, flow:'liquid', rate:18, mouth:.036, build: powderBox('SUGAR', '#f4efe2', '#6d3b5e', 0xfbf3e0)},
+  saltbox: {name:'Salt box', kind:'vessel', r:.06, h:.13, ri:.04, floor:.01, hi:.12, flow:'liquid', rate:18, mouth:.036, build: powderBox('SALT', '#2f5d9e', '#ffffff', 0xffffff)},
   sand:   {name:'Sand', kind:'vessel', r:.046, h:.075, ri:.04, floor:.008, hi:.06, see:true, flow:'liquid', rate:18,
     build: b => { outline(add(new THREE.CylinderGeometry(.046, .036, .075, 16, 1, true), T(0xd8473a, {side:THREE.DoubleSide}), 0, .0375, 0, b), 1.04); cyl(.036, .036, .008, T(0xd8473a), 0, .004, 0, b, 16);
       const hd = add(new THREE.TorusGeometry(.046, .003, 4, 16, Math.PI), T(C.ink), 0, .075, 0, b, false); hd.rotation.y = Math.PI/2; }},
@@ -111,8 +137,10 @@ export const ITEMS = {
   apple:  {name:'Apple', kind:'solid', r:.043, h:.09, density:.8, build: b => { const a = outline(sph(.043, T(0xd23a2e), 0, .042, 0, b, 16), 1.05); a.scale.y = .92;
     cyl(.004, .004, .025, T(C.woodDk), 0, .085, 0, b, 5); const lf = sph(.012, T(C.moss), .012, .088, 0, b, 8); lf.scale.set(1.4, .4, .8); }},
   rock:   {name:'Rock', kind:'solid', r:.032, h:.05, density:2.6, build: b => { const r = outline(add(new THREE.DodecahedronGeometry(.032), T(0x8a8494), 0, .024, 0, b), 1.06); r.scale.y = .75; r.rotation.set(.4, .7, .2); }},
-  cork:   {name:'Cork', kind:'solid', r:.02, h:.042, density:.24, build: b => outline(cyl(.018, .021, .042, T(0xc89a64), 0, .021, 0, b, 12), 1.06)},
-  coin:   {name:'Coin', kind:'solid', r:.021, h:.006, density:8.9, build: b => outline(cyl(.021, .021, .006, T(0xc8783a), 0, .003, 0, b, 18), 1.08)},
+  // it fits a bottle's neck: let go on one, it plugs it
+  cork:   {name:'Cork', kind:'solid', r:.02, h:.042, density:.24, stopper:true, build: b => outline(cyl(.018, .021, .042, T(0xc89a64), 0, .021, 0, b, 12), 1.06)},
+  coin:   {name:'Coin', kind:'solid', r:.021, h:.006, density:8.9, build: (b, o) => { const face = outline(cyl(.021, .021, .006, own(0), 0, .003, 0, b, 18), 1.08); ITEMS.coin.shade({face}, o.tarnish || 0); return {face}; },
+    shade: ({face}, t) => { face.material.color.setHex(lerpCol(COPPER, OXIDE, t)); face.material.emissive.setHex(COPPER); face.material.emissiveIntensity = .4*(1 - t)**2; }},
   duck:   {name:'Rubber duck', kind:'solid', r:.036, h:.07, density:.25, build: b => { const y = T(0xf7d23a), bd = outline(sph(.032, y, 0, .026, 0, b, 14), 1.05); bd.scale.set(1.2, .8, 1);
     outline(sph(.02, y, .022, .058, 0, b, 12), 1.06); const bk = sph(.009, T(0xe8752e), .043, .055, 0, b, 8); bk.scale.set(1.4, .6, 1);
     for (const z of [-.009, .009]) sph(.0035, T(C.ink), .035, .064, z, b, 5, false); }},
@@ -133,6 +161,7 @@ export const ITEMS = {
   button: {name:'Button', kind:'solid', r:.02, h:.007, density:1.2,
     build: b => { outline(cyl(.02, .02, .007, T(0xd36a8f), 0, .0035, 0, b, 16), 1.08); for (const [x, z] of [[-.005, -.005], [.005, -.005], [-.005, .005], [.005, .005]]) cyl(.0025, .0025, .008, T(0x8a3a5a), x, .004, z, b, 6, false); }},
   tablet: {name:'Fizzy tablet', kind:'solid', r:.02, h:.008, density:2, fizz:8, build: b => outline(cyl(.02, .02, .008, T(0xf6f6f0), 0, .004, 0, b, 16), 1.08)},
+  chart:  {name:'pH chart', kind:'solid', r:.18, h:.004, density:.9, build: chart},
   // ---------- prediction trays: put each thing in the tray that matches your guess ----------
   tray:   {name:'Tray', kind:'tray', r:.15, h:.035, w:.28, d:.17,
     build: (b, o) => { const m = T(o.color || 0x6d3b5e);
@@ -142,19 +171,28 @@ export const ITEMS = {
         g.fillStyle = '#1a1320'; g.font = '900 46px Nunito, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(o.label || '?', W/2, H/2 + 3); }), transparent:true, opacity:.9}), 0, .0085, 0, b, false);
       t.rotation.x = -Math.PI/2; }},
   // ---------- tools ----------
-  spoon:  {name:'Spoon', kind:'tool', tool:'spoon', r:.02, h:.2, grip:.17,
-    build: b => { const m = T(0xc8ced8); box(.008, .17, .004, m, 0, .11, 0, b); const bowl = outline(sph(.016, m, 0, .016, 0, b, 12), 1.08); bowl.scale.set(1, 1.3, .5); }},
-  swab:   {name:'Cotton swab', kind:'tool', tool:'swab', r:.012, h:.15, grip:.12,
+  // stirs, and carries a spoonful of powder from a box to wherever it dips next
+  spoon:  {name:'Spoon', kind:'tool', tool:'spoon', dips:true, r:.02, h:.2, grip:.17,
+    build: b => { const m = T(0xc8ced8); box(.008, .17, .004, m, 0, .11, 0, b); const bowl = outline(sph(.016, m, 0, .016, 0, b, 12), 1.08); bowl.scale.set(1, 1.3, .5);
+      const heap = sph(.012, new THREE.MeshToonMaterial({gradientMap:grad, color:0xffffff}), 0, .02, .005, b, 8, false); heap.scale.set(1, .6, .8);
+      heap.visible = false; heap.userData.own = true; return {heap}; }},
+  swab:   {name:'Cotton swab', kind:'tool', tool:'swab', dips:true, r:.012, h:.15, grip:.12,
     build: b => { cyl(.0025, .0025, .13, T(0xf4f0e6), 0, .075, 0, b, 6); const tip = sph(.008, T(0xffffff), 0, .009, 0, b, 10); tip.scale.y = 1.5; const top = sph(.008, T(0xffffff), 0, .141, 0, b, 10); top.scale.y = 1.5; return {tip}; }},
   magnet: {name:'Magnet', kind:'tool', tool:'magnet', r:.045, h:.085, grip:.07,
     build: b => { outline(add(new THREE.TorusGeometry(.03, .011, 8, 18, Math.PI), T(0xd8303a), 0, .05, 0, b), 1.06);
-      for (const x of [-.03, .03]) { box(.022, .03, .022, T(0xd8303a), x, .035, 0, b); box(.022, .018, .022, T(0xc8ced8), x, .011, 0, b); } }}
+      for (const x of [-.03, .03]) { box(.022, .03, .022, T(0xd8303a), x, .035, 0, b); box(.022, .018, .022, T(0xc8ced8), x, .011, 0, b); } }},
+  // its pad takes the universal indicator color of whatever it's dipped in
+  strip:  {name:'Test strip', kind:'tool', tool:'strip', dips:true, r:.014, h:.14, grip:.11,
+    build: b => { outline(box(.013, .11, .0018, T(0xf7f5ee), 0, .085, 0, b), 1.08); const pad = outline(box(.02, .032, .005, own(0xf2dfa6), 0, .016, 0, b), 1.08); return {pad}; }},
+  bar:    {name:'Bar magnet', kind:'tool', tool:'magnet', r:.07, h:.026, grip:.018, density:7.3, pull:.5,
+    build: b => { for (const [x, col, n] of [[-.035, 0xd8303a, 'N'], [.035, 0x3f63c8, 'S']]) { outline(box(.07, .026, .024, T(col), x, .013, 0, b), 1.03);
+      const f = add(new THREE.PlaneGeometry(.022, .018), label(n, col === 0xd8303a ? '#d8303a' : '#3f63c8', '#ffffff', 64, 52, 46), x*1.5, .0262, 0, b, false); f.rotation.x = -Math.PI/2; } }}
 };
 
 // what each supply comes filled with, and how much it holds; Free Lab tops them up whenever they're set down
 const STOCK = {pitcher:[340, {water:340}], vinegar:[250, {vinegar:250}], lemon:[150, {lemon:150}], milk:[300, {milk:300}],
   cabbage:[300, {cabbage:300}], oil:[200, {oil:200}], soap:[150, {soap:150}], saucer:[20, {soap:20}],
-  red:[60, {red:60}], yellow:[60, {yellow:60}], blue:[60, {blue:60}], soda:[160, {soda:160}], sugar:[120, {sugar:120}],
+  red:[60, {red:60}], yellow:[60, {yellow:60}], blue:[60, {blue:60}], soda:[160, {soda:160}], sugar:[120, {sugar:120}], saltbox:[150, {salt:150}],
   sand:[80, {sand:80}], salt:[60, {salt:60}], pepper:[40, {pepper:40}]};
 for (const k in STOCK) Object.assign(ITEMS[k], {cap:STOCK[k][0], fill:STOCK[k][1], supply:true});
 
@@ -173,19 +211,31 @@ const SHAPE = {
   volcano: [['crater', .034, .2, .17, .05, .14, .03, .025]],
   vinegar: [['cyl', .036, .19, 0]], lemon: [['cyl', .036, .1, 0]], milk: [['box', .075, .18, .075, 0]], oil: [['cyl', .035, .22, 0]],
   soap: [['cyl', .034, .18, 0]], red: [['cyl', .02, .08, 0]], yellow: [['cyl', .02, .08, 0]], blue: [['cyl', .02, .08, 0]],
-  soda: [['hollow-box', .095, .13, .065, .005]], sugar: [['hollow-box', .095, .13, .065, .005]],
+  soda: [['hollow-box', .095, .13, .065, .005]], sugar: [['hollow-box', .095, .13, .065, .005]], saltbox: [['hollow-box', .095, .13, .065, .005]],
   salt: [['cyl', .025, .09, 0]], pepper: [['cyl', .025, .09, 0]],
   balloon: [['cyl', .036, .07, 0], ['cyl', .014, .04, .07]],
   egg: [['ball', .028, .032]], apple: [['ball', .043, .042]], rock: [['ball', .027, .024]], cork: [['cyl', .02, .042, 0]],
   coin: [['cyl', .021, .006, 0]], duck: [['ball', .033, .028]], paperclip: [['box', .04, .005, .014, 0]], nail: [['bar', .075, .008, 'x', .005]],
   key: [['box', .055, .006, .022, 0]], foil: [['ball', .022, .023]], crayon: [['bar', .074, .016, 'x', .008]], button: [['cyl', .02, .007, 0]],
-  tablet: [['cyl', .02, .008, 0]],
+  tablet: [['cyl', .02, .008, 0]], chart: [['box', .36, .004, .12, 0]],
   tray: [['hollow-box', .28, .035, .17, .008]],
   spoon: [['box', .01, .17, .005, .03], ['ball', .016, .016]], swab: [['bar', .15, .012, 'y', 0]],
-  magnet: [['box', .085, .03, .022, .05], ['box', .022, .05, .022, 0, -.03], ['box', .022, .05, .022, 0, .03]]
+  magnet: [['box', .085, .03, .022, .05], ['box', .022, .05, .022, 0, -.03], ['box', .022, .05, .022, 0, .03]],
+  strip: [['bar', .14, .012, 'y', 0]], bar: [['box', .14, .026, .024, 0]]
 };
+// Where a magnet pulls from, [x, y, z, which way round], in its own frame. Steel has poles at its two
+// ends too, but they only pull once it's been made into a magnet, and which end is which depends on how.
+const POLES = {magnet: [[-.03, .004, 0, 1], [.03, .004, 0, -1]], bar: [[-.066, .02, 0, 1], [.066, .02, 0, -1]],
+  nail: [[-.033, .005, 0, 1], [.036, .005, 0, -1]], paperclip: [[-.02, .003, 0, 1], [.02, .003, 0, -1]], key: [[-.028, .004, 0, 1], [.028, .004, 0, -1]]};
+for (const k in POLES) ITEMS[k].poles = POLES[k].map(([x, y, z, n]) => ({x, y, z, n}));
 // where a container opens: liquid and powder inside this cylinder belong to it; it pours from its rim
-const OPEN = {bottle: {y:.19, r:.022, neckY:.12}, volcano: {y:.17, r:.03, neckY:.14}, soda: {y:.13, r:.04}, sugar: {y:.13, r:.04}, balloon: {y:.11, r:.03}};
+const OPEN = {bottle: {y:.19, r:.022, neckY:.12}, volcano: {y:.17, r:.03, neckY:.14}, soda: {y:.13, r:.04}, sugar: {y:.13, r:.04}, saltbox: {y:.13, r:.04}, balloon: {y:.11, r:.03}};
+// what each thing is made of, which is how it sounds when it's set down or knocked
+const MATTER = {
+  glass: ['cup', 'jar', 'dish', 'bottle', 'pitcher', 'cabbage', 'oil'], clay: ['saucer', 'volcano'], metal: ['coin', 'paperclip', 'nail', 'key', 'spoon', 'magnet', 'bar'],
+  plastic: ['tub', 'vinegar', 'soap', 'red', 'yellow', 'blue', 'salt', 'pepper', 'lemon', 'sand', 'button', 'crayon'], card: ['milk', 'soda', 'sugar', 'saltbox', 'chart'],
+  wood: ['tray', 'cork'], rubber: ['duck', 'balloon'], stone: ['rock'], food: ['apple', 'egg'], foil: ['foil'], chalk: ['tablet'], soft: ['swab', 'strip']};
+for (const m in MATTER) for (const k of MATTER[m]) ITEMS[k].matter = m;
 // glass weighs what glass weighs; plastic tubs and trays are lighter
 for (const k of ['cup', 'jar', 'dish', 'bottle', 'pitcher', 'cabbage']) ITEMS[k].glass = true;
 for (const k in ITEMS) { const d = ITEMS[k]; d.shape = SHAPE[k];

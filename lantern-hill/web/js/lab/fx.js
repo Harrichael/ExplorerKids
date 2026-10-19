@@ -94,7 +94,7 @@ export function makeFx(world){
     for (const p of f.flakes) if (move(p, 2.2, .94) > .005) f.dirty = true;
     if (!f.dirty) return;
     const g = f.g; g.clearRect(0, 0, N, N); g.save(); g.beginPath(); g.arc(H, H, H, 0, 7); g.clip(); g.drawImage(f.trail, 0, 0);
-    g.fillStyle = '#2a2018'; for (const p of f.flakes) { g.save(); g.translate(H + p.x*H, H + p.y*H); g.rotate(p.a); g.fillRect(-1.6, -1, 3.2, 2); g.restore(); }
+    g.fillStyle = '#2a2018'; for (const p of f.flakes) { g.save(); g.translate(H + p.x*H, H + p.y*H); g.rotate(p.a); g.fillRect(-2.6, -1.7, 5.2, 3.4); g.restore(); }
     g.restore(); f.texture.needsUpdate = true; f.dirty = false;
   }
 

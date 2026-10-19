@@ -6,8 +6,8 @@
 
 import * as THREE from 'three';
 import { T, add, box, outlineMat, tex } from '../core/kit.js';
-import { Sound } from '../core/sound.js';
 import { bring, desk } from './desk.js';
+import { labSound } from './sounds.js';
 import { ITEMS } from './stuff.js';
 
 // Rows from the bottom; a shelf's share of its row's width is its `w`. What's taken out comes as `o`.
@@ -15,12 +15,13 @@ const ROWS = [
   {h:.25, shelves:[
     {label:'Glassware', w:4, things:['cup', 'jar', 'dish', 'saucer', 'bottle', 'balloon', 'tub', 'volcano']},
     {label:'Bottles', w:3.6, things:['pitcher', 'vinegar', 'lemon', 'milk', 'cabbage', 'oil', 'soap']},
-    {label:'Powders', w:2.6, things:['soda', 'sugar', 'salt', 'sand', 'pepper']}]},
+    {label:'Powders', w:2.6, things:['soda', 'sugar', 'saltbox', 'salt', 'sand', 'pepper']}]},
   {h:.19, shelves:[
-    {label:'Colors', w:1.8, things:['red', 'yellow', 'blue']},
-    {label:'Treasures', w:6.4, things:['egg', 'apple', 'rock', 'cork', 'coin', 'duck', 'paperclip', 'nail', 'key', 'foil', 'crayon', 'button', 'tablet']},
-    {label:'Tools', w:1.8, things:['spoon', 'swab', 'magnet']}]}];
-const TAKE = {tub:{fill:{water:950}}};
+    {label:'Colors', w:1.6, things:['red', 'yellow', 'blue']},
+    {label:'Treasures', w:5.6, things:['egg', 'apple', 'rock', 'cork', 'coin', 'duck', 'paperclip', 'nail', 'key', 'foil', 'crayon', 'button', 'tablet']},
+    {label:'Tools', w:3, things:['spoon', 'swab', 'strip', 'magnet', 'bar', 'chart']}]}];
+// a penny from the cabinet is an old one, dull with tarnish
+const TAKE = {tub:{fill:{water:950}}, coin:{tarnish:1}};
 const MAX_ON_MAT = 30;
 // where an open shelf's things float, over the mat and toward the explorer, a little bigger than life
 const SHOW = {w:1.56, y:.2, z:-.16, h:.3, most:1.3};
@@ -134,20 +135,26 @@ function aimAt(ray){
 }
 
 export const reach = {
-  point(ray){ const a = aimAt(ray); hoverThing = a && a.slot || null; hoverShelf = a && a.shelf || null; },
+  point(ray){
+    const a = aimAt(ray), thing = a && a.slot || null, shelf = a && a.shelf || null;
+    // moving along an open shelf plays up the scale, like a cursor in a menu
+    if (thing && thing !== hoverThing) labSound.hoverThing(open.slots.filter(s => s.model).indexOf(thing));
+    if (shelf && shelf !== hoverShelf && shelf !== open) labSound.hoverShelf(shelves.indexOf(shelf));
+    hoverThing = thing; hoverShelf = shelf;
+  },
   press(ray){
     const a = aimAt(ray);
     if (!a) { open = null; return false; }
     if (a.slot) take(a.slot);
-    else if (a.shelf !== open) { open = a.shelf; lineUp(open); Sound.tone(520, {type:'triangle', dur:.12, vol:.05, f2:700}); }
+    else if (a.shelf !== open) { open = a.shelf; lineUp(open); labSound.openShelf(open.x); }
     return true;
   }
 };
 function take(slot){
   const n = desk.items.filter(it => !it.gone).length, p = slot.model.position;
   const it = n < MAX_ON_MAT && bring(slot.type, TAKE[slot.type], {x:p.x, z:p.z});
-  if (!it) { slot.lift = -1; Sound.tone(180, {type:'triangle', dur:.15, vol:.06}); return; }
-  [784, 1046].forEach((f, i) => Sound.tone(f, {type:'triangle', t:i*.06, dur:.1, vol:.05}));
+  if (!it) { slot.lift = -1; labSound.refuse(p.x); return; }
+  labSound.take(p.x);
   slot.lift = 1;
 }
 
