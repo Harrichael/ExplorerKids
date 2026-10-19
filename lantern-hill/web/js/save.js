@@ -1,7 +1,7 @@
 // What the player has made and done: their explorer, phonogram stars, trips, books read (and which of
 // them Ms. Pembrook has cheered), best tower,
-// experiments, the biomes found on the globe, what they carry, where they left the telescope pointing
-// and where Pip's magic last whisked the treehouse.
+// experiments, the biomes found on the globe, what they carry, where they left the telescope pointing,
+// where Pip's magic last whisked the treehouse, and the vegetable garden.
 // The storage keys predate the module split; renaming them orphans existing saves.
 //
 // Saves outlive the code that wrote them, and during a rollout tabs on two versions share them:
@@ -13,7 +13,7 @@
 const KEYS = {explorer:'lantern-hill-explorer', phonograms:'lantern-hill-phonograms', trips:'lantern-hill-trips',
   books:'lantern-hill-books', towerBest:'lantern-hill-tower-best', lab:'lantern-hill-lab', globe:'lantern-hill-globe',
   inventory:'lantern-hill-inventory', telescope:'lantern-hill-telescope', travel:'lantern-hill-travel',
-  pembrook:'lantern-hill-pembrook'};
+  pembrook:'lantern-hill-pembrook', garden:'lantern-hill-garden'};
 const VERSION = {};
 const MIGRATE = {};   // slot -> {fromVersion: record => record}
 
