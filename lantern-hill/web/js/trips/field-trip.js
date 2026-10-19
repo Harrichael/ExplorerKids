@@ -129,7 +129,7 @@ let dir = null;
 function run(from = 0){
   const me = dir = makeDirector(), shared = trip.setup(me);
   (async () => { for (const [, play] of trip.chapters.slice(from)) await play(me, shared); })()
-    .then(() => { if (dir === me) returnHome(); }, e => { if (e !== GONE) throw e; });
+    .then(() => { if (dir === me) returnHome(shared); }, e => { if (e !== GONE) throw e; });
 }
 function makeDirector(){
   let held = null;
@@ -156,6 +156,8 @@ function makeDirector(){
     // shown in a shuffled order, so the right answer isn't always first; resolves with its index as given
     ask: (who, text, answers) => { const order = answers.map((a, i) => i).sort(() => Math.random() - .5);
       return live(new Promise(ok => ask(who, text, order.map(i => answers[i]), j => ok(order[j])))); },
+    // an extra the explorer can ask for or skip, its two answers always in the same places; resolves true if asked for
+    more: (who, text) => live(new Promise(ok => ask(who, text, ["Tell me more!", "Let's keep going!"], i => ok(i === 0)))),
     wait: s => { const end = game.elapsed + s; return frames(() => game.elapsed >= end); },
     // f(k) every frame as k runs from 0 to 1 over s seconds of game time
     tween: (s, f) => { const t0 = game.elapsed; return frames(() => { const k = Math.min(1, (game.elapsed - t0)/s); f(k); return k >= 1; }); },
@@ -182,7 +184,7 @@ function makeDirector(){
   return d;
 }
 const endTrip = d => { if (d) d.ends.splice(0).forEach(f => f()); };
-function returnHome(){
+function returnHome(shared){
   endTrip(dir); dir = null;
   pageTurn(() => {
     Sound.setTheme('home'); enterWorld(HQ, [17.4, 2.4, -2.5]); hero.root.visible = false; blob.visible = false; leaveBtn.hidden = true; objective('');
@@ -190,7 +192,7 @@ function returnHome(){
     game.cutCam = (pos, look) => { pos.set(16.4, 4.4, 10.8); look.set(van.position.x, van.position.y + 1, van.position.z); };
     flyVan({mode:'land', t0:game.elapsed + .6, dur:3, done: () => {
       hero.root.visible = true; blob.visible = true; game.cutCam = null; game.cutscene = false;
-      story(trip.outro, () => { TRIP.on = false; showBadge(); });
+      story(trip.outro, () => { TRIP.on = false; showBadge(shared); });
     }});
   }, null, ['The end of the trip', 'Home to Lantern Hill']);
 }
@@ -201,11 +203,11 @@ function leaveTrip(){
   pageTurn(() => { Sound.setTheme('home'); resetVan(); enterWorld(HQ, [16.2, 2.4, Math.PI]); hero.root.visible = true; blob.visible = true; leaveBtn.hidden = true; objective(''); }, null, ['', 'Back to Lantern Hill']);
 }
 leaveBtn.addEventListener('click', e => { e.stopPropagation(); leaveTrip(); });
-function showBadge(){
+function showBadge(shared){
   const saved = load('trips'), done = saved && typeof saved === 'object' ? saved : {};
   done[trip.id] = true; save('trips', done);
-  trip.badge.draw($('badgeCan')); $('bTitle').textContent = trip.badge.title;
-  $('bText').textContent = trip.badge.text(cfg.name || 'Explorer');
+  trip.badge.draw($('badgeCan'), shared); $('bTitle').textContent = trip.badge.title;
+  $('bText').textContent = trip.badge.text(cfg.name || 'Explorer', shared);
   $('badge').hidden = false; game.cutscene = true;
   [523, 659, 784, 1046, 1319].forEach((f, i) => Sound.tone(f, {type:'triangle', t:i*.1, dur:.45, vol:.09}));
   setTimeout(() => $('badgeOk').focus({preventScroll:true}), 80);

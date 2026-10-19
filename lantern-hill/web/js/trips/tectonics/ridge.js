@@ -127,7 +127,7 @@ export function buildRidge(t){
   // ---------- what the class finds ----------
   const say = t.say;
   let goggled = false;
-  cls.find('juniper', {at:[PILLOW[0] + .8, PILLOW[1] + 1.1, -2.5], pose:'crouch', core:true, call:"Come feel these lumpy rocks!", after:["Brand-new sea floor. Fresh from the crack!"],
+  cls.find('juniper', {name:'pillow', at:[PILLOW[0] + .8, PILLOW[1] + 1.1, -2.5], pose:'crouch', call:"Come feel these lumpy rocks!", after:["Brand-new sea floor. Fresh from the crack!"],
     async scene(){
       pillowGlow.emissiveIntensity = .6;
       await say([['juniper', "Touch this lumpy rock, {name}. It's still a tiny bit warm!"]]);
@@ -136,7 +136,7 @@ export function buildRidge(t){
                  ['juniper', "The cold water cooled it into new rock. Brand-new sea floor!"]]);
       pillowGlow.emissiveIntensity = .25;
     }});
-  cls.find('mo', {at:[MO[0], MO[1], 0], pose:'still', core:true, call:"{name}! Look at my feet!", after:["My legs still feel a million years old."],
+  cls.find('mo', {name:'pebble', at:[MO[0], MO[1], 0], pose:'still', call:"{name}! Look at my feet!", after:["My legs still feel a million years old."],
     async scene(){
       await say([['mo', "Look! One foot on each side of the crack."], ['mo', "Each foot's on a different plate!"],
                  ['mo', "Here's a pebble. Drop it right by the crack, {name}."]]);
@@ -162,13 +162,13 @@ export function buildRidge(t){
       await say([['mo', pick === 0 ? "You were right! New rock carried your pebble away from the crack." : "Whoa! New rock carried your pebble away from the crack."],
                  ['mo', "And my feet slid apart too! Whoa, what a stretch!"],
                  ['sparks', "The plates pull apart. Hot rock fills the gap and makes new sea floor."],
-                 ['theo', "The crack didn't swallow the pebble. It carried it away!"]]);
-      worries(2);
+                 ['basil', "The crack didn't swallow the pebble. It carried it away!"]]);
+      const line = worries(2);
       const s0 = splits; await t.tween(.6, k => { splits = s0*(1 - k); });
-      await say([['theo', "Three worries, crossed off!"]]);
+      await say([['basil', line]]);
       goggled = true;
     }});
-  cls.find('pip', {at:[2.6, -3.4, -Math.PI/2], when: () => goggled, core:true, call:"Come look at the stripes!", after:["Newest by the crack, oldest far away. Like rings in a tree!"],
+  cls.find('pip', {name:'stripes', at:[2.6, -3.4, -Math.PI/2], when: () => goggled, call:"Come look at the stripes!", after:["Newest by the crack, oldest far away. Like rings in a tree!"],
     async scene(){
       const pip = cls.n.pip;
       t.cut((pos, look) => { pos.set(5, 4.2, 3.8); look.set(5, 0, -3.4); });
@@ -192,22 +192,19 @@ export function buildRidge(t){
                  ['pip', "Newest by the crack, older and older as you go. Like rings in a tree!"]]);
       t.cut(null);
     }});
-  cls.find('theo', {at:[SMOKER[0] + 1.4, SMOKER[1] + 1.3, -2.3], call:"That chimney is puffing black smoke!", after:["Worms with no sunlight. Huh. I guess they're brave too."],
+  cls.find('basil', {name:'smoker', at:[SMOKER[0] + 1.4, SMOKER[1] + 1.3, -2.3], call:"That chimney is puffing black smoke!", after:["Worms with no sunlight. Huh. I guess they're brave too."],
     async scene(){
       smoke.burst = 1.2;
       t.cut((pos, look) => { pos.set(SMOKER[0] + 3.2, 2.4, SMOKER[1] + 3.6); look.set(SMOKER[0], 1.4, SMOKER[1]); });
-      await say([['theo', "{name}, that chimney is puffing black smoke. Underwater!"],
-                 ['theo', "It's really super-hot water, from under the crack. And look at the worms!"]]);
-      const pick = await t.ask('theo', "It's so dark down here. Can plants grow?", ["No, there's no sunlight", "Yes, lots of plants"]);
-      await say([['theo', pick === 0 ? "Right, no sunlight at all." : "Nope, it's much too dark. No sunlight at all."],
-                 ['theo', "The worms get their food from the hot water instead. So weird!"]]);
+      await say([['basil', "{name}, that chimney is puffing black smoke. Underwater!"],
+                 ['basil', "It's really super-hot water, from under the crack. And look at the worms!"]]);
+      const pick = await t.ask('basil', "It's so dark down here. Can plants grow?", ["No, there's no sunlight", "Yes, lots of plants"]);
+      await say([['basil', pick === 0 ? "Right, no sunlight at all." : "Nope, it's much too dark. No sunlight at all."],
+                 ['basil', "The worms get their food from the hot water instead. So weird!"]]);
       t.cut(null);
     }});
-  cls.hint = () => {
-    if (!cls.done(1)) return "Mo is standing on the crack, and Juniper found some lumpy rocks. Go see!";
-    if (!goggled) return "Go see Mo, {name}! I think there's a job for my time goggles.";
-    return cls.done(3) ? "Back to the bus, {name}!" : "Pip is waving at you. Go see the stripes!";
-  };
+  cls.hint = () => goggled ? (cls.saw('stripes') ? "Back to the bus whenever you're ready, {name}! Or go see anyone still waving." : "Pip is waving at you. Go see the stripes!") :
+    "Mo is standing on the crack, and Juniper found some lumpy rocks. Go see! I think there's a job for my time goggles.";
 
   return {world:w, bus, cls,
     // the sub sinks down through the dark water, lights blazing, and settles by the crack
@@ -229,12 +226,13 @@ export function buildRidge(t){
       t.goal('Visit anyone who waves!');
     },
     async explore(){
-      await t.until(() => cls.done(3) && !game.cutscene);
+      await t.until(() => cls.saw('pebble') && !game.cutscene);
       await t.wait(.6);
-      await say([['sparks', "In Iceland, this ridge comes up on land. People can walk between two plates there!"],
-                 ['sparks', "Next: what happens when plates crash together? Everyone aboard!"]]);
+      if (await t.more('sparks', "Want to hear something amazing about this crack?"))
+        await say([['sparks', "It runs all the way to Iceland, where it comes up on land."], ['sparks', "People there can walk between two plates!"]]);
+      await say([['sparks', "Next: what happens when plates crash together? Everyone aboard!"], ...cls.stillWaving()]);
       cls.gather([bus.root.position.x - 1.6, bus.root.position.z - 1.2, 0]);
-      await bus.boarding(t);
+      await cls.board(bus);
     },
     // up toward the light, until the sub is out of sight
     async depart(){

@@ -31,30 +31,34 @@ async function check(t, who, q, answers, right, hint, yay){
   }
 }
 
+// every page of Juniper's notebook filled with every find
+const full = s => !!s && s.places.length === PAGES.length && s.places.every(c => { const n = c.tally(); return n.seen === n.of; });
+
 export const tectonics = {
   id: 'tectonics',
-  intro: [['sparks', "All aboard the Wonder Bus, {name}! Theo and Mo are coming too."],
+  intro: [['sparks', "All aboard the Wonder Bus, {name}! Basil and Mo are coming too."],
           ['pip', "Window seat!"]],
-  // what every chapter shares: the bus's inside, the diagram, and the volcano, seen again at the end
-  setup: t => ({cab:cabin(), dg:diagram(), rim:buildRim(t), seat:{seated:true}}),
+  // what every chapter shares: the bus's inside, the diagram, the volcano, seen again at the end, and each
+  // place's class in notebook order, remembering what the explorer saw there
+  setup: t => ({cab:cabin(), dg:diagram(), rim:buildRim(t), seat:{seated:true}, places:[]}),
   chapters: [
     ['over the sea', async (t, {cab, dg, rim, seat}) => {
       cab.view('sea'); t.watch(cab.world, cab.shot('class'), seat);
       await t.say([['sparks', "Welcome aboard, class! Today we have a big question."],
                    ['sparks', "Why does the ground shake? And how do mountains grow?"]]);
       t.cut(cab.shot('window'));
-      await t.say([['theo', "Um… is that smoke out there?"], ['mo', "Maybe the island is making toast."]]);
+      await t.say([['basil', "Um… is that smoke out there?"], ['mo', "Maybe the island is making toast."]]);
       t.cut(cab.shot('teacher'));
       await t.say([['sparks', "That's a volcano! And that's where we're landing."]]);
       t.cut(cab.shot('class'));
-      await t.say([['theo', "I knew I should have stayed home."], ['theo', "I made a worry list. Just in case."]]);
-      worries(-1);
-      await t.say([['sparks', "Let's see how many we can cross off today, Theo!"]]);
+      await t.say([['basil', "I knew I should have stayed home."], ['basil', "I made a worry list. Just in case."]]);
+      worries();
+      await t.say([['sparks', "Let's see how many we can cross off today, Basil!"]]);
     }],
-    ['the volcano rim', async (t, {cab, dg, rim, seat}) => {
+    ['the volcano rim', async (t, {cab, dg, rim, seat, places}) => {
       await rim.arrive();
       await rim.explore();
-      await notebook(PAGES, 0);
+      places[0] = rim.cls; await notebook(PAGES, 0, places.map(c => c.tally()));
       await rim.depart();
     }],
     ['the drill dive', async (t, {cab, dg, rim, seat}) => {
@@ -77,19 +81,19 @@ export const tectonics = {
                    ['juniper', thick ? "You were right. The mantle is HUGE! The crust is just a thin skin." : "Whoa, the mantle is way thicker! The crust is just a thin skin."]]);
       await deeper;
       t.watch(cab.world, cab.shot('class'), seat);
-      await t.say([['theo', "It's getting hot in here. Is the bus going to melt?"]]);
+      await t.say([['basil', "It's getting hot in here. Is the bus going to melt?"]]);
       const dust = puffs(cab.world, 2, 1.3, 0, {rate:0, rise:.3, size:1.3, color:0x8a6a5a, opacity:.6, spread:1.8, life:1.6});
       dust.burst = .5; game.camShake = 3; S.gear = null;
       Sound.tone(110, {type:'sawtooth', dur:.5, vol:.12, f2:45, cut:600}); Sound.hiss({dur:.6, vol:.16, type:'lowpass', freq:500}); Sound.tone(1500, {type:'square', t:.08, dur:.05, vol:.03, cut:3000});
       await t.wait(1);
-      await t.say([['pip', "Uh oh. The drill bit just snapped off!"], ['theo', "I KNEW I should have stayed home."],
+      await t.say([['pip', "Uh oh. The drill bit just snapped off!"], ['basil', "I KNEW I should have stayed home."],
                    ['sparks', "No drill? Then we'll let the Earth carry us up!"], ['sparks', "Heat bubble, on!"]]);
     }],
-    ['the mantle', async (t, {cab, dg, rim, seat}) => {
+    ['the mantle', async (t, {cab, dg, rim, seat, places}) => {
       const mantle = buildMantle(t);
       await mantle.arrive();
       await mantle.explore();
-      await notebook(PAGES, 1);
+      places[1] = mantle.cls; await notebook(PAGES, 1, places.map(c => c.tally()));
       await mantle.depart();
     }],
     ['up the current to the sea floor', async (t, {cab, dg, rim, seat}) => {
@@ -106,44 +110,49 @@ export const tectonics = {
       cab.view('deep'); t.cut(cab.shot('teacher'));
       await t.say([['sparks', "Lights on! Welcome to a ridge on the ocean floor."]]);
     }],
-    ['the ridge', async (t, {cab, dg, rim, seat}) => {
+    ['the ridge', async (t, {cab, dg, rim, seat, places}) => {
       const ridge = buildRidge(t);
       await ridge.arrive();
       await ridge.explore();
-      await notebook(PAGES, 2);
+      places[2] = ridge.cls; await notebook(PAGES, 2, places.map(c => c.tally()));
       await ridge.depart();
     }],
     ['the map flight', async (t, {cab, dg, rim, seat}) => {
       const S = dg.S;
       cab.view('sky'); t.watch(cab.world, cab.shot('class'), seat);
-      await check(t, 'theo', "What happened to your pebble at the ridge?", ["The crack swallowed it", "New rock carried it away", "Nothing at all"], 1,
+      await check(t, 'basil', "What happened to your pebble at the ridge?", ["The crack swallowed it", "New rock carried it away", "Nothing at all"], 1,
         "Think back to the time goggles. Where did your pebble end up?", "New rock carried it away from the crack. Slowly!");
       await t.say([['sparks', "Now let's see that ridge from way up high."]]);
       S.mode = 'map'; S.sep = 1; S.gear = null; S.depth = false; S.labels.clear(); S.labels.add('ridge'); S.bus = [1500, 900];
       t.watch(dg.world, dg.frame(800, 500, 1));
       const over = dg.travel([[1500, 900], [1100, 760], [820, 560], [700, 260]], 9, false);
       await t.say([['sparks', "That glowing line is the ridge. It runs right down the middle of the ocean."]]);
-      S.labels.add('years');
-      await t.tween(2.5, k => { S.sep = 1 - k; });
-      await t.say([['juniper', "Africa and South America… they fit together like puzzle pieces!"],
-                   ['sparks', "Long ago, they were joined. Then the ridge slowly pushed them apart."], ['mo', "Whole continents move? Whoa!"]]);
-      await t.tween(2.5, k => { S.sep = k; });
+      if (await t.more('sparks', "Want to see what this ocean looked like long, long ago?")) {
+        S.labels.add('years');
+        await t.tween(2.5, k => { S.sep = 1 - k; });
+        await t.say([['juniper', "Africa and South America… they fit together like puzzle pieces!"],
+                     ['sparks', "Long ago, they were joined. Then the ridge slowly pushed them apart."], ['mo', "Whole continents move? Whoa!"]]);
+        await t.tween(2.5, k => { S.sep = k; });
+      }
       await over;
       t.watch(cab.world, cab.shot('teacher'), seat);
       await t.say([['sparks', "If plates pull apart here, they must crash together somewhere else. Let's go see!"]]);
     }],
-    ['where plates crash and slide', async (t, {cab, dg, rim, seat}) => {
+    ['where plates crash and slide', async (t, {cab, dg, rim, seat, places}) => {
       const valley = buildValley(t);
       await valley.arrive();
       await valley.explore();
-      await notebook(PAGES, 3);
+      places[3] = valley.cls; await notebook(PAGES, 3, places.map(c => c.tally()));
       await valley.depart();
     }],
-    ['home, past the volcano', async (t, {cab, dg, rim, seat}) => {
-      const S = dg.S;
+    ['home, past the volcano', async (t, {cab, dg, rim, seat, places}) => {
+      const S = dg.S, saw = name => !!places[3] && places[3].saw(name);
       cab.view('sunset'); t.watch(cab.world, cab.shot('class'), seat);
+      // the hint is whatever the explorer saw crumple in the valley
+      const recall = [saw('rug') && 'the rug', saw('shell') ? 'the shell on the mountain top' : saw('peaks') && 'the mountains in the time goggles'].filter(Boolean);
       await check(t, 'juniper', "Last one for my notebook! What happens when two plates crash?", ["The ground crumples up into mountains", "The plates melt into lava", "Nothing happens"], 0,
-        "Remember the rug, and the shell on the mountain top?", "Mountains! Even the sea floor got pushed up high.");
+        recall.length ? `Remember ${recall.join(', and ')}?` : "Think of the tall mountains in the valley.",
+        saw('peaks') ? "Mountains! Even the sea floor got pushed up high." : "Mountains! The ground crumples up, like a pushed rug.");
       const by = rim.flyby();
       await t.say([['pip', "Hey, look! It's our volcano!"]]);
       await by;
@@ -151,10 +160,10 @@ export const tectonics = {
       t.watch(dg.world, dg.frame(860, 300, 1.6, .3));
       await t.say([['sparks', "Here's the volcano's secret. See the plate under the sea?"],
                    ['sparks', "It dives down, under the island."],
-                   ['theo', "It's sinking, like the cool slab I saw in the mantle!"],
+                   ['basil', "It's sinking, like the cool slab I saw in the mantle!"],
                    ['sparks', "Deep down, it's so hot that rock melts. Then the melted rock rises up…"]]);
       const pick = await t.ask('pip', "So why are the volcanoes in a row?", ["They're all along the edge where the plates meet", "Somebody planted them", "The sea made them"]);
-      await t.say([['theo', pick === 0 ? "Yes! They line up where one plate dives under the other!" :
+      await t.say([['basil', pick === 0 ? "Yes! They line up where one plate dives under the other!" :
                             "I know this one! They line up where one plate dives under the other!"],
                    ['juniper', "That answers our very first question!"]]);
       S.melt = false;
@@ -164,14 +173,18 @@ export const tectonics = {
   ],
   outro: [['sparks', "Home sweet Lantern Hill! So, {name}: the ground shakes and mountains grow because Earth's crust is broken into plates."],
           ['sparks', "And they're always moving, very, very slowly."],
-          ['theo', "Can we go on another field trip tomorrow?"]],
-  badge: {title:'Plate Tectonics Explorer', draw:drawBadge,
-    text: name => `You stood on a volcano, rode the mantle up to the sea floor, and made mountains rise and faults snap. Splendid work, ${name}!`}
+          ['basil', "Can we go on another field trip tomorrow?"]],
+  badge: {title:'Plate Tectonics Explorer', draw: (c, s) => drawBadge(c, full(s)),
+    text: (name, s) => `You stood on a volcano, rode the mantle up to the sea floor, and made mountains rise and faults snap. Splendid work, ${name}!` +
+      (full(s) ? " And you found every single thing in Juniper's notebook!" : "")}
 };
 
-function drawBadge(c){
+function drawBadge(c, gold){
   const g = c.getContext('2d'), s = c.width/360; g.setTransform(s, 0, 0, s, 0, 0); g.clearRect(0, 0, 360, 360); g.translate(180, 170);
   g.lineJoin = 'round';
+  // a full notebook earns a golden burst behind the badge
+  if (gold) { g.beginPath(); for (let k = 0; k < 32; k++) { const r = k % 2 ? 140 : 168, a = k*Math.PI/16; g.lineTo(Math.cos(a)*r, Math.sin(a)*r); } g.closePath();
+    g.fillStyle = '#ffd36b'; g.fill(); g.strokeStyle = '#1a1320'; g.lineWidth = 5; g.stroke(); }
   g.fillStyle = '#b5552f'; for (const sx of [-1, 1]) { g.beginPath(); g.moveTo(sx*34, 70); g.lineTo(sx*70, 180); g.lineTo(sx*46, 160); g.lineTo(sx*24, 182); g.closePath(); g.fill(); g.strokeStyle = '#1a1320'; g.lineWidth = 5; g.stroke(); }
   g.fillStyle = '#d9a441'; g.beginPath(); g.arc(0, 0, 128, 0, 7); g.fill(); g.strokeStyle = '#1a1320'; g.lineWidth = 6; g.stroke();
   g.fillStyle = '#2f5552'; g.beginPath(); g.arc(0, 0, 100, 0, 7); g.fill();

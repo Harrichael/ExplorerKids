@@ -60,7 +60,7 @@ export function buildMantle(t){
       if (!inside(x, z) || Math.hypot(x - BUS[0], z - BUS[1]) < 4 || Math.hypot(x - PUTTY[0], z - PUTTY[1]) < 2 || Math.hypot(x - ROCK[0], z - ROCK[1]) < 2 || Math.abs(x) < 2.5) continue;
       const r0 = .25 + Math.random()*.45; bAdd([0x5a2c24, 0x4a2420, 0x6a3428][i % 3], new THREE.SphereGeometry(r0, 8, 6), XF(x, r0*.3, z, fr(1, 1.3), .65, fr(.9, 1.2), 0, fr(0, 6), 0), {ink:.035, shadow:true}); }
     bFlush(w.scene);
-    // Theo's rock to tap, and Juniper's flat warm stone with her putty on it
+    // Basil's rock to tap, and Juniper's flat warm stone with her putty on it
     const big = add(new THREE.SphereGeometry(1.1, 10, 7), T(0x5a2c24, {emissive:0x2a0a06, emissiveIntensity:.5}), ROCK[0], .6, ROCK[1]); big.scale.set(1.2, .8, 1); outline(big, 1.03);
     outline(add(new THREE.CylinderGeometry(.75, .85, .3, 10), T(0x6a3428, {emissive:0x3a0e06, emissiveIntensity:.5}), PUTTY[0], .15, PUTTY[1]), 1.04);
     putty = sph(.2, T(0x5ab8d0), PUTTY[0], .5, PUTTY[1], null, 14); outline(putty, 1.06);
@@ -129,20 +129,19 @@ export function buildMantle(t){
   const say = t.say;
 
   // ---------- what the class finds ----------
-  cls.find('theo', {at:[ROCK[0] + 1.5, ROCK[1] + 1.3, -2.3], core:true, call:"Wait! Is this a lava ocean?!", after:["Solid rock. I feel much better now."],
+  cls.find('basil', {name:'tap', at:[ROCK[0] + 1.5, ROCK[1] + 1.3, -2.3], call:"Wait! Is this a lava ocean?!", after:["Solid rock. I feel much better now."],
     async scene(){
-      await say([['theo', "{name}, the mantle is a big ocean of lava, right? Are we going to sink?"],
-                 ['theo', "Here, use my rock hammer. You tap it. I'm scared."]]);
-      const pick = await t.ask('theo', "What will happen when you tap it?", ["Clink! It's hard rock", "Splash! It's lava"]);
+      await say([['basil', "{name}, the mantle is a big ocean of lava, right? Are we going to sink?"],
+                 ['basil', "Here, use my rock hammer. You tap it. I'm scared."]]);
+      const pick = await t.ask('basil', "What will happen when you tap it?", ["Clink! It's hard rock", "Splash! It's lava"]);
       for (let i = 0; i < 3; i++) { flash.material.opacity = 1; flash.scale.setScalar(.8 + Math.random()*.4); game.camShake = .5;
         Sound.tone(1900 + i*120, {type:'triangle', dur:.12, vol:.1}); Sound.tone(3200, {type:'square', dur:.04, vol:.03, cut:4000}); await t.wait(.45); }
-      await say([['theo', pick === 0 ? "Clink! You were right. It's solid!" : "No splash at all. Clink! It's solid!"],
-                 ['theo', "The mantle is rock. Hot rock, but hard as a sidewalk."],
-                 ['theo', "Nobody can sink in a sidewalk!"]]);
-      worries(1);
-      await say([['theo', "Two worries, crossed off!"]]);
+      await say([['basil', pick === 0 ? "Clink! You were right. It's solid!" : "No splash at all. Clink! It's solid!"],
+                 ['basil', "The mantle is rock. Hot rock, but hard as a sidewalk."],
+                 ['basil', "Nobody can sink in a sidewalk!"]]);
+      await say([['basil', worries(1)]]);
     }});
-  cls.find('juniper', {at:[PUTTY[0] + .4, PUTTY[1] + 1.3, -2.8], pose:'crouch', core:true, call:"Come watch my putty!", after:["Solid, but it flows. Slowly!"],
+  cls.find('juniper', {name:'putty', at:[PUTTY[0] + .4, PUTTY[1] + 1.3, -2.8], pose:'crouch', call:"Come watch my putty!", after:["Solid, but it flows. Slowly!"],
     async scene(){
       await say([['juniper', "My putty ball is solid. You can't pour it."]]);
       const pick = await t.ask('juniper', "What will it do, sitting on this warm rock?", ["Stay round", "Slowly sag flat", "Bounce"]);
@@ -154,7 +153,7 @@ export function buildMantle(t){
                  ['juniper', "It's solid, but it still flows, very slowly."],
                  ['juniper', "Mantle rock does that too. Just much, much slower."]]);
     }});
-  cls.find('pip', {at:[.4, EDGE + 1.3, Math.PI], pose:'peer', core:true, call:"I've got the time goggles!", after:["Round and round, a million years at a time."],
+  cls.find('pip', {name:'goggles', at:[.4, EDGE + 1.3, Math.PI], pose:'peer', call:"I've got the time goggles!", after:["Round and round, a million years at a time."],
     async scene(){
       await say([['pip', "Dr. Sparks lent me her time goggles! Your turn, {name}."],
                  ['pip', "Look at the cliff. That's the mantle, cut open."]]);
@@ -164,18 +163,18 @@ export function buildMantle(t){
         step: k => { S.phase = p0 + k*Math.PI*2; S.apart = k; S.labels = k > .25; }});
       await say([['pip', pick === 0 ? "You guessed it! The hot rock rose up." : "Whoa! The hot rock rose up."],
                  ['pip', "Then it cooled off at the top and sank. Round and round!"],
-                 ['theo', "And look on the side! A cool slab of plate sank down."],
+                 ['basil', "And look on the side! A cool slab of plate sank down."],
                  ['sparks', "The moving mantle drags the plates along. That's why plates move!"]]);
     }});
-  cls.find('mo', {at:[8.6, 4.6, -2.2], pose:'cheer', call:"Phew! Come here!", after:["Hot like the sun. Wow."],
+  cls.find('mo', {name:'heat', at:[8.6, 4.6, -2.2], pose:'cheer', call:"Phew! Come here!", after:["Hot like the sun. Wow."],
     async scene(){
       await say([['mo', "Phew! It's hotter than a pizza oven down here."]]);
       const pick = await t.ask('mo', "Guess how hot the very middle of the Earth is?", ["As hot as an oven", "As hot as the sun's surface"]);
       await say([['mo', pick === 1 ? "Yes! As hot as the surface of the sun!" : "Even hotter! As hot as the surface of the sun!"],
                  ['mo', "Good thing we have the heat bubble. My snacks would melt."]]);
     }});
-  cls.hint = () => cls.done(3) ? "Call the bus from a stop, {name}. Where will the rock carry us up?" :
-    !cls.found.size ? "Theo has a question, Juniper has putty, and Pip has my time goggles!" : "Keep going, {name}! Somebody is still waving you over.";
+  cls.hint = () => cls.saw('goggles') ? "Call the bus from a stop, {name}. Where will the rock carry us up?" :
+    "Basil has a question, Juniper has putty, and Pip has my time goggles!";
 
   // ---------- the place's scenes, run by the trip's script ----------
   return {world:w, bus, cls,
@@ -202,10 +201,11 @@ export function buildMantle(t){
     },
     // the drill is gone, so the explorer calls the bus to the edge, where a current can carry it up
     async explore(){
-      await t.until(() => cls.done(3) && !game.cutscene);
+      await t.until(() => cls.saw('goggles') && !game.cutscene);
       await t.wait(.6);
-      await say([['sparks', "Solid rock that flows, round and round, and carries the plates. That's the mantle!"],
-                 ['sparks', "Let's ride a current up! Call the bus where the rock will carry us."]]);
+      await say([['sparks', cls.saw('tap') || cls.saw('putty') ? "Solid rock that flows, round and round, and carries the plates. That's the mantle!" :
+                              "Hot rock rises, cool rock sinks, round and round, and it carries the plates. That's the mantle!"],
+                 ['sparks', "Let's ride a current up! Call the bus where the rock will carry us."], ...cls.stillWaving('call the bus')]);
       cls.gather([1.6, 5.6, Math.PI]);
       stops.forEach(g => { g.visible = true; });
       const watchBus = (pos, look) => { pos.set(player.x*.5 + 2, 7.5, player.z + 7.5); look.set(bus.root.position.x*.8, Math.max(-1.5, bus.root.position.y), bus.root.position.z); };

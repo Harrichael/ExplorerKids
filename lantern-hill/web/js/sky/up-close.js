@@ -114,8 +114,8 @@ function place(body, ms, where){
 let shown = null;
 
 // ---------- the close-up ----------
-let body = null, aim = {x:0, y:0}, tilt = {x:0, y:0}, steered = 0, zoomTo = 1, zoomAt = 1, labelled = [], last = '';
-export function show(b){ body = b; aim = {x:0, y:0}; tilt = {x:0, y:0}; zoomTo = zoomAt = 1; last = ''; world(b); sharpen(b); lens(0); }
+let body = null, aim = {x:0, y:0}, tilt = {x:0, y:0}, steered = 0, zoomTo = 1, zoomAt = 1, toward = null, labelled = [], last = '';
+export function show(b){ body = b; aim = {x:0, y:0}; tilt = {x:0, y:0}; zoomTo = zoomAt = 1; toward = null; last = ''; world(b); sharpen(b); lens(0); }
 export function refresh(){ last = ''; }
 
 // ---------- lenses ----------
@@ -145,18 +145,20 @@ const ROCK = 7*Math.PI/180;
 // a drag moves the view across the face as far as the finger goes, and no further off than there is
 // something to see
 export function pan(dx, dy){
-  const k = 2*(dist() - ground())*Math.tan(15*Math.PI/180)/(canvas.clientHeight || 1);
-  aim.x -= dx*k; aim.y += dy*k;
-  const far = Math.hypot(aim.x, aim.y), most = system();
-  if (far > most) { aim.x *= most/far; aim.y *= most/far; }
+  const k = perScreen();
+  aim.x -= dx*k; aim.y += dy*k; inReach();
   if (body.id === 'moon') {
     tilt.x -= dx*ROCK*2/(canvas.clientHeight || 1); tilt.y += dy*ROCK*2/(canvas.clientHeight || 1);
     const t = Math.hypot(tilt.x, tilt.y); if (t > ROCK) { tilt.x *= ROCK/t; tilt.y *= ROCK/t; }
   }
   steered = performance.now();
 }
-// Jupiter lets you back off far enough to take in Callisto's orbit, 26 Jupiters out
-export function zoom(k){ zoomTo = Math.min(body.moons ? 28 : 4, Math.max(nearest(), zoomTo*k)); }
+// how far across the face one screen pixel is, in the middle of the view
+const perScreen = () => 2*(dist() - ground())*Math.tan(15*Math.PI/180)/(canvas.clientHeight || 1);
+function inReach(){ const far = Math.hypot(aim.x, aim.y), most = system(); if (far > most) { aim.x *= most/far; aim.y *= most/far; } }
+// Jupiter lets you back off far enough to take in Callisto's orbit, 26 Jupiters out. Given `at`, a
+// spot on screen measured from the middle, what's there stays there as the zoom eases in.
+export function zoom(k, at){ zoomTo = Math.min(body.moons ? 28 : 4, Math.max(nearest(), zoomTo*k)); toward = at || null; }
 const reach = () => body.rings ? RINGS.outer/body.km*1.05 : 1.08;
 const system = () => body.moons ? 28 : reach();
 // how far the camera sits to fit the body (rings and all) in the view, times the zoom
@@ -177,9 +179,11 @@ export function draw(ms, where, w, h, dt){
   const dpr = Math.min(devicePixelRatio, 2);
   if (canvas.width !== Math.round(w*dpr) || canvas.height !== Math.round(h*dpr)) { renderer.setPixelRatio(dpr); renderer.setSize(w, h, false); last = ''; }
   camera.aspect = w/h;
+  const was = perScreen();
   zoomAt *= Math.pow(zoomTo/zoomAt, Math.min(1, dt*8));
   // panned in toward the middle, the ground rises to meet the view; it backs off rather than sink in
   const lo = nearest(); zoomTo = Math.max(zoomTo, lo); zoomAt = Math.max(zoomAt, lo);
+  if (toward) { const d = was - perScreen(); aim.x += toward.x*d; aim.y -= toward.y*d; inReach(); }
   if (performance.now() - steered > 150) { const k = Math.exp(-dt*4); tilt.x *= k; tilt.y *= k; }
   const at = place(body, ms, where);
   const key = [aim.x, aim.y, tilt.x, tilt.y, zoomAt].map(v => v.toFixed(5)).concat([w, h, Math.floor(ms/2000), maps]).join();

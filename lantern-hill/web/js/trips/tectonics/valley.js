@@ -141,7 +141,7 @@ export function buildValley(t){
 
   // ---------- what the class finds ----------
   let crumpled = false;
-  cls.find('juniper', {at:[RUG[0] + 1.6, RUG[1] - .9, -2.2], pose:'point', core:true, call:"Come look at this cliff!", after:["Squish the ground hard enough, and you get mountains!"],
+  cls.find('juniper', {name:'rug', at:[RUG[0] + 1.6, RUG[1] - .9, -2.2], pose:'point', call:"Come look at this cliff!", after:["Squish the ground hard enough, and you get mountains!"],
     async scene(){
       await say([['juniper', "Look at the cliff, {name}! Stripy rock, all bent and wavy."]]);
       const pick = await t.ask('juniper', "What will the rug do if you push one end?", ["Bunch up into bumps", "Stay flat", "Rip in half"]);
@@ -158,7 +158,7 @@ export function buildValley(t){
                  ['juniper', "When plates crash, the ground crumples up. Big crumples are mountains!"]]);
       t.cut(null);
     }});
-  cls.find('pip', {at:[-3.4, -4.4, Math.PI], pose:'peer', core:true, call:"These mountains are HUGE! Come see!", after:["Up, up, up. A few millimeters every year."],
+  cls.find('pip', {name:'peaks', at:[-3.4, -4.4, Math.PI], pose:'peer', call:"These mountains are HUGE! Come see!", after:["Up, up, up. A few millimeters every year."],
     async scene(){
       await say([['pip', "Look how tall these mountains are, {name}!"], ['pip', "Two plates are crashing right here. Very, very slowly."]]);
       const pick = await t.ask('pip', "If two plates keep crashing, what happens to the land between?", ["It crumples up into mountains", "It sinks away", "Nothing happens"]);
@@ -171,7 +171,7 @@ export function buildValley(t){
       const k = cls.n.pip; k.pose = null;
       k.goal = {x:HILL[0] + 1, z:HILL[1] + .4, angle:-2.2, run:true, then: () => { k.pose = 'crouch'; k.spotted = game.elapsed + 1; }};
     }});
-  cls.find('pip', {at:[HILL[0] + 1, HILL[1] + .4, -2.2], pose:'crouch', core:true, when: () => crumpled, call:"Up here! Something's glinting!", after:["A seashell on a mountain. Wait till I tell everyone!"],
+  cls.find('pip', {name:'shell', at:[HILL[0] + 1, HILL[1] + .4, -2.2], pose:'crouch', when: () => crumpled, call:"Up here! Something's glinting!", after:["A seashell on a mountain. Wait till I tell everyone!"],
     async scene(){
       await say([['pip', "It's right here somewhere, {name}. Can you dig it out?"]]);
       const [fx, , fz] = fossil.position.toArray();
@@ -185,23 +185,23 @@ export function buildValley(t){
                  ['pip', "This mountain top was once the sea floor!"]]);
       t.cut(null);
     }});
-  cls.find('theo', {at:[FX - 1.1, ROAD_Z + .9, 1.9], core:true, call:"Somebody broke the road!", after:["My knees are still wobbly."],
+  cls.find('basil', {name:'quake', at:[FX - 1.1, ROAD_Z + .9, 1.9], call:"Somebody broke the road!", after:["My knees are still wobbly."],
     async scene(){
-      await say([['theo', "Somebody broke the road, {name}! The two sides don't line up."],
-                 ['sparks', "Nobody broke it, Theo. That crack is where two plates slide past each other."],
+      await say([['basil', "Somebody broke the road, {name}! The two sides don't line up."],
+                 ['sparks', "Nobody broke it, Basil. That crack is where two plates slide past each other."],
                  ['sparks', "But they get stuck. Push the fence and see what happens."]]);
-      const guess = await t.ask('theo', "What happens if we keep pushing the plates?", ["It bends, then snaps all at once", "It slides smoothly", "Nothing happens"]);
-      await say([['theo', "You push it, {name}. I'll watch from here."]]);
+      const guess = await t.ask('basil', "What happens if we keep pushing the plates?", ["It bends, then snaps all at once", "It slides smoothly", "Nothing happens"]);
+      await say([['basil', "You push it, {name}. I'll watch from here."]]);
       for (let i = 1; i <= 4; i++) {
         await t.free(t.use(w, {name:'Fence', x:FX + .3, z:FENCE_Z - .7, verb:'Push the fence', short:'Push', glow:[FX + .3, 1, FENCE_Z]}), 'Push the fence');
         if (i === 4) break;
         const b0 = S.bend; Sound.tone(150 - i*15, {type:'sawtooth', dur:.5, vol:.05, f2:110, cut:700}); Sound.hiss({dur:.4, vol:.05, type:'bandpass', freq:300});
         await t.tween(.55, k => { S.bend = b0 + .32*k; settle(); });
-        await say([['theo', ["It's bending! Push again!", "It's bending more! Again!", "It's REALLY bent. One more?"][i - 1]]]);
+        await say([['basil', ["It's bending! Push again!", "It's bending more! Again!", "It's REALLY bent. One more?"][i - 1]]]);
       }
-      // it gives all at once: the quake. Everyone drops and covers but Theo, who freezes.
+      // it gives all at once: the quake. Everyone drops and covers but Basil, who freezes.
       snap = {t0:game.elapsed, b:S.bend, s:S.slip};
-      const poses = {}; for (const id in cls.n) { poses[id] = cls.n[id].pose; cls.n[id].pose = id === 'theo' ? null : 'cover'; }
+      const poses = {}; for (const id in cls.n) { poses[id] = cls.n[id].pose; cls.n[id].pose = id === 'basil' ? null : 'cover'; }
       const near = (pos, look) => { pos.set(player.x + 1.2, 3.4, player.z + 5.2); look.set(player.x - .4, .6, player.z - .6); };
       t.cut(near);
       await rumble(1);
@@ -210,38 +210,41 @@ export function buildValley(t){
       const cover = t.free(t.use(w, {name:'Drop, cover, hold on', x:player.x, z:player.z, range:5, verb:'Drop, cover, hold on!', short:'Drop, cover, hold on!', glow:[player.x, 2.2, player.z], big:true}),
         'The ground is shaking! What do you do?').then(() => { covered = true; });
       await t.until(() => covered || game.elapsed > nudge);
-      if (!covered) await say([['theo', "{name}! What do we do?!"], ['sparks', coarse ? "Drop, cover, and hold on! Tap the big button!" : "Drop, cover, and hold on! Press E!"]]);
+      if (!covered) await say([['basil', "{name}! What do we do?!"], ['sparks', coarse ? "Drop, cover, and hold on! Tap the big button!" : "Drop, cover, and hold on! Press E!"]]);
       await cover;
       t.cut(near); player.pose = 'cover'; t.onEnd(() => { player.pose = null; });
       Sound.tone(392, {type:'triangle', dur:.15, vol:.07});
       await t.wait(.9);
-      cls.n.theo.pose = 'cover';
-      await say([['theo', "Drop, cover, hold on. Like {name}!"]]);
+      cls.n.basil.pose = 'cover';
+      await say([['basil', "Drop, cover, hold on. Like {name}!"]]);
       snackHop = game.elapsed;
       await rumble(5);
       await t.wait(.8);
       for (const id in cls.n) cls.n[id].pose = poses[id];
       player.pose = null;
       t.cut((pos, look) => { pos.set(FX + .4, 4.2, FENCE_Z + 5.4); look.set(FX, .3, FENCE_Z); });
-      await say([['theo', guess === 0 ? "You were right. It bent and bent, then SNAPPED!" : "It didn't slide. It bent and bent, then SNAPPED!"],
+      await say([['basil', guess === 0 ? "You were right. It bent and bent, then SNAPPED!" : "It didn't slide. It bent and bent, then SNAPPED!"],
                  ['mo', "Hey! My snack!"],
                  ['sparks', "Stuck plates bend, then snap free. That jolt is an earthquake."],
                  ['sparks', "And everyone did just right: drop, cover, and hold on!"],
-                 ['theo', "I froze. But then I copied you, {name}."]]);
+                 ['basil', "I froze. But then I copied you, {name}."]]);
       worries(3);
-      await say([['theo', "The ground shakes, but now I know what to do!"]]);
+      await say([['basil', "The ground shakes, but now I know what to do!"]]);
       t.cut(null);
     }});
-  cls.find('mo', {at:[ROCK[0] - .1, ROCK[1] - .05, 0], pose:'sit', call:"Picnic time! Over here!", after:["Mountains on one side, snacks on the other. Perfect."],
+  cls.find('mo', {name:'picnic', at:[ROCK[0] - .1, ROCK[1] - .05, 0], pose:'sit', call:"Picnic time! Over here!", after:["Mountains on one side, snacks on the other. Perfect."],
     async scene(){
       await say([['mo', "This rock is the perfect snack spot, {name}."]]);
       const pick = await t.ask('mo', "Want half my granola bar?", ["Yes, please!", "No, thank you"]);
       await say([['mo', pick === 0 ? "Here you go. It's crunchy, like the mountains!" : "More for me! Crunchy, like the mountains."]]);
     }});
+  const mountains = () => cls.saw('rug') || cls.saw('peaks');
   cls.hint = () => {
-    if (!cls.found.size) return "Juniper, Pip and Theo have all found something. Go see!";
-    if (crumpled && cls.done(2) && !cls.done(3)) return "Pip ran up the hill. Something is up there!";
-    return cls.done(4) ? "Back to the bus, {name}! Time to head home." : "Keep looking, {name}! Somebody is still waving you over.";
+    if (!cls.saw('quake')) return mountains() ? "Basil is down by the broken road. Go see what's wrong!" :
+      "Juniper, Pip and Basil have all found something. Go see!";
+    if (!mountains()) return "How do mountains grow, {name}? Juniper and Pip are finding out. Go see!";
+    if (crumpled && !cls.saw('shell')) return "Pip ran up the hill. Something is up there!";
+    return "Back to the bus whenever you're ready, {name}! Or go see anyone still waving.";
   };
 
   return {world:w, bus, cls,
@@ -262,12 +265,12 @@ export function buildValley(t){
       t.goal('Visit anyone who waves!');
     },
     async explore(){
-      await t.until(() => cls.done(4) && !game.cutscene);
+      await t.until(() => cls.saw('quake') && mountains() && !game.cutscene);
       await t.wait(.6);
       await say([['sparks', "Crashing plates push up mountains. Stuck plates snap and shake the ground."],
-                 ['sparks', "That's why the ground shakes, {name}. And that's how mountains grow!"]]);
+                 ['sparks', "That's why the ground shakes, {name}. And that's how mountains grow!"], ...cls.stillWaving()]);
       cls.gather([bus.root.position.x - 2, bus.root.position.z + 1.2, Math.PI/2]);
-      await bus.boarding(t);
+      await cls.board(bus);
     },
     // up and away over the peaks, into the sunset
     async depart(){

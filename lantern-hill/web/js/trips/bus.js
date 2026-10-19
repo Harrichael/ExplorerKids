@@ -52,10 +52,10 @@ export function tripBus(w, at){
     },
     // the door, on the bus's left side, in the place's coordinates
     door(out = 0){ const a = root.rotation.y, lx = 1.62, lz = -.97 - out; return [root.position.x + lx*Math.cos(a) + lz*Math.sin(a), root.position.z - lx*Math.sin(a) + lz*Math.cos(a)]; },
-    async boarding(t){
+    async boarding(t, when){
       const [x, z] = bus.door(.7);
       t.goal('Back to the Wonder Bus when you’re ready');
-      await t.use(w, {name:'Wonder Bus', x, z, verb:'Climb aboard the Wonder Bus', short:'Board', glow:[x, root.position.y + 2.6, z]});
+      await t.use(w, {name:'Wonder Bus', x, z, verb:'Climb aboard the Wonder Bus', short:'Board', glow:[x, root.position.y + 2.6, z], when});
       t.goal('');
     },
   };
