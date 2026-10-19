@@ -133,6 +133,9 @@ const STORIES = [
     if (D.desk.items.length) return 'the Free Lab started with things already on the mat';
     const bottles = C.shelves.find(s => s.def.label === 'Bottles'), has = t => !!bottles.slots.find(s => s.type === t).model;
     if (has('cabbage')) return 'cabbage juice is in the cabinet before its experiment is done';
+    // let the camera finish easing back to take in the cabinet
+    const R = await import('/js/core/render.js'), cam = R.camera.position;
+    for (let i = 0, was = cam.clone(); i < 60; i++) { await sleep(150); if (was.distanceTo(cam) < 1e-4) break; was.copy(cam); }
     if (!has('vinegar')) return 'vinegar is missing after the volcano';
     await click(screen(bottles.x, bottles.y + bottles.h/2, -.64)); await sleep(1200);
     const v = bottles.slots.find(s => s.type === 'vinegar').model.position;
