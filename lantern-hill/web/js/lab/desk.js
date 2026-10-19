@@ -168,6 +168,21 @@ export function setupDesk(layout, {endless=false}={}){
   layout.forEach(([id, type, x, z, o], i) => desk.items.push(makeItem(id, type, x, z, o || {}, i)));
   acc = 0;
 }
+// Something taken out mid-play lands on the clearest spot near where it was asked for, or nowhere if
+// the mat is full.
+let brought = 0;
+export function bring(type, o, near){
+  const r = ITEMS[type].r + .012;
+  let best = null, bd = Infinity;
+  for (let x = -BOUNDS.x + r; x <= BOUNDS.x - r; x += .02) for (let z = -BOUNDS.z + r; z <= BOUNDS.z - r; z += .02) {
+    const d = Math.hypot(x - near.x, z - near.z); if (d >= bd) continue;
+    if (live().some(it => { const t = it.body.translation(); return Math.hypot(t.x - x, t.z - z) < r + it.def.r; })) continue;
+    bd = d; best = {x, z};
+  }
+  if (!best) return null;
+  const it = makeItem(type + ++brought, type, best.x, best.z, o || {}, 0);
+  desk.items.push(it); return it;
+}
 export function clearDesk(){
   for (const it of desk.items) {
     desk.root.remove(it.g);
