@@ -1,7 +1,8 @@
 // Dr. Sparks' experiment desk. There's no separate screen: the explorer steps up to the real bench in
 // the Science Corner, the camera leans in over it, and Dr. Sparks' experiment book opens. Each
 // experiment asks a question, takes the explorer's prediction, lets them test it however they like
-// with everything on the desk, and then compares. Loaded the first time someone uses the desk.
+// with everything on the desk, and then compares. Finished experiments open new ones in the book and
+// stock the cabinet the Free Lab is played from. Loaded the first time someone uses the desk.
 
 import * as THREE from 'three';
 import { Sound } from '../core/sound.js';
@@ -13,12 +14,14 @@ import { blob, hero, player } from '../player.js';
 import { load, save } from '../save.js';
 import { game } from '../state.js';
 import { convo, endConvo, story } from '../ui/dialogue.js';
+import { closeCabinet, initCabinet, reach, stockCabinet, updateCabinet } from './cabinet.js';
 import { clearDesk, desk, initDesk, isVessel, restingIn, setupDesk, totalGas, updateDesk } from './desk.js';
-import { EXPERIMENTS, FREE } from './experiments.js';
+import { EXPERIMENTS, FREE, opened, stocked } from './experiments.js';
 import { handsOff, handsOn, setTipButton, setTipKey, updateHands } from './hands.js';
 import { ready } from './physics.js';
+import { ITEMS } from './stuff.js';
 
-const FREE_AFTER = 3, HINT_AFTER = 35;
+const FREE_AFTER = 1, HINT_AFTER = 35;
 
 const css = document.createElement('style');
 css.textContent = `
@@ -58,55 +61,63 @@ css.textContent = `
 #labToast small{display:block;font-family:var(--body);font-weight:900;font-size:17px;color:var(--gold);margin-top:8px;text-shadow:0 2px 0 var(--ink)}
 @keyframes toast{0%{opacity:0;transform:translate(-50%,-40%) scale(.8)}10%{opacity:1;transform:translate(-50%,-50%) scale(1.05)}18%{transform:translate(-50%,-50%) scale(1)}80%{opacity:1}100%{opacity:0}}
 #labBook{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:calc(16px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));background:radial-gradient(ellipse at center,rgba(26,19,32,.35),rgba(20,12,28,.7))}
-#labBook .page{width:min(760px,100%);max-height:100%;overflow:auto;background:linear-gradient(180deg,#f3e6c8,#e6d3ac);color:var(--ink);border:3px solid var(--gold);border-radius:20px;box-shadow:0 0 0 4px var(--ink),0 18px 40px rgba(0,0,0,.5);padding:18px 20px 16px;animation:popin .25s ease-out}
+#labBook .page{width:min(940px,100%);max-height:100%;overflow:auto;background:linear-gradient(180deg,#f3e6c8,#e6d3ac);color:var(--ink);border:3px solid var(--gold);border-radius:20px;box-shadow:0 0 0 4px var(--ink),0 18px 40px rgba(0,0,0,.5);padding:18px 20px 16px;animation:popin .25s ease-out}
 #labBook header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:12px}
 #labBook .sub{font-weight:900;font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:var(--rust)}
 #labBook h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(24px,6vw,34px);line-height:1.05;color:var(--plum)}
-#labBook .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:10px}
-.lb-card{position:relative;text-align:left;font-family:var(--body);color:var(--ink);background:#fbf4e2;border:2.5px solid var(--ink);border-radius:14px;padding:10px 12px 10px 50px;cursor:pointer;min-height:76px;box-shadow:0 3px 0 var(--ink)}
+#labBook .tree{position:relative;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(178px,230px);column-gap:30px;overflow-x:auto;padding:2px 2px 6px}
+#labBook .tree .col{position:relative;z-index:1;display:flex;flex-direction:column;justify-content:space-around;gap:10px}
+#labBook .links{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
+#labBook .links path{fill:none;stroke-width:3.5;stroke-linecap:round}
+#labBook .links path.done{stroke:var(--teal)}
+#labBook .links path.new{stroke:var(--rust);stroke-dasharray:2 7}
+#lbFree{margin-top:12px}
+.lb-card{position:relative;text-align:left;font-family:var(--body);color:var(--ink);background:#fbf4e2;border:2.5px solid var(--ink);border-radius:14px;padding:7px 10px 7px 42px;cursor:pointer;box-shadow:0 3px 0 var(--ink)}
 .lb-card:hover{transform:translateY(-1px)}
-.lb-card .num{position:absolute;left:10px;top:10px;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:16px;background:var(--plum);color:var(--parch);border:2px solid var(--ink)}
-.lb-card b{display:block;font-family:var(--display);font-weight:400;font-size:18px;line-height:1.1}
-.lb-card .bl{display:block;font-weight:800;font-size:13px;color:#5a4a4a;margin-top:2px}
-.lb-card .st{display:inline-block;margin-top:5px;font-weight:900;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:2px 8px;border-radius:999px;background:rgba(26,19,32,.08)}
+.lb-card .num{position:absolute;left:8px;top:8px;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:16px;background:var(--plum);color:var(--parch);border:2px solid var(--ink)}
+.lb-card b{display:block;font-family:var(--display);font-weight:400;font-size:17px;line-height:1.1}
+.lb-card .bl{display:block;font-weight:800;font-size:12px;line-height:1.25;color:#5a4a4a;margin-top:2px}
+.lb-card .st{display:inline-block;margin-top:4px;font-weight:900;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:2px 8px;border-radius:999px;background:rgba(26,19,32,.08)}
 .lb-card .nb{display:block;margin-top:4px;font-weight:800;font-size:12px;color:#5a4a4a}
 .lb-card.done .num{background:var(--teal)}
 .lb-card.done .st{background:#cfe8d4;color:#22543a}
 .lb-card.new{background:#fff7d8;border-color:var(--rust);box-shadow:0 3px 0 var(--rust),0 0 0 3px rgba(217,164,65,.5)}
 .lb-card.new .st{background:var(--rust);color:var(--parch)}
-.lb-card.free{grid-column:1/-1;padding-left:56px;background:linear-gradient(90deg,#d8efe6,#fbf4e2)}
+.lb-card.free{width:100%;padding-left:56px;background:linear-gradient(90deg,#d8efe6,#fbf4e2)}
 .lb-card.free .num{width:36px;height:36px;font-size:18px;background:var(--rust)}
 #labBook footer{display:flex;justify-content:flex-end;margin-top:12px}
 #labBook footer .lab-pill{background:var(--plum)}`;
 document.head.appendChild(css);
 
 const hud = document.createElement('div'); hud.id = 'labHud'; hud.hidden = true;
-hud.innerHTML = `<div class="lab-card"><div class="sub" id="lhSub"></div><h3 id="lhTitle"></h3><div class="q" id="lhQ"></div><div class="status" id="lhStatus"></div><div class="after" id="lhAfter" hidden></div></div>
+hud.innerHTML = `<div class="lab-card" id="lhCard"><div class="sub" id="lhSub"></div><h3 id="lhTitle"></h3><div class="q" id="lhQ"></div><div class="status" id="lhStatus"></div><div class="after" id="lhAfter" hidden></div></div>
   <div class="btns"><button class="lab-pill" id="lhHint">Need a hint?</button><button class="lab-pill" id="lhBook">Experiment book</button><button class="lab-pill" id="lhReset">Start over</button><button class="lab-pill" id="lhLeave">Step away</button></div>
   <div id="lhChoose" hidden></div><button class="lab-pill go" id="lhLock" hidden>These are my guesses →</button>
   <button id="labTip" hidden aria-label="Hold to tip">Tip<small>${coarse ? 'HOLD' : 'HOLD T'}</small></button><div id="labHint" hidden></div>`;
 const book = document.createElement('div'); book.id = 'labBook'; book.hidden = true; book.setAttribute('role', 'dialog'); book.setAttribute('aria-labelledby', 'lbTitle');
 book.innerHTML = `<div class="page"><header><div><div class="sub">Dr. Vega Sparks' lab</div><h2 id="lbTitle">Experiment Book</h2></div></header>
-  <div class="grid" id="lbGrid"></div><footer><button class="lab-pill" id="lbLeave">Step away</button></footer></div>`;
+  <div class="tree" id="lbTree"></div><div id="lbFree"></div><footer><button class="lab-pill" id="lbLeave">Step away</button></footer></div>`;
 document.body.append(hud, book);
 const $ = id => document.getElementById(id);
 const tipBtn = $('labTip'), hint = $('labHint'), chooseEl = $('lhChoose'), lockBtn = $('lhLock'), hintBtn = $('lhHint');
 
 const root = new THREE.Group(); root.position.set(LAB_DESK.x, LAB_DESK.y, LAB_DESK.z); scene.add(root);
-initDesk(root);
+initDesk(root); initCabinet(root);
 
 const record = () => load('lab') || {};
 const progress = () => new Set(record().done || []);
-const unlocked = (i, done) => i === 0 || done.has(EXPERIMENTS[i - 1].id) || done.has(EXPERIMENTS[i].id);
 
 // ---------- stepping up to the desk and back ----------
 const FRONT = {x:LAB_DESK.x, z:LAB_DESK.z + 1.1};
 const headAt = new THREE.Vector3();
-// lean in over the desk, far enough back that it fits the screen, whatever its shape
+// lean in over the desk, far enough back that it fits the screen, whatever its shape; in the Free Lab,
+// far enough to take in the cabinet too
+const VIEW = {desk:{w:.98, h:.64, y:-.02, z:.1, el:1.0}, free:{w:.98, h:.72, y:.1, z:-.12, el:.72}};
 function deskCam(pos, look){
-  const tanV = Math.tan(camera.fov*Math.PI/360), D = Math.max(.98/(tanV*camera.aspect), .64/tanV), el = 1.0;
-  look.set(LAB_DESK.x, LAB_DESK.y - .02, LAB_DESK.z + .1);
-  pos.set(look.x, look.y + D*Math.sin(el), look.z + D*Math.cos(el));
+  const v = lab && lab.run && lab.run.exp.free ? VIEW.free : VIEW.desk;
+  const tanV = Math.tan(camera.fov*Math.PI/360), D = Math.max(v.w/(tanV*camera.aspect), v.h/tanV);
+  look.set(LAB_DESK.x, LAB_DESK.y + v.y, LAB_DESK.z + v.z);
+  pos.set(look.x, look.y + D*Math.sin(v.el), look.z + D*Math.cos(v.el));
 }
 let lab = null;
 export function openLab(){
@@ -133,11 +144,12 @@ function step(dt){
     if (camera.position.distanceTo(headAt) < 1.1 || L.t > .7) { hero.root.visible = false; blob.visible = false; }
     if (L.t > .9) openBook();
   } else if (L.phase === 'run') { runStep(dt); updateDesk(dt); updateHands(dt, game.elapsed); }
+  updateCabinet(dt);
 }
 function leave(){
   if (!lab) return;
   if (convo) endConvo(true);
-  clearDesk(); handsOff(); setTipKey(false); setTipButton(false);
+  clearDesk(); handsOff(); closeCabinet(); setTipKey(false); setTipButton(false);
   hud.hidden = book.hidden = true; document.documentElement.classList.remove('labbing');
   hero.root.visible = true; blob.visible = true; game.cutCam = null; game.cutscene = false; lab = null;
   Sound.close();
@@ -145,32 +157,58 @@ function leave(){
 hqAnims.push(dt => { if (lab) step(dt); });
 
 // ---------- the experiment book ----------
+// Drawn as the tree it is: each experiment one column further along than the deepest one it comes
+// after, kept level with what it grew from, with lines back to each of those. Only what's open is drawn,
+// so the tree grows as the explorer goes.
 function openBook(){
   if (convo) endConvo(false);
-  lab.phase = 'book'; lab.run = null; clearDesk(); handsOff(); hud.hidden = true;
-  const done = progress(), notes = record().notes || {}, grid = $('lbGrid'); grid.innerHTML = '';
-  // locked experiments stay out of the book entirely, so each unlock reveals something new
+  lab.phase = 'book'; lab.run = null; clearDesk(); handsOff(); closeCabinet(); hud.hidden = true;
+  const done = progress(), notes = record().notes || {}, tree = $('lbTree'), shown = EXPERIMENTS.filter(e => opened(e, done));
+  stockCabinet(stocked(done));
+  // an old save can have something done without what now comes before it; it hangs off what's shown
+  const depth = {}, cols = [], at = {}, from = e => e.after.filter(id => id in depth);
+  for (const e of shown) { depth[e.id] = Math.max(-1, ...from(e).map(id => depth[id])) + 1; (cols[depth[e.id]] = cols[depth[e.id]] || []).push(e); }
+  const mean = e => from(e).reduce((s, id) => s + at[id], 0)/(from(e).length || 1);
+  cols.forEach(col => { col.sort((a, b) => mean(a) - mean(b)); col.forEach((e, i) => { at[e.id] = i; }); });
+  tree.innerHTML = '<svg class="links" aria-hidden="true"></svg>';
   let firstNew = null;
-  EXPERIMENTS.forEach((e, i) => {
-    if (!unlocked(i, done)) return;
-    const fin = done.has(e.id), n = notes[e.id], b = document.createElement('button');
-    b.className = 'lb-card ' + (fin ? 'done' : 'new');
-    b.innerHTML = `<span class="num">${i + 1}</span><b>${e.title}</b><span class="bl">${e.blurb}</span>
-      <span class="st">${fin ? '✓ Done' : 'New!'} · Grade ${e.grade}</span>${n ? `<span class="nb">Predictions right: ${n.right} of ${n.total}</span>` : ''}`;
-    b.addEventListener('click', () => startRun(e));
-    if (!fin && !firstNew) firstNew = b;
-    grid.appendChild(b);
-  });
-  if (done.size >= FREE_AFTER) {
-    const free = document.createElement('button');
-    free.className = 'lb-card free new';
-    free.innerHTML = `<span class="num">★</span><b>Free Lab</b><span class="bl">Every supply on the desk. Mix anything with anything!</span><span class="st">Open</span>`;
-    free.addEventListener('click', () => startRun(FREE));
-    grid.appendChild(free);
+  for (const col of cols) {
+    const c = document.createElement('div'); c.className = 'col'; tree.appendChild(c);
+    for (const e of col) {
+      const fin = done.has(e.id), n = notes[e.id], b = document.createElement('button');
+      b.className = 'lb-card ' + (fin ? 'done' : 'new'); b.dataset.id = e.id;
+      b.innerHTML = `<span class="num">${fin ? '✓' : '?'}</span><b>${e.title}</b><span class="bl">${e.blurb}</span>
+        <span class="st">${fin ? 'Done' : 'New!'} · Grade ${e.grade}</span>${n ? `<span class="nb">Predictions right: ${n.right} of ${n.total}</span>` : ''}`;
+      b.addEventListener('click', () => startRun(e));
+      if (!fin && !firstNew) firstNew = b;
+      c.appendChild(b);
+    }
   }
-  book.hidden = false; (firstNew || grid.lastElementChild).focus({preventScroll:true});
+  const foot = $('lbFree'); foot.innerHTML = '';
+  if (done.size >= FREE_AFTER) {
+    const free = document.createElement('button'), n = stocked(done).size;
+    free.className = 'lb-card free new';
+    free.innerHTML = `<span class="num">★</span><b>Free Lab</b><span class="bl">${n} supplies in your cabinet. Mix anything with anything!</span><span class="st">Open</span>`;
+    free.addEventListener('click', () => startRun(FREE));
+    foot.appendChild(free);
+  }
+  book.hidden = false; link();
+  (firstNew || foot.lastElementChild || tree.querySelector('.lb-card')).focus({preventScroll:true});
   Sound.open();
 }
+// measured from layout, not the screen: the page is still popping in, scaled, when this runs
+function link(){
+  const tree = $('lbTree'), svg = tree.querySelector('svg'), done = progress();
+  svg.setAttribute('width', tree.scrollWidth); svg.setAttribute('height', tree.scrollHeight);
+  const card = id => { const c = tree.querySelector(`[data-id="${id}"]`), col = c.parentNode;
+    return {left:col.offsetLeft + c.offsetLeft, right:col.offsetLeft + c.offsetLeft + c.offsetWidth, mid:col.offsetTop + c.offsetTop + c.offsetHeight/2}; };
+  const shown = id => !!tree.querySelector(`[data-id="${id}"]`);
+  svg.innerHTML = EXPERIMENTS.filter(e => shown(e.id)).flatMap(e => e.after.filter(shown).map(id => {
+    const a = card(id), b = card(e.id), x0 = a.right, y0 = a.mid, x1 = b.left, y1 = b.mid, m = (x0 + x1)/2;
+    return `<path class="${done.has(e.id) ? 'done' : 'new'}" d="M${x0} ${y0}C${m} ${y0} ${m} ${y1} ${x1} ${y1}"/>`;
+  })).join('');
+}
+addEventListener('resize', () => { if (!book.hidden) link(); });
 
 // ---------- running an experiment: question, prediction, test, result ----------
 async function startRun(exp, quiet){
@@ -180,16 +218,17 @@ async function startRun(exp, quiet){
   if (!lab) return;
   book.hidden = true;
   hud.hidden = false; chooseEl.hidden = lockBtn.hidden = true;
-  setupDesk(exp.setup, {endless: !!exp.free}); handsOn(root);
+  setupDesk(exp.setup, {endless: !!exp.free}); closeCabinet(); handsOn(root, exp.free ? reach : null);
   lab.phase = 'run'; lab.run = {exp, r:-1, notes:[]};
   exp.setup.forEach((s, i) => Sound.tone(523*Math.pow(2, (i % 6)/12*2), {type:'triangle', t:i*.05 + .05, dur:.12, vol:.045}));
   $('lhReset').textContent = exp.free ? 'Clean up' : 'Start over';
-  const n = EXPERIMENTS.indexOf(exp);
-  $('lhSub').textContent = exp.free ? 'Free Lab · anything goes' : `Experiment ${n + 1} · Grade ${exp.grade}`;
+  $('lhSub').textContent = `Experiment · Grade ${exp.grade}`;
   $('lhTitle').textContent = exp.title; $('lhAfter').hidden = true;
   lab.hintAt = lab.hintAt || 0;
+  // the Free Lab has no question to pin up, and the cabinet needs the room
+  $('lhCard').hidden = !!exp.free;
   if (exp.free) {
-    $('lhQ').innerHTML = 'What happens if…?'; $('lhStatus').textContent = 'Make a guess, then try it!'; hintBtn.hidden = true;
+    hintBtn.hidden = true;
     if (!quiet) story(exp.intro);
     return;
   }
@@ -284,20 +323,23 @@ function compare(result){
   story(lines, () => { if (lab && lab.run === run) nextRound(); });
   drawHud();
 }
+const list = xs => xs.length < 2 ? xs.join('') : xs.slice(0, -1).join(', ') + ' and ' + xs[xs.length - 1];
 function finish(){
   const run = lab.run, exp = run.exp, rec = record(), before = new Set(rec.done || []), done = new Set(before);
   run.phase = 'done'; run.rd = null; done.add(exp.id);
   const right = run.notes.reduce((s, n) => s + n.right, 0), total = run.notes.reduce((s, n) => s + n.total, 0);
   save('lab', {done:[...done], notes:Object.assign({}, rec.notes, {[exp.id]: {right, total}})});
   [523, 659, 784, 1046, 1319].forEach((f, i) => Sound.tone(f, {type:'triangle', t:i*.1, dur:.35, vol:.08}));
-  const i = EXPERIMENTS.indexOf(exp), next = EXPERIMENTS[i + 1], extra = [];
-  const opened = next && !before.has(exp.id) ? next : null, freeNow = before.size < FREE_AFTER && done.size >= FREE_AFTER;
-  toast('Experiment complete!', opened ? `New experiment unlocked: ${opened.title}` : freeNow ? 'The Free Lab is open!' : exp.title);
-  if (opened) extra.push(['sparks', `You've unlocked a new experiment in my book: ${opened.title}!`]);
-  if (freeNow) extra.push(['sparks', "And that's three experiments! You've earned the Free Lab, where every supply is yours to mix however you like."]);
+  const fresh = EXPERIMENTS.filter(e => opened(e, done) && !opened(e, before)), had = stocked(before), now = stocked(done);
+  const got = [...now].filter(t => !had.has(t)), freeNow = before.size < FREE_AFTER && done.size >= FREE_AFTER, extra = [];
+  stockCabinet(now);
+  toast('Experiment complete!', fresh.length ? `New in the book: ${list(fresh.map(e => e.title))}` : got.length ? 'New supplies in your cabinet!' : exp.title);
+  if (fresh.length) extra.push(['sparks', `You've opened up ${fresh.length > 1 ? 'new experiments' : 'a new experiment'} in my book: ${list(fresh.map(e => e.title))}!`]);
+  if (freeNow) extra.push(['sparks', "And you've earned the Free Lab! Everything from this experiment is waiting in the cabinet behind the mat, to mix however you like."]);
+  else if (got.length) extra.push(['sparks', `I've put the ${list(got.map(t => ITEMS[t].name.toLowerCase()))} in your cabinet for the Free Lab.`]);
   const after = $('lhAfter'); after.innerHTML = ''; after.hidden = false;
-  const target = next && unlocked(i + 1, done) ? next : null;
-  if (target) { const b = pill(`Next: ${target.title} →`, () => startRun(target)); b.classList.add('go'); after.appendChild(b); }
+  EXPERIMENTS.filter(e => e.after.includes(exp.id) && opened(e, done) && !done.has(e.id))
+    .forEach((e, i) => { const b = pill(`Next: ${e.title} →`, () => startRun(e)); if (!i) b.classList.add('go'); after.appendChild(b); });
   after.appendChild(pill('Experiment book', openBook));
   story([...exp.explain, ...extra]);
   drawHud();
@@ -327,8 +369,10 @@ function tipUi(dt){
   tipBtn.hidden = !canTip && !tipBtn.classList.contains('on');
   if (canTip && desk.tip) lab.tipped = true;
   lab.hintAt += dt;
-  hint.hidden = lab.tipped || lab.hintAt > 40;
-  if (!hint.hidden) hint.innerHTML = coarse ? 'Drag things to carry them · hold <b>Tip</b> to pour' : 'Drag things to carry them · hold <b>T</b>, <b>Space</b> or <b>right-click</b> to tip';
+  const bare = lab.run.exp.free && !desk.items.some(it => !it.gone);
+  hint.hidden = !bare && (lab.tipped || lab.hintAt > 40);
+  if (!hint.hidden) hint.innerHTML = bare ? `${coarse ? 'Tap' : 'Click'} a <b>shelf</b> in the cabinet, then pick what you want`
+    : coarse ? 'Drag things to carry them · hold <b>Tip</b> to pour' : 'Drag things to carry them · hold <b>T</b>, <b>Space</b> or <b>right-click</b> to tip';
 }
 function pill(text, fn){ const b = document.createElement('button'); b.className = 'lab-pill'; b.textContent = text; b.addEventListener('click', fn); return b; }
 function toast(big, small){
@@ -348,13 +392,13 @@ tipBtn.addEventListener('pointerdown', tipOn); tipBtn.addEventListener('pointeru
 tipBtn.addEventListener('contextmenu', e => e.preventDefault());
 
 // T tips any time, Space only while the explorer isn't reading (it turns pages); Esc backs out one
-// level: experiment, book, desk
+// level: cabinet shelf, experiment, book, desk
 const tipKey = e => e.key === 't' || e.key === 'T' || e.key === ' ';
 addEventListener('keydown', e => {
   if (!lab || lab.phase === 'walk' || lab.phase === 'turn') return;
   if (tipKey(e) && (e.key !== ' ' || !convo) && lab.phase === 'run') { e.preventDefault(); e.stopPropagation(); if (!e.repeat) setTipKey(true); return; }
   if ((e.key === 'm' || e.key === 'M') && !e.repeat && !convo) { setSound(!Sound.isOn()); return; }
-  if (e.key === 'Escape' && !convo) { e.stopPropagation(); if (lab.phase === 'run') openBook(); else if (lab.phase === 'book') leave(); }
+  if (e.key === 'Escape' && !convo) { e.stopPropagation(); if (lab.phase === 'run') { if (!closeCabinet()) openBook(); } else if (lab.phase === 'book') leave(); }
 }, true);
 addEventListener('keyup', e => { if (tipKey(e)) setTipKey(false); });
 addEventListener('blur', () => setTipKey(false));

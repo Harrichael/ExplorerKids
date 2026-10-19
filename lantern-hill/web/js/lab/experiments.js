@@ -6,9 +6,14 @@
 //   choose: picture cards; observe() returns the id of the card that came true
 //   sort:   put each thing in the tray for your guess; observe() returns {thing: bin} for things tested so far
 // hints are offered one at a time, only to an explorer who seems stuck or asks.
+//
+// The book is a tree, not a list: an experiment opens once everything in its `after` is done, and is
+// listed after those. What an experiment puts on the desk is what finishing it stocks in the Free
+// Lab's cabinet.
 
 import * as chem from './chem.js';
 import { desk, find, isVessel, totalGas } from './desk.js';
+import { ITEMS } from './stuff.js';
 
 const S = text => ['sparks', text];
 const wet = () => desk.items.filter(v => !v.gone && isVessel(v) && chem.waterVol(v.c) > 20);
@@ -21,7 +26,7 @@ const settledShade = (c, added, plenty) => { const sh = shade(c); return sh !== 
 const COLORS = [{id:'pink', label:'Pink', swatch:'#e2457f'}, {id:'purple', label:'Stays purple', swatch:'#6e45a8'}, {id:'green', label:'Green', swatch:'#5cb83a'}];
 
 export const EXPERIMENTS = [
-  {id:'sinkfloat', title:'Sink or Float?', grade:'K–1', blurb:'Which treasures float in a tub of water?',
+  {id:'sinkfloat', after:[], title:'Sink or Float?', grade:'K–1', blurb:'Which treasures float in a tub of water?',
     setup:[['tub', 'tub', .38, -.14, {fill:{water:1050}}], ['float', 'tray', -.48, .33, {label:'FLOAT?', color:0x2f8f8a}], ['sink', 'tray', -.12, .33, {label:'SINK?', color:0x6d3b5e}],
            ['apple', 'apple', -.62, -.3], ['rock', 'rock', -.45, -.36], ['cork', 'cork', -.3, -.28], ['coin', 'coin', -.15, -.36], ['duck', 'duck', -.02, -.26]],
     rounds:[{
@@ -35,7 +40,7 @@ export const EXPERIMENTS = [
         duck:"The duck is hollow and full of air, so it floats."}}],
     explain:[S("Things that are heavy for their size sink. Things that are light for their size float."), S("Scientists call how heavy something is for its size its density. You just tested it!")]},
 
-  {id:'magnets', title:'Magnet Hunt', grade:'1', blurb:'What will a magnet pick up?',
+  {id:'magnets', after:['sinkfloat'], title:'Magnet Hunt', grade:'1', blurb:'What will a magnet pick up?',
     setup:[['yes', 'tray', -.46, .34, {label:'STICKS?', color:0xd8303a}], ['no', 'tray', -.1, .34, {label:'NOPE?', color:0x34406b}], ['magnet', 'magnet', .6, .3],
            ['paperclip', 'paperclip', -.62, -.25], ['nail', 'nail', -.4, -.36], ['key', 'key', -.18, -.28], ['coin', 'coin', .02, -.38],
            ['foil', 'foil', .2, -.26], ['crayon', 'crayon', .4, -.36], ['button', 'button', .6, -.24], ['cork', 'cork', .55, .0]],
@@ -50,7 +55,7 @@ export const EXPERIMENTS = [
         crayon:"Crayons are wax. No pull at all.", button:"Plastic buttons don't feel a magnet.", cork:"Cork comes from a tree. Nothing magnetic there."}}],
     explain:[S("Magnets pull on things made with iron, like steel paperclips, nails and keys."), S("Lots of other things, even metals like coins and foil, don't feel a magnet's pull at all.")]},
 
-  {id:'volcano', title:'Fizzy Volcano', grade:'1–2', blurb:'What happens when vinegar meets baking soda?',
+  {id:'volcano', after:['sinkfloat'], title:'Fizzy Volcano', grade:'1–2', blurb:'What happens when vinegar meets baking soda?',
     setup:[['volcano', 'volcano', 0, -.08], ['soda', 'soda', -.55, -.25], ['vinegar', 'vinegar', .55, -.22], ['soap', 'soap', .45, .2], ['red', 'red', -.5, .24]],
     rounds:[{
       q:"What happens when vinegar meets baking soda?", ask:[S("Here's a big question, {name}. What happens when vinegar meets baking soda?")],
@@ -62,7 +67,7 @@ export const EXPERIMENTS = [
       say:{fizz:"FOOSH! Vinegar is an acid and baking soda is a base. When they meet, they make a gas called carbon dioxide."}}],
     explain:[S("All those bubbles are carbon dioxide gas. With soap in there, the gas gets trapped in foam, and up it goes like lava!")]},
 
-  {id:'rainbow', title:'Rainbow Milk', grade:'2', blurb:'Can soap make colors dance?',
+  {id:'rainbow', after:['volcano'], title:'Rainbow Milk', grade:'2', blurb:'Can soap make colors dance?',
     setup:[['dish', 'dish', 0, .02], ['milk', 'milk', -.55, -.22], ['red', 'red', .3, -.38], ['yellow', 'yellow', .42, -.38], ['blue', 'blue', .54, -.38],
            ['saucer', 'saucer', .56, .22], ['swab', 'swab', .36, .32]],
     rounds:[{
@@ -76,7 +81,7 @@ export const EXPERIMENTS = [
       say:{zoom:"Whoa! Milk has a stretchy skin on top called surface tension. Soap breaks it and chases the fat around, pushing the colors along for the ride."}}],
     explain:[S("Soap grabs onto fat. Every time you poke, the soap races out across the milk and the colors swirl. Try another poke!")]},
 
-  {id:'egg', title:'The Floating Egg', grade:'2–3', blurb:'Can salt make an egg float?',
+  {id:'egg', after:['sinkfloat'], title:'The Floating Egg', grade:'2–3', blurb:'Can salt make an egg float?',
     setup:[['jar', 'jar', 0, -.02, {fill:{water:170}}], ['egg', 'egg', -.42, .22], ['salt', 'salt', .4, -.26], ['spoon', 'spoon', .45, .22]],
     rounds:[
       {q:"Will an egg sink or float in plain water?", ask:[S("Here's an egg and a jar of plain water, {name}. Will the egg sink or float?")],
@@ -93,7 +98,7 @@ export const EXPERIMENTS = [
         say:{float:"It floats! Salt makes the water heavier for its size, so it pushes up on the egg harder."}}],
     explain:[S("That's why it's easier to float in the salty ocean than in a swimming pool!")]},
 
-  {id:'dissolve', title:'Dissolve Detective', grade:'3', blurb:'What disappears in water?',
+  {id:'dissolve', after:['egg'], title:'Dissolve Detective', grade:'3', blurb:'What disappears in water?',
     setup:[['c1', 'cup', -.45, .02, {fill:{water:110}}], ['c2', 'cup', -.15, .02, {fill:{water:110}}], ['c3', 'cup', .15, .02, {fill:{water:110}}],
            ['sugar', 'sugar', -.62, -.34], ['sand', 'sand', -.35, -.36], ['oil', 'oil', -.12, -.36], ['spoon', 'spoon', .62, .0],
            ['gone', 'tray', -.4, .36, {label:'VANISHES?', color:0x2f8f8a}], ['stays', 'tray', -.04, .36, {label:'STAYS?', color:0xb5552f}]],
@@ -115,7 +120,7 @@ export const EXPERIMENTS = [
         oil:"The oil breaks into drops, then floats back to the top. Oil and water won't mix!"}}],
     explain:[S("When something dissolves, it spreads through the water so well you can't see it anymore. That's called a solution."), S("Sand and oil don't dissolve. They make a mixture, and you can still see every bit.")]},
 
-  {id:'balloon', title:'Balloon Blow-Up', grade:'3–4', blurb:'Blow up a balloon without blowing.',
+  {id:'balloon', after:['volcano'], title:'Balloon Blow-Up', grade:'3–4', blurb:'Blow up a balloon without blowing.',
     setup:[['bottle', 'bottle', 0, 0], ['balloon', 'balloon', -.4, .26], ['soda', 'soda', -.55, -.26], ['vinegar', 'vinegar', .46, -.22]],
     rounds:[{
       q:"What will happen to the balloon?", ask:[S("Vinegar goes in the bottle. Baking soda goes in the balloon. Then the balloon goes on the bottle, and we tip the soda in."), S("What will happen to the balloon?")],
@@ -127,7 +132,7 @@ export const EXPERIMENTS = [
       say:{inflate:"It blew itself up! The fizzing made carbon dioxide gas, and the gas needed somewhere to go."}}],
     explain:[S("Gas takes up space, even though you can't see it. Enough gas can fill a whole balloon!")]},
 
-  {id:'lava', title:'Lava Lamp', grade:'4', blurb:'Oil, water and a fizzy surprise.',
+  {id:'lava', after:['dissolve', 'volcano'], title:'Lava Lamp', grade:'4', blurb:'Oil, water and a fizzy surprise.',
     setup:[['jar', 'jar', 0, 0, {fill:{water:90}}], ['oil', 'oil', .42, -.3], ['blue', 'blue', -.46, .26], ['red', 'red', -.34, .34], ['t1', 'tablet', .42, .22], ['t2', 'tablet', .55, .3]],
     rounds:[
       {q:"Where will oil go when we pour it on water?", ask:[S("This jar has plain water in it, {name}. Where will the oil go when we pour it in?")],
@@ -144,7 +149,7 @@ export const EXPERIMENTS = [
         say:{blobs:"Far out! The tablet makes bubbles of gas. Each bubble grabs a blob of colored water and floats it up through the oil, then the blob sinks back down."}}],
     explain:[S("Oil floats, water sinks, and gas bubbles carry the water up for a ride. That's a lava lamp!")]},
 
-  {id:'cabbage', title:'Cabbage Color Detective', grade:'5', blurb:'A purple juice that changes color.',
+  {id:'cabbage', after:['volcano'], title:'Cabbage Color Detective', grade:'5', blurb:'A purple juice that changes color.',
     setup:[['k1', 'cup', -.4, .2, {fill:{cabbage:110}}], ['k2', 'cup', 0, .2, {fill:{cabbage:110}}], ['k3', 'cup', .4, .2, {fill:{cabbage:110}}],
            ['lemon', 'lemon', -.52, -.3], ['pitcher', 'pitcher', 0, -.32], ['soda', 'soda', .52, -.3]],
     rounds:[
@@ -163,15 +168,21 @@ export const EXPERIMENTS = [
     explain:[S("Acids like lemon juice and vinegar turn it pink. Bases like baking soda and soap turn it green."), S("Here's a challenge: add baking soda to your pink cup and watch what happens!")]}
 ];
 
-export const FREE = {id:'free', title:'Free Lab', grade:'Any', free:true,
-  setup:[
-    ['pitcher', 'pitcher', -.7, -.42], ['milk', 'milk', -.55, -.42], ['vinegar', 'vinegar', -.44, -.42], ['lemon', 'lemon', -.35, -.42], ['soap', 'soap', -.26, -.42],
-    ['oil', 'oil', -.18, -.42], ['cabbage', 'cabbage', -.07, -.42], ['soda', 'soda', .07, -.42], ['sugar', 'sugar', .21, -.42], ['sand', 'sand', .33, -.42],
-    ['salt', 'salt', .42, -.42], ['pepper', 'pepper', .49, -.42], ['red', 'red', .57, -.42], ['yellow', 'yellow', .63, -.42], ['blue', 'blue', .69, -.42],
-    ['c1', 'cup', -.62, -.14], ['c2', 'cup', -.47, -.14], ['jar', 'jar', -.32, -.14], ['dish', 'dish', -.1, -.12], ['bottle', 'bottle', .14, -.14],
-    ['balloon', 'balloon', .27, -.14], ['saucer', 'saucer', .42, -.14], ['c3', 'cup', .58, -.14],
-    ['tub', 'tub', -.56, .32, {fill:{water:950}}], ['egg', 'egg', -.27, .2], ['t1', 'tablet', -.17, .3], ['t2', 'tablet', -.1, .4], ['coin', 'coin', -.27, .42],
-    ['cork', 'cork', 0, .24], ['rock', 'rock', .06, .42], ['spoon', 'spoon', .14, .24], ['swab', 'swab', .21, .38], ['magnet', 'magnet', .3, .22],
-    ['paperclip', 'paperclip', .33, .44], ['volcano', 'volcano', .6, .3]],
-  intro:[S("The whole lab is yours, {name}! Mix anything with anything."),
-         S("A real scientist asks, 'What happens if...?' Make a guess, then try it! Press Clean up whenever you want a fresh desk.")]};
+export const opened = (e, done) => done.has(e.id) || e.after.every(id => done.has(id));
+
+// Trays only show a guess, so they stay behind. What was poured in for the explorer counts too: a jar
+// that came full of water stocks the water pitcher.
+const SUPPLY_OF = {};
+for (const k in ITEMS) if (ITEMS[k].supply) for (const sub in ITEMS[k].fill) SUPPLY_OF[sub] = k;
+export function stocked(done){
+  const got = new Set();
+  for (const e of EXPERIMENTS) if (done.has(e.id)) for (const [, type, , , o] of e.setup) {
+    if (type !== 'tray') got.add(type);
+    for (const sub in (o && o.fill) || {}) if (SUPPLY_OF[sub]) got.add(SUPPLY_OF[sub]);
+  }
+  return got;
+}
+
+export const FREE = {id:'free', title:'Free Lab', grade:'Any', free:true, setup:[],
+  intro:[S("The lab is yours, {name}! Everything from my experiments that you've finished is in the cabinet behind the mat."),
+         S("Tap a shelf to open it, then pick what you want. A real scientist asks, 'What happens if...?' Make a guess, then try it!")]};
