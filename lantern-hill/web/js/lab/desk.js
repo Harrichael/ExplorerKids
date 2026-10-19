@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { clamp01, grad } from '../core/kit.js';
 import { Sound } from '../core/sound.js';
 import * as chem from './chem.js';
-import { makeFluid } from './fluid.js';
+import { makeFluid, spread } from './fluid.js';
 import { makeFx } from './fx.js';
 import { P, STEP, THING, ghost, makeBody, makeWorld, retire, rot, toLocal, toWorld, upOf } from './physics.js';
 import { ITEMS, UNITS_PER_M3, capacity } from './stuff.js';
@@ -55,7 +55,7 @@ function catches(x, y, z, d){
 // something has arrived in a container at (x, z)
 function deliver(v, out, x, z, settled){
   const f = desk.fx, l = toLocal(v.body, x, v.body.translation().y, z, _l), u = l.x/v.def.ri, w = l.z/v.def.ri, wet = chem.liquidVol(v.c) > 2;
-  out = {l:Object.assign({}, out.l), p:Object.assign({}, out.p)};
+  out = {l:Object.assign({}, out.l), p:Object.assign({}, out.p)}; v.hit = {x:l.x, z:l.z};
   if (out.p.pepper && wet) { f.film(v).pepper(u, w, Math.ceil(out.p.pepper*14)); delete out.p.pepper; }
   for (const k of ['red', 'yellow', 'blue']) {
     if (!out.l[k]) continue;
@@ -68,9 +68,10 @@ function deliver(v, out, x, z, settled){
   if (!chem.liquidVol(v.c)) f.dropFilm(v);
 }
 
-// Pouring is forgiving: a stream from the hand bends into an open container whose mouth is near
-// where it's coming out, and that container's rim glows while the hand is over it. Out of reach,
-// it splashes wherever it lands.
+// The hand is forgiving: a stream bends into an open container whose mouth is near where it's coming
+// out, a small thing let go near a mouth drops in, and a balloon let go near a free bottle neck
+// stretches on. Whatever it will go into glows round its rim while the hand is there; out of reach,
+// things land wherever they fall.
 const AIM_REACH = .09;
 let ring = null;
 function aimTarget(v, p){
@@ -84,11 +85,29 @@ function aimTarget(v, p){
   }
   return best;
 }
-// where the held container would pour: judged from its low rim, or from the hand before it's tipped
-// far enough for the rim to be over anything
+// a free bottle neck near the balloon's mouth
+function neckFor(b){
+  const m = toWorld(b.body, 0, b.def.open.y, 0, {});
+  let best = null, bd = .08;
+  for (const v of vessels()) {
+    if (!v.def.neck || balloonOn(v) || uprightness(v) < .8) continue;
+    const o = toWorld(v.body, 0, v.def.open.y, 0, {}), d = Math.hypot(m.x - o.x, m.z - o.z);
+    if (d < bd && m.y > o.y - .04) { bd = d; best = {v, m:o, r:v.def.open.r}; }
+  }
+  return best;
+}
+// where the held thing would go: a container pours from its low rim (or, before it's tipped far
+// enough for the rim to be over anything, from the hand); a small thing drops from where it hangs
 function heldTarget(){
   const v = desk.held;
-  if (!v || !isVessel(v) || v.attached || chem.isEmpty(v.c)) return null;
+  if (!v || v.attached) return null;
+  if (v.def.balloon) return neckFor(v);
+  if (!isVessel(v)) {
+    if (v.def.tool || !(v.def.r < .045)) return null;
+    const t = aimTarget(v, v.body.translation());
+    return t && t.r > v.def.r + .004 ? t : null;
+  }
+  if (chem.isEmpty(v.c)) return null;
   const g = toWorld(v.body, 0, v.grip, 0, {}), r = lowRim(v).p;
   return aimTarget(v, r) || aimTarget(v, {x:g.x, y:Math.max(g.y, r.y), z:g.z});
 }
@@ -208,8 +227,16 @@ export function grab(it){
   Sound.tone(660 + Math.random()*80, {type:'triangle', dur:.06, vol:.05});
 }
 export function release(){
-  const it = desk.held; if (!it) return; desk.held = null;
+  const it = desk.held; if (!it) return;
+  const into = heldTarget(); desk.held = null;
   if (it.attached) { it.raised = false; return; }
+  if (into && it.def.balloon) { attach(it, into.v); return; }
+  if (into && !isVessel(it)) {
+    // over the mouth, it drops straight down the middle
+    const t = it.body.translation();
+    it.body.setTranslation({x:into.m.x, y:Math.max(t.y, into.m.y + it.def.h + .01), z:into.m.z}, true);
+    it.body.setLinvel({x:0, y:0, z:0}, true); it.body.setAngvel({x:0, y:0, z:0}, true);
+  }
   it.body.setGravityScale(1, true);
   if (it.def.tool === 'spoon' || it.def.tool === 'swab') { it.resting = vessels().find(v => insideOf(v, it)) || null; ghost(it.body, it.resting ? 'resting' : false); }
   const v = it.body.linvel(), s = Math.hypot(v.x, v.y, v.z);
@@ -489,7 +516,8 @@ function fizzSound(gas, rate){
   if ((fizzT -= .016) > 0) return; fizzT = .05; Sound.hiss({dur:.05 + Math.random()*.06, vol:Math.min(.09, .015 + gas*.2), type:'highpass', freq:4000 + Math.random()*3000});
 }
 function chemStep(v, dt){
-  const gas = chem.step(v.c, dt, v.stir); v.stir = Math.max(0, v.stir - dt*3);
+  // liquid carries the fizz across a container much faster than it creeps through a dry pile
+  const gas = spread(v, v.c, dt, v.def.ri, chem.liquidVol(v.c) > 5 ? .08 : .03, v.stir); v.stir = Math.max(0, v.stir - dt*3);
   if (desk.endless && v.refill && v !== desk.held && uprightness(v) > .8) {
     // Free Lab supplies top themselves back up with what they started with, keeping anything mixed in
     let short = false;
@@ -515,12 +543,16 @@ function chemStep(v, dt){
     v.head = Math.min(.025, v.head + gas*.0012*(soapy ? 2 : 1));
     v.foam += gas*(soapy ? 4.5 : 1.6)*(v.type === 'volcano' ? 1.5 : 1);
     const fc = chem.lerpCol(0xffffff, lk ? lk.col : 0xffffff, soapy ? .55 : .3);
-    v.foam = desk.fluid.gush(v.foam, rate, fc, v.body.linvel(), up, () => { const a = Math.random()*7, r = Math.random()*o.r*.7; return toWorld(v.body, Math.cos(a)*r, o.y + .004, Math.sin(a)*r, _w); });
+    const squeeze = Math.min(3, Math.max(1, (v.def.ri/o.r)**2));
+    // a wide-open top foams where the fizz is; a narrow mouth is the only way out, wherever it is
+    const at = v.front && o.r > v.def.ri*.8 ? v.front : {x:0, z:0, r:o.r};
+    v.foam = desk.fluid.gush(v.foam, rate, fc, v.body.linvel(), up, () => { const a = Math.random()*7, r = Math.random()*Math.min(at.r, o.r)*.8;
+      return toWorld(v.body, at.x + Math.cos(a)*r, o.y + .004, at.z + Math.sin(a)*r, _w); }, squeeze);
     // a big rush of gas kicks the container about
     if (rate > 40 && v !== desk.held) { const k = Math.min(1, (rate - 40)/120)*.0006*dt*60; v.body.applyImpulse({x:(Math.random() - .5)*k, y:k*.6, z:(Math.random() - .5)*k}, true); }
   }
   if (chem.oilVol(v.c) > 5 && lk) { v.blobAcc = (v.blobAcc || 0) + gas*.9; while (v.blobAcc >= 1) { v.blobAcc -= 1; desk.fx.blob(v, lk.col); v.stats.blobs++; } }
-  if (Math.random() < Math.min(1, rate*.02)) for (let i = 0; i < Math.min(6, 1 + rate*.08); i++) desk.fx.bubble(v);
+  if (Math.random() < Math.min(1, rate*.02)) for (let i = 0; i < Math.min(6, 1 + rate*.08); i++) desk.fx.bubble(v, v.front);
 }
 
 // ---------- drawing ----------
@@ -559,6 +591,9 @@ export function updateDesk(dt){
       buoyancy(it);
       if (it.def.balloon) balloons(it);
       if (it.def.flow === 'shake') shaking(it);
+      // small things dropped from the hand would fall a container's floor-thickness in one step and
+      // pass straight through it (the engine's sweep misses thin, fast things), so they fall no faster
+      if (it !== H && !isVessel(it) && it.def.r < .035) { const lv = it.body.linvel(); if (lv.y < -1.1) it.body.setLinvel({x:lv.x, y:-1.1, z:lv.z}, true); }
     }
     for (const m of live()) if (m.def.tool === 'magnet') magnetism(m);
     while (leaving.length) retire(leaving.pop());

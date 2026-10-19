@@ -114,6 +114,13 @@ const STORIES = [
     const lo = Math.min(...ys), hi = Math.max(...ys);
     return hi - lo < .01 ? '' : 'it rose and fell by ' + ((hi - lo)*100).toFixed(1) + ' cm';
   })()`],
+  ['a balloon let go a little off the bottle neck stretches onto it', `(async () => { const {open, choose, carry, until, D} = lab;
+    await open(6); await lab.listen();
+    if (!document.getElementById('lhChoose').hidden) await choose(0);
+    const b = lab.pos('bottle');
+    await carry('balloon', {x:b.x + .055, y:0, z:b.z + .035});
+    return await until(() => D.find('balloon').attached, 3000) ? '' : 'the balloon fell off beside the bottle';
+  })()`],
   ['a magnet picks up a paperclip and not a coin', `(async () => { const {open, carry, until, D, sleep} = lab;
     await open(1);
     const linger = () => sleep(1200);

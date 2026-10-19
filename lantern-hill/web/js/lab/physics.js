@@ -49,10 +49,16 @@ function parts(shape, density){
     else if (k === 'box') { const [w, h, dd, y0, x = 0] = a; d(R.ColliderDesc.cuboid(w/2, h/2, dd/2), x, y0 + h/2, 0); }
     else if (k === 'ball') { const [r, y] = a; d(R.ColliderDesc.ball(r), 0, y, 0); }
     else if (k === 'bar') { const [len, th, axis, y] = a; d(R.ColliderDesc.capsule(len/2 - th/2, th/2), 0, axis === 'y' ? len/2 : y, 0, axis === 'y' ? null : zRot(Math.PI/2)); }
-    else if (k === 'cone') {
-      const [rt, rb, h] = a, pts = [];
-      for (let i = 0; i < 16; i++) { const t = i/16*Math.PI*2; pts.push(Math.cos(t)*rb, 0, Math.sin(t)*rb, Math.cos(t)*rt, h, Math.sin(t)*rt); }
-      out.push(R.ColliderDesc.convexHull(new Float32Array(pts)).setDensity(density).setFriction(.7).setRestitution(.05));
+    else if (k === 'crater') {
+      // a cone with a chamber down its middle: wedges round a wide hole below the neck and a narrow
+      // one above it, each wedge convex, on a solid floor
+      const [rt, rb, h, ri, neckY, rNeck, floor] = a, n = 14, rAt = y => rb + (rt - rb)*y/h;
+      d(R.ColliderDesc.cylinder(floor/2, ri + .01), 0, floor/2, 0);
+      for (const [y0, y1, hole] of [[0, neckY, ri], [neckY, h, rNeck]]) for (let i = 0; i < n; i++) {
+        const pts = [];
+        for (const t of [i/n*Math.PI*2, (i + 1.08)/n*Math.PI*2]) for (const [y, r] of [[y0, hole], [y1, hole], [y0, rAt(y0)], [y1, rAt(y1)]]) pts.push(Math.cos(t)*r, y, Math.sin(t)*r);
+        out.push(R.ColliderDesc.convexHull(new Float32Array(pts)).setDensity(density).setFriction(.7).setRestitution(.05));
+      }
     }
   }
   return out;
