@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { siderealTime } from './astro.js';
 import { RINGS, aroundJupiter, axes, equatorial, sight, surface } from './bodies.js';
+import { cells, streamed } from './detail.js';
 
 export const canvas = document.createElement('canvas');
 const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true, preserveDrawingBuffer:true});
@@ -32,6 +33,7 @@ const texture = (file, done = arrived) => loader.load(`sky/maps/${file}`, t => {
 function ball(b){
   const globe = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 64), new THREE.MeshLambertMaterial({map:texture(`${b.map}-small.jpg`)}));
   globe.material.map.encoding = THREE.sRGBEncoding;
+  if (b.lenses) globe.userData.ground = streamed(globe, b.lenses[0].hips, arrived);
   return globes[b.id] = globe;
 }
 function sharpen(b){
@@ -113,18 +115,40 @@ let shown = null;
 
 // ---------- the close-up ----------
 let body = null, aim = {x:0, y:0}, tilt = {x:0, y:0}, steered = 0, zoomTo = 1, zoomAt = 1, labelled = [], last = '';
-export function show(b){ body = b; aim = {x:0, y:0}; tilt = {x:0, y:0}; zoomTo = zoomAt = 1; last = ''; world(b); sharpen(b); }
+export function show(b){ body = b; aim = {x:0, y:0}; tilt = {x:0, y:0}; zoomTo = zoomAt = 1; last = ''; world(b); sharpen(b); lens(0); }
 export function refresh(){ last = ''; }
+
+// ---------- lenses ----------
+let lensAt = 0, glow = null, closeups = null;
+export const lenses = b => b.lenses || [];
+const lensNow = () => lenses(body)[lensAt];
+const hipsNow = () => lensNow()?.hips || lenses(body)[0]?.hips;
+export function lens(i){
+  lensAt = i;
+  const l = lensNow(), globe = globes[body.id];
+  if (globe.userData.ground) globe.userData.ground.use(hipsNow());
+  if (glow) { glow.parent.remove(glow); glow = null; }
+  if (l?.glow) glowing(l, globe);
+  zoom(1); last = '';
+}
+async function glowing(l, globe){
+  try { closeups = closeups || await fetch('sky/maps/closeups.json').then(r => r.json()); } catch { return; }
+  if (lensNow() !== l || globes[body.id] !== globe || glow) return;
+  const mat = new THREE.MeshBasicMaterial({color:l.glow, transparent:true, opacity:.45, depthWrite:false});
+  glow = cells(closeups[body.id] || {}, mat); glow.userData.mat = mat;
+  for (const c of glow.children) c.renderOrder = 99;
+  globe.add(glow); maps++;
+}
 // The Moon rocks a little as it goes round, nodding and turning about 7° each way, so over a month
 // Earth sees 59% of it rather than half. A drag rocks it that far and lets go; the planets hold still.
 const ROCK = 7*Math.PI/180;
 // a drag moves the view across the face as far as the finger goes, and no further off than there is
 // something to see
 export function pan(dx, dy){
-  const k = 2*dist()*Math.tan(15*Math.PI/180)/(canvas.clientHeight || 1);
+  const k = 2*(dist() - ground())*Math.tan(15*Math.PI/180)/(canvas.clientHeight || 1);
   aim.x -= dx*k; aim.y += dy*k;
-  const off = Math.hypot(aim.x, aim.y), most = system();
-  if (off > most) { aim.x *= most/off; aim.y *= most/off; }
+  const far = Math.hypot(aim.x, aim.y), most = system();
+  if (far > most) { aim.x *= most/far; aim.y *= most/far; }
   if (body.id === 'moon') {
     tilt.x -= dx*ROCK*2/(canvas.clientHeight || 1); tilt.y += dy*ROCK*2/(canvas.clientHeight || 1);
     const t = Math.hypot(tilt.x, tilt.y); if (t > ROCK) { tilt.x *= ROCK/t; tilt.y *= ROCK/t; }
@@ -138,8 +162,13 @@ const system = () => body.moons ? 28 : reach();
 // how far the camera sits to fit the body (rings and all) in the view, times the zoom
 const fit = () => reach()/Math.tan(Math.min(15, Math.atan(Math.tan(15*Math.PI/180)*camera.aspect)/Math.PI*180)*Math.PI/180);
 const dist = () => fit()*zoomAt;
-// no closer than a fifth of the body's radius above it, where even the sharpest map runs out of detail
-const nearest = () => 1.2/fit();
+// No closer than a fifth of the body's radius above the ground in the middle of the view, where the
+// shipped map runs out of detail; a world with sharper ground streamed in lets you down until its
+// finest pixels are two screen pixels
+const HALF = 15*Math.PI/180;
+const perPixel = () => 2*HALF/((canvas.clientHeight || 600)*Math.min(devicePixelRatio, 2));
+const ground = () => { const off = Math.hypot(aim.x, aim.y); return off < 1 ? Math.sqrt(1 - off*off) : 0; };
+const nearest = () => { const h = hipsNow(); return (ground() + Math.min(.2, h ? 1.0233/(512 << h.order)/(2*perPixel()) : .2))/fit(); };
 
 // Draws only when something shows a change: a drag, a zoom, a map arriving, or the Moon rocking
 // back. Says whether it drew.
@@ -149,6 +178,8 @@ export function draw(ms, where, w, h, dt){
   if (canvas.width !== Math.round(w*dpr) || canvas.height !== Math.round(h*dpr)) { renderer.setPixelRatio(dpr); renderer.setSize(w, h, false); last = ''; }
   camera.aspect = w/h;
   zoomAt *= Math.pow(zoomTo/zoomAt, Math.min(1, dt*8));
+  // panned in toward the middle, the ground rises to meet the view; it backs off rather than sink in
+  const lo = nearest(); zoomTo = Math.max(zoomTo, lo); zoomAt = Math.max(zoomAt, lo);
   if (performance.now() - steered > 150) { const k = Math.exp(-dt*4); tilt.x *= k; tilt.y *= k; }
   const at = place(body, ms, where);
   const key = [aim.x, aim.y, tilt.x, tilt.y, zoomAt].map(v => v.toFixed(5)).concat([w, h, Math.floor(ms/2000), maps]).join();
@@ -158,7 +189,11 @@ export function draw(ms, where, w, h, dt){
   const right = new THREE.Vector3().crossVectors(at.up, at.toUs), centre = right.clone().multiplyScalar(aim.x).addScaledVector(at.up, aim.y);
   const dir = at.toUs.clone().addScaledVector(right, Math.sin(tilt.x)).addScaledVector(at.up, Math.sin(tilt.y)).normalize();
   camera.position.copy(centre).addScaledVector(dir, dist()); camera.up.copy(at.up); camera.lookAt(centre);
-  camera.near = Math.max(.002, dist() - system() - .01); camera.far = dist() + system() + 1; camera.updateProjectionMatrix();
+  // nothing is nearer than the ground, and zoomed right in that is a few kilometres away
+  camera.near = Math.max(1e-5, (camera.position.length() - 1)*.5); camera.far = dist() + system() + 1; camera.updateProjectionMatrix();
+  camera.updateMatrixWorld(); globes[body.id].userData.ground?.update(camera, perPixel());
+  // the glow goes out as the close-up it marks fills the screen
+  if (glow) { glow.visible = true; glow.userData.mat.opacity = .45*Math.min(1, Math.max(0, (dist() - 1.25)/.5)); }
   renderer.render(scene, camera);
   return true;
 }
@@ -221,6 +256,8 @@ export function portrait(b, ms, where, r){
   const span = b.rings ? RINGS.outer/b.km*1.02 : 1.02, size = Math.min(2048, Math.ceil(px*span)*2 + 2);
   renderer.setPixelRatio(1); renderer.setSize(size, size, false);
   const at = place(b, ms, where), e = size/2/px, moons = shown.userData.moons;
+  // drawn small, a world wears only its own map
+  globes[b.id]?.userData.ground?.hide(); if (glow) glow.visible = false;
   Object.assign(flat, {left:-e, right:e, top:e, bottom:-e}); flat.updateProjectionMatrix();
   flat.position.copy(at.toUs).multiplyScalar(span + 5); flat.up.copy(at.up); flat.lookAt(0, 0, 0);
   // the star view draws the moons itself, where they are beside Jupiter
