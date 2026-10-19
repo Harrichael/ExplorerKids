@@ -1,48 +1,37 @@
-// Runs a field trip: the Wonder Bus flies off from HQ, visits each stop in turn and brings everyone
-// home for a badge. What a trip shows and says lives in its definition (see tectonics/index.js).
+// Runs a field trip: the Wonder Bus flies off from HQ, the trip's own script plays out, and the bus
+// brings everyone home for a badge. A trip is one continuous story: rides that the explorer watches
+// from their seat, and places where they get off and explore. Its script (see tectonics/index.js)
+// is an async function handed the director below, so the storyboard reads top to bottom:
+//
+//   setup: t => ({cab: cabin()}),             // what the chapters share
+//   chapters: [['Over the sea', async (t, {cab}) => {
+//     t.watch(cab.world, cab.shot('class'));
+//     await t.say([['sparks', "Hold on to your hats!"]]);
+//     const i = await t.ask('pip', "What will happen?", ["It rises", "It sinks"]);
+//     t.play(place.world, place.spawn);        // the explorer has control
+//     await t.until(() => place.cleared);
+//   }], ...]
 
 import * as THREE from 'three';
-import { clamp01, ease, glowTex, occluder, sparkTex } from '../core/kit.js';
+import { clamp01, ease, glowTex, sparkTex } from '../core/kit.js';
 import { Sound } from '../core/sound.js';
-import { addUsable, inWorld } from '../core/world.js';
+import { addUsable } from '../core/world.js';
 import { cfg } from '../explorer.js';
 import { driveVan, van, vanBody } from '../hq/garden.js';
 import { HQ } from '../hq/index.js';
 import { enterWorld } from '../play.js';
 import { blob, hero, player } from '../player.js';
-import { buildBus } from '../props/wonder-bus.js';
 import { load, save } from '../save.js';
 import { game } from '../state.js';
-import { endConvo, story } from '../ui/dialogue.js';
+import { ask, endConvo, story } from '../ui/dialogue.js';
 import { $ } from '../ui/dom.js';
 import { pageTurn } from '../ui/page-turn.js';
 
 const objEl = $('obj'), leaveBtn = $('leaveTrip');
 export function objective(text){ objEl.hidden = !text; objEl.textContent = text || ''; }
 
-function makeWagon(){
-  const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
-  const pads = buildBus(body);
-  return {root, body, pads};
-}
-export function wagonDock(w, x, y, z, ry, ux, uz){
-  const wg = makeWagon(); wg.root.position.set(x, y, z); wg.root.rotation.y = ry; wg.baseY = y; w.scene.add(wg.root); w.wagon = wg;
-  wg.update = () => wagonUpdate(w);
-  inWorld(w, () => occluder(wg.root));
-  addUsable(w, {name:'Wonder Bus', x:ux, z:uz, range:1.8, verb:'Climb into the Wonder Bus', short:'Ride', glow:[x, y + 2.7, z], action: () => boardWagon(w)});
-}
-function wagonUpdate(w){
-  const wg = w.wagon; if (!wg) return;
-  if (w.lift) {
-    const p = clamp01((game.elapsed - w.lift.t0)/2.4);
-    wg.root.position.y = wg.baseY + Math.pow(p, 1.7)*18; wg.body.rotation.z = Math.min(.4, p*1.3); wg.body.position.y = 0;
-  } else if (w.arriveT !== undefined && game.elapsed - w.arriveT < 2) {
-    const p = ease(clamp01((game.elapsed - w.arriveT)/2)); wg.root.position.y = wg.baseY + (1 - p)*10; wg.body.rotation.z = -(1 - p)*.3;
-  } else { wg.root.position.y = wg.baseY; wg.body.rotation.z = 0; wg.body.position.y = Math.sin(game.elapsed*1.7)*.1; }
-}
-
 // ---------- the field trip ----------
-const TRIP = {on:false, stage:0};
+const TRIP = {on:false};
 let trip = null, vanAnim = null;
 const VAN_HOME = {x:15.6, z:5.5, ry:-.3, dx:Math.cos(.3), dz:Math.sin(.3)};
 // takeoff: a hop, then a climbing left turn over the lily pond and off toward the moon, wide
@@ -113,13 +102,15 @@ function updateVanAnim(){
   }
   stepDust(dt);
 }
-export function startTrip(t){
+// Starting at a later chapter skips the takeoff, for trying out one part of a trip on its own.
+export function startTrip(t, from = 0){
   if (TRIP.on || game.cutscene) return;
-  trip = t; TRIP.on = true; TRIP.stage = 0;
+  trip = t; TRIP.on = true;
+  if (from) { Sound.setTheme('trip'); run(from); return; }
   story(trip.intro, () => {
     game.cutscene = true; hero.root.visible = false; blob.visible = false; Sound.setTheme('trip');
     [523, 659, 784].forEach((f, i) => Sound.tone(f, {type:'triangle', t:i*.08, dur:.2, vol:.07}));
-    const a = {mode:'fly', t0:game.elapsed, dur:6.2, p:0, done: () => goStage(0)};
+    const a = {mode:'fly', t0:game.elapsed, dur:6.2, p:0, done: () => { flyVan(null); van.visible = false; run(); }};
     // from down by the wheels, craning up out of the garden to watch it go; never past the
     // garden's edge, where the forest starts
     game.cutCam = (pos, look) => {
@@ -130,26 +121,69 @@ export function startTrip(t){
     flyVan(a);
   });
 }
-function goStage(i){
-  TRIP.stage = i; const stage = trip.stages[i];
-  pageTurn(() => {
-    flyVan(null);
-    van.visible = false;
-    const w = stage.build(); enterWorld(w, w.spawn); w.arriveT = game.elapsed;
-    hero.root.visible = true; blob.visible = true; leaveBtn.hidden = false; objective('');
-  }, () => { if (game.world.onEnter) game.world.onEnter(); }, [`Chapter ${i + 1}`, stage.title]);
+
+// ---------- the director: what a trip's script awaits ----------
+// Leaving the trip strands the script mid-await; everything it awaits checks for that and stops it.
+const GONE = Symbol('left the trip');
+let dir = null;
+function run(from = 0){
+  const me = dir = makeDirector(), shared = trip.setup(me);
+  (async () => { for (const [, play] of trip.chapters.slice(from)) await play(me, shared); })()
+    .then(() => { if (dir === me) returnHome(); }, e => { if (e !== GONE) throw e; });
 }
-function boardWagon(w){
-  if (!w.cleared) { story([['sparks', w.notYet]]); return; }
-  game.cutscene = true; hero.root.visible = false; blob.visible = false; objective('');
-  [523, 659, 784].forEach((f, i) => Sound.tone(f, {type:'triangle', t:i*.08, dur:.2, vol:.07}));
-  Sound.hiss({dur:2.2, vol:.1, type:'bandpass', freq:900, q:.6}); Sound.tone(200, {type:'sawtooth', dur:2.2, vol:.04, f2:560, cut:900});
-  w.lift = {t0: game.elapsed + .3};
-  const wp = new THREE.Vector3(), sx = player.x, sz = player.z;
-  game.cutCam = (pos, look) => { w.wagon.root.getWorldPosition(wp); pos.set(sx, 4.4 + Math.max(0, wp.y - 1)*.35, sz + 8); look.set(wp.x, wp.y + 1, wp.z); };
-  setTimeout(() => { if (TRIP.stage < trip.stages.length - 1) goStage(TRIP.stage + 1); else returnHome(); }, 2300);
+function makeDirector(){
+  let held = null;
+  const d = {gone:false, ends:[() => { if (held) held.parent.remove(held); held = null; }]};
+  const live = p => p.then(v => { if (d.gone) throw GONE; return v; });
+  const frames = test => live(new Promise(ok => { const f = () => d.gone || test() ? ok() : requestAnimationFrame(f); f(); }));
+  Object.assign(d, {
+    // the explorer is watching: from their seat on the bus, or hidden inside it while the camera shows the bus.
+    // A cam that returns true is followed exactly, for shots that ride along with something fast.
+    watch(w, cam, {seated = false, spawn} = {}){
+      if (game.world !== w) enterWorld(w, spawn || w.spawn || [0, 0, 0]);
+      game.cutscene = true; game.cutCam = cam; game.camSnap = true;
+      hero.root.visible = seated; blob.visible = false; leaveBtn.hidden = true; objective('');
+    },
+    // a new camera on the same scene, cut to without a glide
+    cut(cam){ game.cutCam = cam; game.camSnap = true; },
+    play(w, spawn){
+      if (game.world !== w) enterWorld(w, spawn || w.spawn);
+      else if (spawn) { player.x = spawn[0]; player.z = spawn[1]; player.angle = spawn[2] ?? player.angle; }
+      game.cutscene = false; game.cutCam = null; hero.root.visible = true; blob.visible = true; leaveBtn.hidden = false;
+    },
+    say: lines => live(new Promise(ok => story(lines, ok))),
+    // a question with answers to pick from; resolves with the index of the one picked
+    // shown in a shuffled order, so the right answer isn't always first; resolves with its index as given
+    ask: (who, text, answers) => { const order = answers.map((a, i) => i).sort(() => Math.random() - .5);
+      return live(new Promise(ok => ask(who, text, order.map(i => answers[i]), j => ok(order[j])))); },
+    wait: s => { const end = game.elapsed + s; return frames(() => game.elapsed >= end); },
+    // f(k) every frame as k runs from 0 to 1 over s seconds of game time
+    tween: (s, f) => { const t0 = game.elapsed; return frames(() => { const k = Math.min(1, (game.elapsed - t0)/s); f(k); return k >= 1; }); },
+    until: test => frames(test),
+    // in the middle of a scene, the explorer has control again, with `goal` to do, until p settles;
+    // resolves with its value
+    free: async (p, goal) => { const was = objEl.hidden ? '' : objEl.textContent;
+      game.cutscene = false; game.cutCam = null; if (goal) objective(goal);
+      try { return await p; } finally { if (!d.gone) { game.cutscene = true; objective(was); } } },
+    // things in a place to press, each glowing where it is; resolves with the index of the one pressed,
+    // once they're all taken away again
+    use: (w, ...spots) => { let hit = -1;
+      const us = spots.map((s, i) => addUsable(w, {name:s.verb, range:1.7, ...s, action: () => { hit = i; }}));
+      return frames(() => hit >= 0).finally(() => us.forEach(u => { w.usables.splice(w.usables.indexOf(u), 1); w.scene.remove(u.sparkle);
+        // still in range, it would keep its key and its prompt
+        const k = game.reach.indexOf(u); if (k >= 0) game.reach[k] = null; })).then(() => hit); },
+    // something small carried in the explorer's right hand; let go, it stays where it was in the world
+    hold(m){ d.drop(); held = m; hero.armR.add(m); m.position.set(0, -.64, .12); m.visible = true; },
+    drop(){ const m = held; held = null; if (m) game.world.scene.attach(m); return m; },
+    goal: objective,
+    // undoes something a place did outside its own world, however the trip ends
+    onEnd: f => { d.ends.push(f); },
+  });
+  return d;
 }
+const endTrip = d => { if (d) d.ends.splice(0).forEach(f => f()); };
 function returnHome(){
+  endTrip(dir); dir = null;
   pageTurn(() => {
     Sound.setTheme('home'); enterWorld(HQ, [17.4, 2.4, -2.5]); hero.root.visible = false; blob.visible = false; leaveBtn.hidden = true; objective('');
     van.visible = true; game.cutscene = true;
@@ -162,7 +196,8 @@ function returnHome(){
 }
 function leaveTrip(){
   if (!TRIP.on || game.cutscene) return;
-  endConvo(false); TRIP.on = false;
+  if (dir) { dir.gone = true; endTrip(dir); }
+  dir = null; endConvo(false); TRIP.on = false;
   pageTurn(() => { Sound.setTheme('home'); resetVan(); enterWorld(HQ, [16.2, 2.4, Math.PI]); hero.root.visible = true; blob.visible = true; leaveBtn.hidden = true; objective(''); }, null, ['', 'Back to Lantern Hill']);
 }
 leaveBtn.addEventListener('click', e => { e.stopPropagation(); leaveTrip(); });

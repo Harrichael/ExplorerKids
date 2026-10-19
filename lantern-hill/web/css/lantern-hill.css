@@ -216,3 +216,55 @@ button.snd:focus-visible,button.word:focus-visible{outline:3px solid #6d3b5e;out
 #turnNote .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 @keyframes ink{0%,100%{transform:scale(.55);opacity:.35}45%{transform:scale(1);opacity:.9}}
 @media (prefers-reduced-motion: reduce){#updateToast{animation:none}#turnNote i{animation:none;opacity:.7}}
+/* Field trips: an arrow at the screen's edge toward a classmate calling the explorer over */
+#callArrow{position:fixed;transform:translate(-50%,-50%);z-index:3;pointer-events:none;font-family:var(--display);font-size:15px;color:var(--ink);background:var(--gold);border:3px solid var(--ink);border-radius:14px;padding:3px 10px 3px 24px;white-space:nowrap}
+#callArrow::before{content:'';position:absolute;left:6px;top:50%;width:0;height:0;border:7px solid transparent;border-left:11px solid var(--ink);transform:translate(0,-50%) rotate(var(--a));transform-origin:30% 50%}
+/* a usable that needs doing right now (drop, cover, hold on!) is big and in the middle of the screen */
+.use.big{left:16px;right:16px;bottom:auto;top:calc(max(120px, 26%) + env(safe-area-inset-top,0px));margin:0 auto;width:fit-content;max-width:calc(100% - 32px);height:auto;border-radius:24px;padding:18px 28px;font-size:26px;line-height:1.15;z-index:6;animation:popin .25s ease-out,bigpulse 1.2s ease-in-out .25s infinite}
+@keyframes bigpulse{50%{box-shadow:0 0 0 3px var(--ink),0 0 34px rgba(255,211,107,.9)}}
+#prompt.big{bottom:auto;top:calc(max(120px, 26%) + env(safe-area-inset-top,0px));font-size:28px;line-height:1.3;padding:14px 28px;white-space:normal;max-width:calc(100% - 32px);box-sizing:border-box}
+/* Theo's worry list, each worry crossed off as a place shows it can't happen */
+#worries{position:fixed;top:calc(84px + env(safe-area-inset-top,0px));left:16px;right:16px;margin:0 auto;width:fit-content;max-width:min(360px,calc(100% - 32px));box-sizing:border-box;z-index:5;pointer-events:none;
+  background:#efe0bf;color:#1a1320;border:3px solid var(--gold);border-radius:14px;box-shadow:0 0 0 4px var(--ink),0 10px 26px rgba(0,0,0,.45);padding:8px 16px 10px;transform:rotate(-1.5deg);animation:popin .35s cubic-bezier(.3,1.4,.5,1);
+  background-image:repeating-linear-gradient(transparent 0 23px,rgba(52,64,107,.16) 23px 24px)}
+#worries b{display:block;font-family:var(--display);font-weight:400;font-size:17px;color:#6d3b5e;margin-bottom:2px}
+#worries ol{margin:0;padding-left:22px;font-weight:800;font-size:14.5px;line-height:24px}
+#worries li{position:relative;width:fit-content}
+#worries li::after{content:'';position:absolute;left:-2px;top:50%;height:3px;width:0;background:var(--rust);border-radius:2px}
+#worries li.done{opacity:.55}
+#worries li.done::after{width:calc(100% + 4px)}
+#worries li.now::after{animation:strike .6s .9s ease-out forwards}
+#worries li.brave{list-style:none;margin-left:-22px;color:#2f8f8a;opacity:0;animation:appear .4s 1.6s forwards}
+@keyframes strike{to{width:calc(100% + 4px)}}
+@keyframes appear{to{opacity:1}}
+@media (prefers-reduced-motion: reduce){#worries,.use.big{animation:none}#worries li.now::after{animation:none;width:calc(100% + 4px)}#worries li.brave{animation:none;opacity:1}}
+/* the talk box stays readable over the goggles and binoculars */
+#dialog{z-index:5}
+/* Time goggles: a brass rim round the view and a counter of the years rushing by */
+#goggles{position:fixed;inset:0;pointer-events:none;z-index:4}
+#goggles .ring{position:absolute;inset:0;background:radial-gradient(ellipse 62% 70% at 50% 48%,transparent 82%,rgba(217,164,65,.9) 84%,#6b4430 90%,rgba(26,19,32,.96) 93%)}
+#goggles .count{position:absolute;top:6%;left:50%;transform:translateX(-50%);background:rgba(26,19,32,.86);border:2.5px solid var(--gold);border-radius:16px;padding:6px 18px;color:var(--parch);font-weight:800;font-size:18px;text-align:center;box-shadow:0 0 0 3px var(--ink)}
+#goggles .count .lbl{display:block;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold)}
+#goggles .count b{font-family:var(--display);font-weight:400;font-size:26px;color:#ffd36b}
+/* Binoculars: two round views of something far away */
+#binoc{position:fixed;inset:0;pointer-events:none;z-index:4;background:rgba(26,19,32,.97);
+  -webkit-mask:radial-gradient(circle at 37% 50%,transparent 26vmin,#000 27vmin),radial-gradient(circle at 63% 50%,transparent 26vmin,#000 27vmin);-webkit-mask-composite:source-in;
+  mask:radial-gradient(circle at 37% 50%,transparent 26vmin,#000 27vmin),radial-gradient(circle at 63% 50%,transparent 26vmin,#000 27vmin);mask-composite:intersect}
+/* Juniper's notebook: stickers of each place, stuck in as the trip goes */
+#notebook{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(20,12,28,.72);padding:16px;z-index:7;animation:fadein .3s ease-out}
+#notebook .page{width:min(620px,100%);box-sizing:border-box;background:#efe0bf;color:#1a1320;border:3px solid var(--gold);border-radius:20px;box-shadow:0 0 0 5px var(--ink),0 24px 50px rgba(0,0,0,.55);padding:16px 18px;display:flex;flex-direction:column;align-items:center;gap:10px;background-image:repeating-linear-gradient(transparent 0 27px,rgba(52,64,107,.14) 27px 28px)}
+#notebook .ch{font-family:var(--display);font-size:22px;color:#6d3b5e}
+#notebook .slots{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;width:100%}
+#notebook .slot{background:#fff8e8;border:2.5px solid #1a1320;border-radius:12px;padding:6px;transform:rotate(-1deg);display:flex;flex-direction:column;align-items:center}
+#notebook .slot:nth-child(2n){transform:rotate(1.2deg)}
+#notebook .slot canvas{width:100%;height:auto;border-radius:8px}
+#notebook .slot.empty{opacity:.35;border-style:dashed}
+#notebook .slot.new{animation:popin .6s .25s cubic-bezier(.3,1.4,.5,1) both}
+#notebook .cap{font-weight:800;font-size:13.5px;line-height:1.35;text-align:center;padding:4px 2px 2px}
+#notebook .cap b{display:block;font-family:var(--display);font-weight:400;font-size:16px}
+@media (max-width:520px){#notebook .slots{grid-template-columns:1fr 1fr;gap:8px}#notebook .cap{font-size:12px}}
+@media (prefers-reduced-motion: reduce){#notebook,#notebook .slot.new{animation:none}}
+#notebook .wbtn{flex:none;padding:8px 26px}
+/* a phone on its side: the four stickers in one row, so the button stays on screen */
+@media (max-height:520px){#notebook{padding:8px}#notebook .page{width:min(860px,100%);padding:10px 14px;gap:6px}#notebook .ch{font-size:18px}
+  #notebook .slots{grid-template-columns:repeat(4,1fr);gap:8px}#notebook .cap{font-size:11.5px}#notebook .cap b{font-size:14px}}

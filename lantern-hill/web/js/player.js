@@ -18,7 +18,7 @@ export function buildHero(){
 export const blob = new THREE.Mesh(new THREE.CircleGeometry(.42,20), new THREE.MeshBasicMaterial({color:0x120c18, transparent:true, opacity:.28, depthWrite:false}));
 blob.position.set(0, .05, 0); blob.rotation.x = -Math.PI/2; blob.receiveShadow = true;
 
-export const player = {x:0, y:0, z:2.6, vy:0, angle:Math.PI, walk:0, lastStepSign:0};
+export const player = {x:0, y:0, z:2.6, vy:0, angle:Math.PI, walk:0, lastStepSign:0, pose:null};
 const R = .36, H = 1.5;
 
 export function blocked(x, z, y){

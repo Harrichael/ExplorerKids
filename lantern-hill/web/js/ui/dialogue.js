@@ -68,6 +68,8 @@ export function endConvo(sound){
 }
 export function closeDialog(){ if (convo && !convo.then) endConvo(true); }
 export function story(lines, then){ startConvo(lines.map(([id, text]) => ({p: PERSONA[id], text})), then, null); }
+// one line that ends in a question; pick(i) runs with the index of the answer chosen
+export function ask(id, text, answers, pick){ startConvo([{p: PERSONA[id], text, choices: answers.map((label, i) => ({label, then: () => pick(i)}))}], null, null); }
 // the explorer's inner voice; extra fields on each line (like what to look at) ride along on curItem
 const THINK_VOICE = {type:'sine', base:523, scale:[0,4,7,12], len:.12, vol:.05, glide:1.03};
 export function think(lines, then){
@@ -79,7 +81,10 @@ export function talk(){
   if (convo) { if (!typing.done) { finishLine(); return; } if (asking()) { choose(lit); return; } Sound.next(); nextItem(); return; }
   if (!game.nearest || game.cutscene) return;
   // someone with more to say than their usual lines (an offer, say) brings their own talk
-  const n = game.nearest; startConvo((n.converse && n.converse()) || n.lines.map(text => ({p: n.persona, text})), null, n);
+  const n = game.nearest;
+  // someone whose talk is a whole scene, with things happening between the lines, runs it instead
+  if (n.onTalk) { n.onTalk(); return; }
+  startConvo((n.converse && n.converse()) || n.lines.map(text => ({p: n.persona, text})), null, n);
 }
 dlg.addEventListener('click', talk);
 export function updateTyping(dt){
