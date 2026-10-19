@@ -4,15 +4,16 @@ import { PERSONA } from '../characters/cast.js';
 import { C, T, add, col, cyl, grp, outlineMat, rand, rr } from '../core/kit.js';
 import { pembrookTalk } from '../library/nook.js';
 import { pipTalk } from '../travel/index.js';
-import { PLAT } from './garden.js';
+import { PLAT, TREEHOUSE } from './garden.js';
 import { scene } from './scene.js';
 
 export const npcs = [];
-function addNPC(p, x, y, z, ry, lines, extra){
+// `on` is what they stand on, if it can move (the treehouse deck); its frame is the yard's at rest
+function addNPC(p, x, y, z, ry, lines, extra, on = scene){
   const model = p.make();
-  model.root.position.set(x, y, z); model.root.rotation.y = ry; scene.add(model.root);
+  model.root.position.set(x, y, z); model.root.rotation.y = ry; on.add(model.root);
   model.root.traverse(m => { if (m.isMesh && m.material !== outlineMat) m.castShadow = true; });
-  const label = makeLabel(p.name, p.dot); label.position.set(x, y + p.labelY, z); scene.add(label);
+  const label = makeLabel(p.name, p.dot); label.position.set(x, y + p.labelY, z); on.add(label);
   const n = Object.assign({model, x, y, z, gy:y, baseAngle:ry, label, labelY:p.labelY, line:0, t:rand()*10, range:2.4, blinkAt:rr(1,4)},
     {pid:p.id, name:p.name, role:p.role, dot:p.dot, kind:p.kind, voice:p.voice, persona:p, lines}, extra);
   npcs.push(n);
@@ -58,10 +59,10 @@ addNPC(PERSONA.pip, 19.5, PLAT, -4.4, Math.PI*.25, [
   "Hey {name}, you made it up the ramp! Welcome to the treehouse. Juniper and I built the railing ourselves. Mostly.",
   "From up here you can see the whole garden. I count fireflies every night. My record is forty-six!",
   "Inside the hut there's a map of every place we want to explore: volcanoes, coral reefs, even the Moon. Want to help us fill it in?"
-], {converse:pipTalk});
+], {converse:pipTalk}, TREEHOUSE.deck);
 
 addNPC(PERSONA.juniper, 23.2, PLAT, -1.3, -Math.PI*.6, [
   "Hi! I'm Juniper. I always wear my raincoat, because you never know what an adventure will bring.",
   "I write down everything in this notebook. Today: one owl, one sleepy cat, and one new explorer named {name}. That's you!",
   "Every time we finish an adventure, we hang a new lantern on the railing. Four so far. The next one might be ours together."
-]);
+], undefined, TREEHOUSE.deck);
