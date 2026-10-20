@@ -27,10 +27,25 @@ export const PAGES = [
     c.fillStyle = '#ff8a3a'; c.fillRect(w/2 - 8, h*.62, 16, h); arrow(c, w/2 - 24, h*.5, 30, h*.5); arrow(c, w/2 + 24, h*.5, w - 30, h*.5);
     c.fillStyle = '#d0d0d0'; c.beginPath(); c.arc(w*.2, h*.6, 9, 0, 7); c.fill(); c.stroke();
   }},
-  {title:'Crash and slide', note:'Crashing plates push up mountains. Stuck plates snap: an earthquake!', draw(c, w, h){
-    sky(c, w, h, '#8ab0d8', '#e8d8f0'); cone(c, 70, h*.7, 60, 90, '#6b5a52'); c.fillStyle = '#f6ecd6'; c.beginPath(); c.moveTo(62, h*.7 - 78); c.lineTo(70, h*.7 - 90); c.lineTo(78, h*.7 - 78); c.fill();
-    c.fillStyle = '#4e7a4e'; c.fillRect(0, h*.7, w, h);
-    c.strokeStyle = ink; c.lineWidth = 5; c.beginPath(); c.moveTo(165, h*.7); c.lineTo(158, h*.8); c.lineTo(170, h*.88); c.lineTo(162, h); c.stroke();
-    c.strokeStyle = '#efe0bf'; c.lineWidth = 6; c.beginPath(); c.moveTo(130, h*.78); c.lineTo(160, h*.78); c.moveTo(166, h*.86); c.lineTo(220, h*.86); c.stroke();
+  {title:'Crash!', note:'Crashing plates crumple the ground up into mountains.', draw(c, w, h){
+    sky(c, w, h, '#8ab0d8', '#e8d8f0');
+    cone(c, 70, h*.72, 52, 70, '#5a6a8a'); cone(c, 170, h*.72, 50, 64, '#5a6a8a'); cone(c, w/2, h*.72, 66, 104, '#6b5a52');
+    c.fillStyle = '#f6ecd6'; c.beginPath(); c.moveTo(w/2 - 12, h*.72 - 86); c.lineTo(w/2 - 8, h*.72 - 104); c.lineTo(w/2 + 8, h*.72 - 104); c.lineTo(w/2 + 12, h*.72 - 86); c.fill();
+    // the ground underneath, bunched into folds like a pushed rug
+    c.fillStyle = '#8a5a3a'; c.fillRect(0, h*.72, w, h); c.strokeStyle = '#d8b888'; c.lineWidth = 4;
+    for (const dy of [12, 26]) { c.beginPath(); for (let x = 0; x <= w; x += 6) c.lineTo(x, h*.72 + dy - 8*Math.exp(-(((x - w/2)/40)**2))*Math.cos((x - w/2)/9)); c.stroke(); }
+    c.strokeStyle = ink; c.lineWidth = 3; c.strokeRect(-2, h*.72, w + 4, h);
+    arrow(c, 8, h*.9, 62, h*.9); arrow(c, w - 8, h*.9, w - 62, h*.9);
+  }},
+  {title:'Slide!', note:'Plates slide past each other. Stuck, they bend, then snap: an earthquake!', draw(c, w, h){
+    // from above: gold fields, the fault down the middle, and a road and a creek it slid apart
+    c.fillStyle = '#dcb456'; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#3a78c8'; c.fillRect(0, 34, w/2, 12); c.fillRect(w/2 - 6, 34, 12, 46); c.fillRect(w/2, 68, w/2, 12);
+    c.fillStyle = '#6a6470'; c.fillRect(0, 108, w/2 - 3, 22); c.fillRect(w/2 + 3, 124, w/2, 22);
+    c.fillStyle = '#efe0bf'; for (let x = 8; x < w; x += 30) c.fillRect(x, x < w/2 ? 117 : 133, 14, 4);
+    c.strokeStyle = ink; c.lineWidth = 5; c.beginPath(); c.moveTo(w/2, 0); for (let y = 12; y <= h; y += 12) c.lineTo(w/2 + (y % 24 ? 5 : -5), y); c.stroke();
+    arrow(c, 40, 160, 40, 92); arrow(c, w - 40, 10, w - 40, 60);
+    // the shake
+    c.strokeStyle = '#c0483a'; c.lineWidth = 4; c.lineCap = 'round'; for (const [x, y, a] of [[w/2 - 14, 96, Math.PI], [w/2 + 14, 100, 0]]) for (const k of [0, 1]) { c.beginPath(); c.arc(x, y, 10 + k*9, a - .7, a + .7); c.stroke(); }
   }},
 ];

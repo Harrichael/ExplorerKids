@@ -74,7 +74,9 @@ export function tripBus(w, at){
     const yaw = Math.atan2(-tan.z, tan.x), turn = Math.atan2(Math.sin(Math.atan2(-tan2.z, tan2.x) - yaw), Math.cos(Math.atan2(-tan2.z, tan2.x) - yaw));
     // a path straight up or down has no heading of its own; keep the one it had
     if (Math.hypot(tan.x, tan.z) > .05) root.rotation.y = yaw;
-    body.rotation.set(-Math.max(-.4, Math.min(.4, turn*6))*f.roll, 0, Math.atan2(tan.y, Math.hypot(tan.x, tan.z)));
+    // straight up or down it rides level like a lift, with a little wobble, instead of standing on its tail
+    const lift = clamp01((Math.abs(tan.y) - .85)/.12), wob = Math.sin(f.t*7)*.035*lift;
+    body.rotation.set(-Math.max(-.4, Math.min(.4, turn*6))*f.roll*(1 - lift) + wob, 0, Math.atan2(tan.y, Math.hypot(tan.x, tan.z))*(1 - lift) + wob*.6);
     body.position.y = 0;
     if (f.t >= f.dur) { bus.flight = null; body.rotation.x = 0; f.done(); }
   });

@@ -26,6 +26,7 @@ import { game } from '../state.js';
 import { ask, endConvo, story } from '../ui/dialogue.js';
 import { $ } from '../ui/dom.js';
 import { pageTurn } from '../ui/page-turn.js';
+import { heroHopIn, hopIn, spawnNPC } from './stop-kit.js';
 
 const objEl = $('obj'), leaveBtn = $('leaveTrip');
 export function objective(text){ objEl.hidden = !text; objEl.textContent = text || ''; }
@@ -107,8 +108,10 @@ export function startTrip(t, from = 0){
   if (TRIP.on || game.cutscene) return;
   trip = t; TRIP.on = true;
   if (from) { Sound.setTheme('trip'); run(from); return; }
-  story(trip.intro, () => {
-    game.cutscene = true; hero.root.visible = false; blob.visible = false; Sound.setTheme('trip');
+  story(trip.intro, async () => {
+    game.cutscene = true; Sound.setTheme('trip');
+    await allAboard();
+    hero.root.visible = false; blob.visible = false;
     [523, 659, 784].forEach((f, i) => Sound.tone(f, {type:'triangle', t:i*.08, dur:.2, vol:.07}));
     const a = {mode:'fly', t0:game.elapsed, dur:6.2, p:0, done: () => { flyVan(null); van.visible = false; run(); }};
     // from down by the wheels, craning up out of the garden to watch it go; never past the
@@ -118,8 +121,36 @@ export function startTrip(t, from = 0){
       pos.set(11 + k*1.2, 2.4 + k*5.8, 10.2);
       if (a.pop) look.copy(a.pop); else look.set(van.position.x, van.position.y + 1.1, van.position.z);
     };
-    flyVan(a);
+    game.camSnap = true; flyVan(a);
   });
+}
+
+// The class piles in before takeoff: the kids run up from round the garden and hop in at the door, then
+// Dr. Sparks with a cheer, then the explorer. Those who live at HQ are off on the trip until it's over.
+const AWAY = ['sparks', 'pip', 'juniper'];
+const away = gone => { for (const n of HQ.npcs) if (AWAY.includes(n.pid)) n.model.root.visible = n.label.visible = !gone; };
+// from further and further off, so they reach the door one after another; Dr. Sparks comes out of
+// the cottage last, cheers them in and follows
+const RUNNERS = [['pip', 19.2, 1.5], ['juniper', 12.9, 2.8], ['basil', 14.4, -.9], ['mo', 11.3, 0], ['sparks', 10.9, 2.2, .7]];
+const at = (x, y, z) => van.localToWorld(new THREE.Vector3(x, y, z));
+const until = test => new Promise(ok => { const f = () => test() ? ok() : requestAnimationFrame(f); f(); });
+const pause = s => { const end = game.elapsed + s; return until(() => game.elapsed >= end); };
+async function allAboard(){
+  away(true);
+  const door = at(1.62, 0, -1.35), inside = at(1.62, .3, -.75);
+  game.cutCam = (pos, look) => { pos.set(16.2, 4.7, -.9); look.set(16.6, .7, 4.6); }; game.camSnap = true;
+  let turn = 0;
+  // one at a time through the door
+  await Promise.all(RUNNERS.map(async ([id, x, z, late = 0], i) => {
+    const n = spawnNPC(HQ, id, x, z, 0); n.range = 0; n.label.visible = false;
+    await pause(late);
+    await new Promise(ok => { n.goal = {x:door.x, z:door.z, run:true, then:ok}; });
+    if (id === 'sparks') { n.pose = 'cheer'; Sound.tone(784, {type:'triangle', dur:.25, vol:.06}); await pause(.45); }
+    await until(() => turn === i);
+    await hopIn(n, [inside.x, inside.y, inside.z]); turn++;
+    HQ.npcs.splice(HQ.npcs.indexOf(n), 1); HQ.scene.remove(n.model.root, n.label);
+  }));
+  await heroHopIn([inside.x, inside.z]);
 }
 
 // ---------- the director: what a trip's script awaits ----------
@@ -187,7 +218,7 @@ const endTrip = d => { if (d) d.ends.splice(0).forEach(f => f()); };
 function returnHome(shared){
   endTrip(dir); dir = null;
   pageTurn(() => {
-    Sound.setTheme('home'); enterWorld(HQ, [17.4, 2.4, -2.5]); hero.root.visible = false; blob.visible = false; leaveBtn.hidden = true; objective('');
+    Sound.setTheme('home'); away(false); enterWorld(HQ, [17.4, 2.4, -2.5]); hero.root.visible = false; blob.visible = false; leaveBtn.hidden = true; objective('');
     van.visible = true; game.cutscene = true;
     game.cutCam = (pos, look) => { pos.set(16.4, 4.4, 10.8); look.set(van.position.x, van.position.y + 1, van.position.z); };
     flyVan({mode:'land', t0:game.elapsed + .6, dur:3, done: () => {
@@ -200,7 +231,7 @@ function leaveTrip(){
   if (!TRIP.on || game.cutscene) return;
   if (dir) { dir.gone = true; endTrip(dir); }
   dir = null; endConvo(false); TRIP.on = false;
-  pageTurn(() => { Sound.setTheme('home'); resetVan(); enterWorld(HQ, [16.2, 2.4, Math.PI]); hero.root.visible = true; blob.visible = true; leaveBtn.hidden = true; objective(''); }, null, ['', 'Back to Lantern Hill']);
+  pageTurn(() => { Sound.setTheme('home'); away(false); resetVan(); enterWorld(HQ, [16.2, 2.4, Math.PI]); hero.root.visible = true; blob.visible = true; leaveBtn.hidden = true; objective(''); }, null, ['', 'Back to Lantern Hill']);
 }
 leaveBtn.addEventListener('click', e => { e.stopPropagation(); leaveTrip(); });
 function showBadge(shared){

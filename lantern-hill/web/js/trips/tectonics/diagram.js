@@ -13,15 +13,44 @@
 import * as THREE from 'three';
 import { clamp01, ease, rrect } from '../../core/kit.js';
 import { tripWorld } from '../stop-kit.js';
+import { AFRICA, SAMERICA } from './continents.js';
 
 const W = 1600, H = 1000, PW = 16, PH = 10;
 // the planet: centre far below the page, so its surface is a gentle arc across the top
 const EC = [800, 1950], R = 1750, MANTLE = 790, CRUST = 30;
 const SURF = 200, TRENCH = 930, RIDGE = 1260, VOLCANO = 790;
 const KM = 2900/MANTLE;
-// Africa and South America as they are now, in map pixels, and how far each has drifted from the ridge
-const AFRICA = [[930,250],[900,300],[885,345],[882,385],[930,430],[942,490],[960,590],[990,665],[1020,690],[1060,640],[1100,525],[1140,430],[1165,380],[1115,345],[1080,265],[1020,240]];
-const SAMERICA = [[560,330],[660,360],[678,392],[725,430],[736,490],[750,580],[712,640],[662,715],[632,655],[605,555],[572,465],[546,390]];
+
+// The map is an equirectangular crop of the South Atlantic, MK pixels to the degree. Closing the ocean
+// is the Bullard fit: South America turns about a pole at 44°N 30.6°W onto Africa. Bullard turned it 57°
+// to meet the continental shelves; these coastlines have no shelves, so it takes 58 to close them. Africa
+// takes a little of the turn too, so both are seen to move; the ridge always sits halfway between them.
+const RAD = Math.PI/180, MLON = -15, MLAT = -13, MK = 9, FIT = 58*RAD, BAND = 3.2*RAD;
+const vec = (lon, lat) => [Math.cos(lat*RAD)*Math.cos(lon*RAD), Math.cos(lat*RAD)*Math.sin(lon*RAD), Math.sin(lat*RAD)];
+const unit = v => { const l = Math.hypot(...v); return v.map(x => x/l); };
+const POLE = vec(-30.6, 44), SEAMW = 4, NORTH = vec(-30, 40), SOUTH = vec(0, -72);
+function turn(v, a){ const [kx, ky, kz] = POLE, co = Math.cos(a), si = Math.sin(a), d = (kx*v[0] + ky*v[1] + kz*v[2])*(1 - co);
+  return [v[0]*co + (ky*v[2] - kz*v[1])*si + kx*d, v[1]*co + (kz*v[0] - kx*v[2])*si + ky*d, v[2]*co + (kx*v[1] - ky*v[0])*si + kz*d]; }
+const onMap = v => [W/2 + (Math.atan2(v[1], v[0])/RAD - MLON)*MK, H/2 - (Math.asin(Math.max(-1, Math.min(1, v[2])))/RAD - MLAT)*MK];
+const rings = rs => rs.map(r => { const out = []; for (let i = 0; i < r.length; i += 2) out.push(vec(r[i], r[i + 1])); return out; });
+// swing: how far each turns from today back to the fit
+const LANDS = [{rings:rings(AFRICA), swing:-.25*FIT, name:[['Africa', vec(20, 6)]], fills:[[vec(10, 30), '#e6c887'], [vec(18, 2), '#9cc06e'], [vec(24, -30), '#c9c27a']]},
+               {rings:rings(SAMERICA), swing:.75*FIT, name:[['South', vec(-59, -8)], ['America', vec(-59, -12.5)]], fills:[[vec(-62, 4), '#86b462'], [vec(-58, -22), '#a8bd6c'], [vec(-68, -48), '#dcbc80']]}];
+const MID = (LANDS[0].swing + LANDS[1].swing)/2;
+// The ridge is the seam where the coasts met in the fit, so it mirrors both. It runs on north and south
+// of the seam to where today's ridge leaves the page.
+const RIFT = (() => {
+  const dot = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+  const af = LANDS[0].rings[0].map(v => turn(v, LANDS[0].swing)), seam = []; let run = [];
+  for (const b0 of LANDS[1].rings[0]) { const b = turn(b0, LANDS[1].swing); let m = null, md = -2;
+    for (const p of af) { const d = dot(p, b); if (d > md) { md = d; m = p; } }
+    if (md > Math.cos(SEAMW*RAD)) run.push(unit([m[0] + b[0], m[1] + b[1], m[2] + b[2]])); else { if (run.length > seam.length) seam.splice(0, seam.length, ...run); run = []; } }
+  if (run.length > seam.length) seam.splice(0, seam.length, ...run);
+  if (seam[0][2] < seam[seam.length - 1][2]) seam.reverse();
+  const soft = seam.map((_, i) => { const s = [0, 0, 0]; for (let k = -3; k <= 3; k++) { const q = seam[Math.max(0, Math.min(seam.length - 1, i + k))]; s[0] += q[0]; s[1] += q[1]; s[2] += q[2]; } return unit(s); });
+  const on = (e, to, n) => { const t = turn(to, MID); return Array.from({length:n}, (_, k) => unit(e.map((x, i) => x + (t[i] - x)*(k + 1)/n))); };
+  return [...on(soft[0], NORTH, 8).reverse(), ...soft, ...on(soft[soft.length - 1], SOUTH, 8)];
+})();
 
 export function diagram(){
   const w = tripWorld({title:'The Wonder Bus', bg:0x1a1320, hemi:1, sunI:0, fogNear:100, fogFar:200});
@@ -91,20 +120,33 @@ export function diagram(){
   }
   function drawMap(){
     // a storybook sea: soft and deep at the edges, lighter in the middle, dotted with little waves
-    c.textBaseline = 'alphabetic'; const sea = c.createRadialGradient(W/2, H/2, 100, W/2, H/2, W*.62); sea.addColorStop(0, '#4f8fb8'); sea.addColorStop(1, '#2a5684'); c.fillStyle = sea; c.fillRect(0, 0, W, H);
+    const sea = c.createRadialGradient(W/2, H/2, 100, W/2, H/2, W*.62); sea.addColorStop(0, '#4f8fb8'); sea.addColorStop(1, '#2a5684'); c.fillStyle = sea; c.fillRect(0, 0, W, H);
+    // sep 1 is today; 0 is 200 million years ago, when they fitted together. Each band of sea floor is
+    // fixed to the rock it was made in, so new bands well up at the ridge and old ones ride away with the land.
+    const mid = -MID*S.sep, open = FIT*S.sep/2, edge = th => RIFT.map(v => onMap(turn(v, mid + th)));
+    // North of the equator the ridge parts Africa from North America, off this story's page, so it fades out up there
+    const fade = (lat0, lat1, rgb, al) => { const g = c.createLinearGradient(0, onMap(vec(0, lat0))[1], 0, onMap(vec(0, lat1))[1]); g.addColorStop(0, `rgba(${rgb},0)`); g.addColorStop(1, `rgba(${rgb},${al})`); return g; };
+    const bands = [fade(22, 2, '120,180,214', .28), fade(22, 2, '30,62,104', .42)];
+    for (const side of [-1, 1]) for (let j = 0; j*BAND < open; j++) {
+      const outer = edge(side*(open - j*BAND)), inner = edge(side*Math.max(0, open - (j + 1)*BAND));
+      c.beginPath(); outer.forEach(([x, y]) => c.lineTo(x, y)); for (let i = inner.length - 1; i >= 0; i--) c.lineTo(...inner[i]); c.closePath();
+      c.fillStyle = bands[j % 2]; c.fill(); }
     c.strokeStyle = 'rgba(239,240,255,.22)'; c.lineWidth = 4; c.lineCap = 'round';
     for (const [x, y, r] of waves) { c.beginPath(); c.arc(x - r, y, r, Math.PI*1.15, Math.PI*1.85); c.arc(x + r*.9, y, r, Math.PI*1.15, Math.PI*1.85); c.stroke(); }
-    // the ridge down the middle of the ocean, glowing where the plates pull apart
-    c.strokeStyle = '#ffb050'; c.lineWidth = 7; c.setLineDash([22, 12]); c.beginPath();
-    for (const [x, y] of [[815, 0], [800, 200], [830, 360], [790, 520], [810, 700], [780, 1000]]) c.lineTo(x, y); c.stroke(); c.setLineDash([]);
-    const land = (pts, dx, fill) => { c.beginPath(); pts.forEach(([x, y]) => c.lineTo(x + dx, y)); c.closePath(); c.lineWidth = 26; c.lineJoin = 'round'; c.strokeStyle = 'rgba(239,240,255,.16)'; c.stroke();
-      c.fillStyle = fill; c.fill(); c.strokeStyle = INK; c.lineWidth = 5; c.stroke(); };
-    // sep 1 is today; 0 is when they fitted together, long ago
-    land(AFRICA, -95*(1 - S.sep), '#d9b77a'); land(SAMERICA, 75*(1 - S.sep), '#8fb86a');
+    // the ridge, glowing where the plates pull apart, sinks out of sight as the gap closes
+    const glow = clamp01(S.sep*6), ridge = edge(0);
+    c.globalAlpha = glow; c.strokeStyle = fade(34, 4, '255,176,80', 1); c.lineWidth = 7; c.lineJoin = 'round'; c.setLineDash([22, 12]); c.beginPath(); ridge.forEach(([x, y]) => c.lineTo(x, y)); c.stroke(); c.setLineDash([]); c.globalAlpha = 1;
     c.textAlign = 'center';
-    label('Africa', 1020 - 95*(1 - S.sep), 470); label('South', 655 + 75*(1 - S.sep), 470); label('America', 655 + 75*(1 - S.sep), 515);
-    if (S.labels.has('ridge')) label('the ridge', 930, 150, 30, '#ffd36b');
-    if (S.labels.has('years')) { plaque(130, 116, 420, 72); c.textBaseline = 'middle'; label(S.sep < .05 ? '200 million years ago' : S.sep > .95 ? 'today' : `${Math.round((1 - S.sep)*200)} million years ago`, 340, 154, 30); }
+    for (const l of LANDS) {
+      const at = v => onMap(turn(v, l.swing*(1 - S.sep))), [p0, , p1] = l.fills.map(([v]) => at(v)), g = c.createLinearGradient(p0[0], p0[1], p1[0], p1[1]);
+      l.fills.forEach(([, col], i) => g.addColorStop(i/2, col));
+      c.beginPath(); for (const r of l.rings) { r.forEach((v, i) => { const [x, y] = at(v); i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.closePath(); }
+      c.lineJoin = 'round'; c.lineWidth = 22; c.strokeStyle = 'rgba(239,240,255,.16)'; c.stroke(); c.fillStyle = g; c.fill(); c.strokeStyle = INK; c.lineWidth = 5; c.stroke();
+    }
+    c.textBaseline = 'middle';
+    for (const l of LANDS) for (const [text, v] of l.name) label(text, ...onMap(turn(v, l.swing*(1 - S.sep))));
+    if (S.labels.has('ridge') && S.sep > .5) { const [x, y] = ridge.reduce((a, b) => Math.abs(b[1] - 600) < Math.abs(a[1] - 600) ? b : a); c.globalAlpha = clamp01((S.sep - .5)*4); label('the ridge', x + 110, y, 30, '#ffd36b'); c.globalAlpha = 1; }
+    if (S.labels.has('years')) { plaque(130, 116, 420, 72); label(S.sep < .05 ? '200 million years ago' : S.sep > .95 ? 'today' : `${Math.round((1 - S.sep)*200)} million years ago`, 340, 154, 30); }
   }
   function drawBus(){
     if (!S.bus) return;
