@@ -236,9 +236,13 @@ function update(dt){
     o.meshes.forEach(mm => { mm.material.opacity = o.cur * mm.userData.baseOp; mm.material.depthWrite = o.cur > .95; }); });
 }
 
+// one frame of play: time moves on by dt, then it is drawn
+export function step(dt, draw = true){ update(dt); if (draw) { renderer.render(game.world.scene, camera); renderBust(dt); } }
+// the test harness (js/testing.js) swaps in its own step, to run faster than life or hold still for a picture
+export const loop = {step};
 function frame(){
   const dt = Math.min(clock.getDelta(), .05);
-  if (!game.activity) { update(dt); renderer.render(game.world.scene, camera); renderBust(dt); }
+  if (!game.activity) loop.step(dt);
   requestAnimationFrame(frame);
 }
 export function start(){ frame(); }

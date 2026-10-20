@@ -14,7 +14,7 @@ import { game } from '../../state.js';
 import { tripBus } from '../bus.js';
 import { classmates } from '../class.js';
 import { goggles } from '../goggles.js';
-import { curio, puffs, tripWorld } from '../stop-kit.js';
+import { curio, puffs, sample, tripWorld } from '../stop-kit.js';
 import { wonders } from './wonders.js';
 
 // the ledge is the floor of the heat bubble, an ellipse BX by BZ round z = BC, DH tall; the cliff stands
@@ -324,6 +324,13 @@ export function buildMantle(t){
     ['sparks', "Out there, the rock is more than a thousand degrees. The bubble keeps the heat out, like a cooler keeps a picnic cold."],
     ['mo', "Please keep my sandwiches cold, bubble."]],
     async act(){ for (let i = 0; i < 3; i++) { boing = 1; Sound.tone(330, {type:'sine', dur:.5, vol:.08 - i*.02, f2:660, vib:[12, 20]}); Sound.tone(880, {type:'triangle', t:.1, dur:.3, vol:.04}); await t.wait(1.3); } }});
+
+  // a sample for the microscope at home: a chunk of mantle rock broken off round the back of the knoll,
+  // its green olivine grains catching the glow
+  const CHIP = [5, 12], cg = new THREE.Group(); cg.position.set(CHIP[0], G(CHIP), CHIP[1]); w.scene.add(cg);
+  for (const [dx, dz, r, c] of [[0, 0, .32, 0x6a6448], [.38, .18, .2, 0x5a5a40], [-.3, .22, .17, 0x6e6a4a]]) { const m = outline(add(new THREE.DodecahedronGeometry(r, 0), T(c), dx, r*.45, dz, cg), 1.08); m.rotation.set(dx*3, dz*5, 0); }
+  for (const [x, y, z] of [[.12, .5, .2], [-.15, .42, .22], [.05, .3, -.28], [.4, .3, .3], [-.32, .3, .3], [.22, .22, .3]]) sph(.045, T(0x8ad04a, {emissive:0x4a8a20, emissiveIntensity:.5}), x, y, z, cg, 6, false);
+  sample(w, t, {ids:['olivine'], at:CHIP, y:G(CHIP) + .6, verb:'Pick up a chip of rock'});
 
   // ---------- the place's scenes, run by the trip's script ----------
   return {world:w, bus, cls,

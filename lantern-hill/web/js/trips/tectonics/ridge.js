@@ -13,7 +13,7 @@ import { game } from '../../state.js';
 import { tripBus } from '../bus.js';
 import { classmates } from '../class.js';
 import { goggles } from '../goggles.js';
-import { curio as kitCurio, puffTex, puffs, tripWorld } from '../stop-kit.js';
+import { curio as kitCurio, puffTex, puffs, sample, tripWorld } from '../stop-kit.js';
 import { anglerfish, atolla, ghostOctopus, glowJelly, seaPig, whaleFall, yetiCrab } from './deep-life.js';
 import { PAD, buildRift, crackX, ground, ledgeX, onLedge, walkable, wallAt } from './rift.js';
 import { wonders } from './wonders.js';
@@ -423,6 +423,15 @@ export function buildRidge(t){
     ['sparks', "If something tries to eat this one, it flashes like a burglar alarm. That calls a bigger animal to scare the attacker away!"]], [-.15, 1], 2);
   curio('Big bones', [WHALE[0] + .9, WHALE[1] + 1], ground(...WHALE) + 1, [['sparks', "Whale bones! When a whale dies, it sinks all the way down here."],
     ['sparks', "Crabs, fish, and red bone-eating worms come to feast on it."], ['sparks', "One whale can feed them for years and years!"]], [1, .2]);
+
+  // samples for the microscope at home: a scoop of the oldest, softest mud, up on the high ledge, made of
+  // tiny shells; and a white mat of microbes round the back of the big smoker
+  const OOZE = [ledgeX(-1, 11, .25), 11], MAT = at(-5.4, -5.8);
+  for (const [dx, dz, r] of [[0, 0, .55], [.5, -.3, .35], [-.4, .35, .3]]) { const x = OOZE[0] + dx, z = OOZE[1] + dz; sph(r, T(0xe8dcc4), x, ground(x, z) - r*.1, z, w.scene, 10).scale.y = .3; }
+  for (const [dx, dz, r] of [[0, 0, .4], [.4, .25, .28], [-.35, .2, .25], [.15, -.38, .22], [-.2, -.3, .18]]) { const x = MAT[0] + dx, z = MAT[1] + dz;
+    sph(r, T(0xf4f2ea, {emissive:0x8a9aa8, emissiveIntensity:.25}), x, ground(x, z) + .02, z, w.scene, 9).scale.y = .22; }
+  sample(w, t, {ids:['foram', 'radiolarian', 'diatom'], at:OOZE, y:ground(...OOZE) + .6, verb:'Scoop up some sea-floor mud'});
+  sample(w, t, {ids:['microbes'], at:MAT, y:ground(...MAT) + .6, verb:'Collect some of the white fuzz'});
 
   return {world:w, bus, cls,
     // the magma the class rode up the mantle on brings the bus with it: up out of the crack's mouth

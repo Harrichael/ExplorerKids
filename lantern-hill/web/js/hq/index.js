@@ -15,11 +15,12 @@ import '../garden/bed.js';
 import './daylight.js';
 import { bFlush } from '../core/kit.js';
 import { addUsable } from '../core/world.js';
+import { has, SAMPLES } from '../samples/index.js';
 import { load } from '../save.js';
 import { game } from '../state.js';
 import { ask } from '../ui/dialogue.js';
 import { openWardrobe } from '../ui/wardrobe.js';
-import { ARMCHAIRS, LAB_DESK, WINDOW_SEAT } from './cottage.js';
+import { ARMCHAIRS, LAB_DESK, MICROSCOPE, WINDOW_SEAT } from './cottage.js';
 import { BED } from '../garden/bed.js';
 import { BENCH } from './garden-life.js';
 import { PLAT, groundAt } from './garden.js';
@@ -84,6 +85,10 @@ async function lookThroughTelescope(){
   const { openTelescope } = await import('../sky/telescope.js');
   openTelescope();
 }
+async function useMicroscope(){
+  const { openMicroscope } = await import('../samples/microscope.js');
+  openMicroscope();
+}
 async function boardWonderBus(){
   const [{ startCheck, startTrip }, { tectonics }] = await Promise.all([import('../trips/field-trip.js'), import('../trips/tectonics/index.js')]);
   if (!load('trips')?.tectonics) { startTrip(tectonics); return; }
@@ -108,6 +113,9 @@ addUsable(HQ, {name:'Experiment desk', x:LAB_DESK.x, z:LAB_DESK.z + 1.05, range:
 // the bus is just a parked bus until the first Fizzy Volcano; the trip is a surprise that eruption reveals (lab/index.js)
 addUsable(HQ, {name:'Wonder Bus', x:15.9, z:3.6, range:1.9, verb:'Board the Wonder Bus', short:'Board', glow:[15.6, 2.9, 5.5], action:boardWonderBus,
   when: () => (load('lab')?.done || []).includes('volcano')});
+// just furniture until a field trip turns up a sample to look at
+addUsable(HQ, {name:'Microscope', x:MICROSCOPE.x - .75, z:MICROSCOPE.z - .35, range:1.3, verb:'Look through the microscope', short:'Look', glow:[MICROSCOPE.x, 1.45, MICROSCOPE.z],
+  action:useMicroscope, when: () => SAMPLES.some(s => has(s.id))});
 addUsable(HQ, {name:'Pip’s telescope', x:23.7, z:-1.05, y:PLAT, range:1.3, verb:'Look through Pip’s telescope', short:'Look', glow:[24.4, PLAT + 1.5, -.6], action:lookThroughTelescope});
 addUsable(HQ, {name:'Pond bench', x:BENCH.x, z:BENCH.z - .78, range:1.25, verb:'Sit on the bench', short:'Sit', glow:[BENCH.x, .9, BENCH.z], action:sitOnBench});
 addUsable(HQ, {name:'Vegetable garden', x:BED.x, z:BED.front + .55, range:1.9, verb:'Tend the garden', short:'Garden', glow:[BED.x, .8, BED.z + .3], action:openGarden});

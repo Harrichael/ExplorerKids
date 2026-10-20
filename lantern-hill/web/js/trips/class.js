@@ -131,7 +131,8 @@ export function classmates(w, t, door){
       // whoever has something to show is talked to through it; the rest just chat
       k.onTalk = f ? () => play(f) : id === 'sparks' ? sparksHint : null;
       // mid-find, with the explorer handed the controls to do something, nobody calls or talks
-      k.calling = !!f && !running; k.range = running ? 0 : 1.7;
+      // a talk prompt with nothing behind it reads as a broken button, so only those with something to say offer one
+      k.calling = !!f && !running; k.range = running || !(k.onTalk || k.lines.length) ? 0 : 1.7;
       if (!k.calling) continue;
       const d = Math.hypot(player.x - k.x, player.z - k.z); if (d < nd) { nd = d; near = f; }
     }

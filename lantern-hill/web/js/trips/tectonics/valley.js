@@ -12,7 +12,7 @@ import { game } from '../../state.js';
 import { tripBus } from '../bus.js';
 import { classmates } from '../class.js';
 import { goggles } from '../goggles.js';
-import { curio, tripWorld } from '../stop-kit.js';
+import { curio, sample, tripWorld } from '../stop-kit.js';
 import { butterflies, flock, marmot, mountainGoat, soarer } from './land-life.js';
 import { storySky } from '../sky.js';
 
@@ -746,6 +746,26 @@ function buildFinds(w, t){
       ['juniper', "And at the bottom of the sea, the mud piles up in layers. Like the stripes in the canyon!"],
       ['sparks', "Yes! The layers turn to rock. And one day, crashing plates might crumple them into new mountains."]],
     from:SKIP, act: () => { skip = 0; stone.visible = true; Sound.hiss({dur:.2, vol:.05, type:'highpass', freq:3000}); }});
+
+  // samples for the microscope at home: more fossils in the canyon walls, small ones, for whoever looks
+  // closely all the way up it; and a snowbank lingering at the foot of the cliffs at the high shelf's far end, pink with algae
+  const wallAt = (i, up, sd) => { const s = i/(CANYON.length - 1), [cx, cz] = CANYON[i], q = along(CANYON, cx, cz), nx = q.tz*sd, nz = -q.tx*sd, fl = floorY(s);
+    let d = halfW(s); while (H(cx + nx*d, cz + nz*d) < fl + up && d < halfW(s) + 6) d += .05;
+    return {x:cx + nx*(d - .15), z:cz + nz*(d - .15), y:fl + up, nx, nz, stand:[cx + nx*(halfW(s) - 1.2), cz + nz*(halfW(s) - 1.2)]}; };
+  const fossilArt = draw => tex(128, 128, (c, cw) => { c.fillStyle = '#d9c8a6'; c.beginPath(); c.arc(64, 64, 62, 0, 7); c.fill(); c.strokeStyle = '#5a4030'; c.fillStyle = '#5a4030'; c.lineWidth = 4; draw(c);
+    c.strokeStyle = '#1a1320'; c.lineWidth = 6; c.beginPath(); c.arc(64, 64, 60, 0, 7); c.stroke(); });
+  const FOSSILS = [
+    ['crinoid', 15, 1.7, 1, c => { for (const [x, y, r] of [[52, 56, 20], [86, 80, 13], [44, 92, 10]]) { c.beginPath(); for (let i = 0; i <= 10; i++) { const a = i/10*Math.PI*2, d = i % 2 ? r*.55 : r; c.lineTo(x + Math.cos(a)*d, y + Math.sin(a)*d); } c.stroke(); } }],
+    ['nummulite', 27, 1.9, -1, c => { for (const [x, y, r] of [[50, 54, 16], [84, 66, 12], [58, 92, 11], [90, 96, 8]]) { c.beginPath(); c.arc(x, y, r, 0, 7); c.stroke(); c.beginPath(); for (let a = 0; a < 14; a += .3) c.lineTo(x + Math.cos(a)*r*a/14, y + Math.sin(a)*r*a/14); c.stroke(); } }],
+    ['trilobite', 52, 1.6, 1, c => { c.beginPath(); c.ellipse(64, 46, 26, 16, 0, Math.PI, 0); c.stroke(); for (let k = 0; k < 6; k++) { c.beginPath(); c.moveTo(42 + k*2, 52 + k*9); c.lineTo(86 - k*2, 52 + k*9); c.stroke(); }
+      c.beginPath(); c.moveTo(56, 50); c.lineTo(58, 102); c.moveTo(72, 50); c.lineTo(70, 102); c.stroke(); }]];
+  for (const [id, i, up, sd, draw] of FOSSILS) { const f = wallAt(i, up, sd), g = new THREE.Group(); g.position.set(f.x, f.y, f.z); g.lookAt(f.x - f.nx, f.y + .2, f.z - f.nz); w.scene.add(g);
+    add(new THREE.CircleGeometry(.24, 20), T(0xffffff, {map:fossilArt(draw)}), 0, 0, .02, g, false);
+    sample(w, t, {ids:[id], at:[f.x, f.z], y:f.y + .1, from:f.stand, range:1.8, verb:'Chip out a tiny fossil'}); }
+  const SNOW = [29, -21.6];
+  meshOf(mergeGeos([[0, 0, .9], [.8, .3, .6], [-.7, .4, .55], [.3, -.6, .5]].map(([dx, dz, r]) => [new THREE.SphereGeometry(r, 12, 8), XF(SNOW[0] + dx, H(SNOW[0] + dx, SNOW[1] + dz) - r*.05, SNOW[1] + dz, 1, .32, 1)])), 0xf6eef0, w.scene, .03);
+  meshOf(mergeGeos([[.15, .1, .5], [.6, .35, .3], [-.35, .3, .28]].map(([dx, dz, r]) => [new THREE.SphereGeometry(r, 10, 6), XF(SNOW[0] + dx, H(SNOW[0] + dx, SNOW[1] + dz) + .2, SNOW[1] + dz, 1, .22, 1)])), 0xe8708c, w.scene);
+  sample(w, t, {ids:['snowalgae'], at:SNOW, y:H(...SNOW) + .6, verb:'Scoop up some pink snow'});
 
   // and life all about: a golden eagle wheeling over the canyon, swallows over the meadow, butterflies on the flowers
   life.push(soarer(w.scene, -14, 24, -20, 16).tick, soarer(w.scene, 30, 34, -50, 22, {sp:-.11, s:2.2}).tick);

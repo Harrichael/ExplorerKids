@@ -3,6 +3,7 @@ import { makeLabel } from '../characters/build.js';
 import { PERSONA } from '../characters/cast.js';
 import { C, T, add, col, cyl, grp, outlineMat, rand, rr } from '../core/kit.js';
 import { pembrookTalk } from '../library/nook.js';
+import { jars } from '../samples/index.js';
 import { pipTalk } from '../travel/index.js';
 import { PLAT, TREEHOUSE } from './garden.js';
 import { scene } from './scene.js';
@@ -47,7 +48,8 @@ addNPC(PERSONA.sparks, 7.6, 0, -4.7, 0, [
   "A real scientist makes a guess, tests it, and is happy to be wrong. Wrong answers are just clues wearing a disguise.",
   "My experiment desk is all set up, {name}! Step up to it and open my experiment book. Fizzing, floating, color-changing... and it's all hands-on.",
   "Those glowing jars? Mostly colored water and a little fizz. The real magic is asking 'why?' until you find out."
-]);
+], {converse: () => { const n = jars().length;
+  return n ? [{p:PERSONA.sparks, text:`${n === 1 ? 'A sample jar' : 'Sample jars'}, {name}? Bring ${n === 1 ? 'it' : 'them'} to my microscope by the window. Let's see what you found!`}] : null; }});
 
 addNPC(PERSONA.biscuit, -.9, 0, -4.7, .4, [
   "Mrrrp. (Biscuit opens one eye, decides {name} is acceptable, and closes it again.)",

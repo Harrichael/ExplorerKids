@@ -6,6 +6,7 @@
 
 import { Sound } from '../core/sound.js';
 import { BOOKS, progress } from '../library/books.js';
+import { jarArt, jars } from '../samples/index.js';
 import { load, save } from '../save.js';
 import { game } from '../state.js';
 import { $ } from './dom.js';
@@ -22,9 +23,9 @@ export function putBack(kind){
 export function carry(item){
   if (items.length >= CAPACITY) return false;
   items.push(item); save('inventory', {items});
-  bagBtn.classList.remove('new'); void bagBtn.offsetWidth; bagBtn.classList.add('new');
-  return true;
+  nudgeBag(); return true;
 }
+export function nudgeBag(){ bagBtn.classList.remove('new'); void bagBtn.offsetWidth; bagBtn.classList.add('new'); }
 
 const css = document.createElement('style');
 css.textContent = `
@@ -44,6 +45,10 @@ css.textContent = `
 .ipanel .iread kbd,.ipanel .keyhint kbd{font:inherit;font-size:12px;opacity:.75}
 .ipanel .iread:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
 .ipanel .keyhint{margin-top:10px;color:#6d3b5e}
+.ipanel .ijars{display:flex;flex-wrap:wrap;gap:2px;max-width:60%}
+.ipanel .ijars img{width:38px;height:48px;cursor:pointer;background:none;box-shadow:none;border-radius:0;object-fit:contain;filter:drop-shadow(0 2px 2px rgba(0,0,0,.25))}
+.ipanel .ijars img.wig{animation:jarwig .5s ease-in-out}
+@keyframes jarwig{25%{transform:rotate(-14deg)}60%{transform:rotate(10deg)}85%{transform:rotate(-4deg)}}
 #bag.new{animation:bagpulse .9s ease-in-out 4}
 @keyframes bagpulse{50%{transform:scale(1.15);background:var(--plum)}}
 .labbing #bag{display:none}
@@ -59,8 +64,15 @@ let reading = null;
 function render(){
   const book = holding('book'), b = book && BOOKS.find(x => x.id === book.id);
   reading = null; slotsEl.innerHTML = '';
+  const js = jars();
+  if (js.length) { const j = document.createElement('div'); j.className = 'islot'; slotsEl.append(j);
+    j.innerHTML = `<div class="ijars">${js.map(x => `<img alt="A sample jar" src="${jarArt(x.tint)}">`).join('')}</div>
+      <div class="what">${js.length === 1 ? 'A sample jar' : `${js.length} sample jars`}<em>I wonder what's inside? Dr. Sparks' microscope will show you.</em></div>`;
+    // a shake, to listen to what's inside
+    j.querySelectorAll('img').forEach((img, i) => img.addEventListener('click', () => { img.classList.remove('wig'); void img.offsetWidth; img.classList.add('wig');
+      Sound.hiss({dur:.25, vol:.05, type:'bandpass', freq:2200 + i*300}); Sound.tone(1400 + i*90, {type:'triangle', t:.1, dur:.06, vol:.03}); })); }
   const slot = document.createElement('div'); slot.className = 'islot'; slotsEl.append(slot);
-  if (!b) { slot.innerHTML = `<p class="iempty">Nothing in here yet. Ms. Pembrook at the library desk will lend you a book.</p>`; return; }
+  if (!b) { slot.innerHTML = `<p class="iempty">${js.length ? 'No book right now.' : 'Nothing in here yet.'} Ms. Pembrook at the library desk will lend you a book.</p>`; return; }
   const read = game.world.read;
   slot.innerHTML = `<img alt="" src="${b.dir}p001.jpg" style="aspect-ratio:${b.aspect}"><div class="what">${b.title}<em>${progress(b)}</em>
     ${read ? '' : '<em>Read it back home at Lantern Hill</em>'}</div><button class="iread"${read ? '' : ' disabled'}>Read <kbd class="keyhint">R</kbd></button>`;

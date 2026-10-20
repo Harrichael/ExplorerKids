@@ -33,8 +33,10 @@ const objEl = $('obj'), leaveBtn = $('leaveTrip');
 export function objective(text){ objEl.hidden = !text; objEl.textContent = text || ''; }
 
 // ---------- the field trip ----------
-const TRIP = {on:false};
+const TRIP = {on:false, chapter:null};
 let trip = null, vanAnim = null;
+// which trip is on, and its chapter: an index into trip.chapters, or null for the Explorer Check
+export const tripNow = () => TRIP.on ? {id:trip.id, chapter:TRIP.chapter, name:TRIP.chapter === null ? 'Explorer Check' : trip.chapters[TRIP.chapter][0]} : null;
 const VAN_HOME = {x:15.6, z:5.5, ry:-.3, dx:Math.cos(.3), dz:Math.sin(.3)};
 // takeoff: a hop, then a climbing left turn over the lily pond and off toward the moon, wide
 // enough of the treehouse that its canopy never hides the bus from the garden camera
@@ -104,11 +106,12 @@ function updateVanAnim(){
   }
   stepDust(dt);
 }
-// Starting at a later chapter skips the takeoff, for trying out one part of a trip on its own.
-export function startTrip(t, from = 0){
+// Starting at a later chapter skips the takeoff, for trying out one part of a trip on its own; seed
+// stands in for what the chapters skipped would have left in what they share (a choice made, say).
+export function startTrip(t, from = 0, seed){
   if (TRIP.on || game.cutscene) return;
-  trip = t; TRIP.on = true;
-  if (from) { Sound.setTheme('trip'); run(from); return; }
+  trip = t; TRIP.on = true; TRIP.chapter = from;
+  if (from) { Sound.setTheme('trip'); run(from, seed); return; }
   story(trip.intro, async () => {
     game.cutscene = true; Sound.setTheme('trip');
     await allAboard();
@@ -158,9 +161,9 @@ async function allAboard(){
 // Leaving the trip strands the script mid-await; everything it awaits checks for that and stops it.
 const GONE = Symbol('left the trip');
 let dir = null;
-function run(from = 0){
-  const me = dir = makeDirector(), shared = trip.setup(me);
-  (async () => { for (const [, play] of trip.chapters.slice(from)) await play(me, shared); })()
+function run(from = 0, seed){
+  const me = dir = makeDirector(), shared = Object.assign(trip.setup(me), seed);
+  (async () => { for (let i = from; i < trip.chapters.length; i++) { TRIP.chapter = i; await trip.chapters[i][1](me, shared); } })()
     .then(() => { if (dir === me) returnHome(shared); }, e => { if (e !== GONE) throw e; });
 }
 function makeDirector({leave = true} = {}){
@@ -259,7 +262,7 @@ function offerCheck(t, shared){
 // The questions come from what was found on every trip so far, so they're drawn the same way from either.
 export function startCheck(t, shared = null){
   if (TRIP.on || game.cutscene) return;
-  trip = t; TRIP.on = true; Sound.setTheme('trip');
+  trip = t; TRIP.on = true; TRIP.chapter = null; Sound.setTheme('trip');
   // the check's own way home is the Wonder Bus, parked on the cloud
   const me = dir = makeDirector({leave:false});
   pageTurn(() => { away(true); van.visible = false;

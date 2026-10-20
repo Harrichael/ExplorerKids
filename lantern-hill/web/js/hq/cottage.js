@@ -299,10 +299,24 @@ const chartTex = tex(512,384,(g,w,h)=>{ g.fillStyle='#1f2747'; g.fillRect(0,0,w,
 box(2.3, 1.7, .06, T(C.woodDk), 7.8, 2.4, -6.98, null, false);
 add(new THREE.PlaneGeometry(2.1, 1.5), T(0xffffff,{map:chartTex}), 7.8, 2.4, -6.94, null, false);
 windowOn(9.97, 2.0, -4.0, -Math.PI/2, 1.2, 1.3);
-const tele1 = grp(9.2, 0, -2.4, -.9);
-for (let i=0;i<3;i++){ const a = i*2.1; const l = cyl(.03,.03,1.3,T(C.woodDk),Math.cos(a)*.25,.62,Math.sin(a)*.25,tele1,5); l.rotation.z = Math.cos(a)*.22; l.rotation.x = -Math.sin(a)*.22; }
-const tt1 = cyl(.09,.13,1.1,T(C.gold),0,1.35,0,tele1,12); tt1.rotation.z = 1.15; outline(tt1, 1.08);
-col(8.85, 9.55, -2.75, -2.05);
+// Dr. Sparks' brass microscope on its little table by the window, for the samples found on field trips (samples/)
+export const MICROSCOPE = {x:9.2, z:-2.4};
+const scope = grp(MICROSCOPE.x, 0, MICROSCOPE.z, -2.1); scope.scale.setScalar(1.2);
+cyl(.42,.4,.07,T(C.woodLt),0,.8,0,scope,18); cyl(.06,.08,.76,T(C.woodDk),0,.39,0,scope,8); cyl(.26,.3,.06,T(C.woodDk),0,.03,0,scope,12);
+const brass = T(C.gold), brassDk = T(0xa8762a), blk = T(C.ink);
+const sb = box(.3,.05,.24,brassDk,0,.86,-.02,scope); outline(sb, 1.06);
+const arm = add(new THREE.TorusGeometry(.17,.035,8,16,Math.PI*.75), brass, 0,1.05,-.1,scope); arm.rotation.set(0, Math.PI/2, Math.PI*.15); outline(arm, 1.12);
+const stage = box(.24,.025,.2,blk,0,1.0,.02,scope); outline(stage, 1.06);
+box(.2,.006,.07,T(0xdff1f5,{transparent:true,opacity:.7}),0,1.016,.03,scope,false);
+sph(.022,glowM(0xd36a8f,.5),0,1.02,.03,scope,8,false);
+const mirror = cyl(.06,.06,.012,T(0xcfe8f0),0,.93,.02,scope,12,false); mirror.rotation.x = .5;
+const tube = grp(0,1.24,.02,0,scope); tube.rotation.x = -.38;
+outline(cyl(.06,.065,.32,brass,0,0,0,tube,14), 1.1); outline(cyl(.045,.05,.1,blk,0,.2,0,tube,12), 1.12);
+outline(cyl(.075,.075,.05,brassDk,0,-.17,0,tube,14), 1.1);
+for (const a of [0, 2.1, 4.2]) { const o = cyl(.022,.016,.08,brass,Math.sin(a)*.04,-.22,Math.cos(a)*.04,tube,8); o.rotation.x = Math.cos(a)*.25; o.rotation.z = -Math.sin(a)*.25; }
+for (const sx of [-1, 1]) { const k = cyl(.05,.05,.035,brassDk,sx*.08,1.1,-.12,scope,10); k.rotation.z = Math.PI/2; outline(k, 1.12); }
+const slideBox = grp(-.22,.835,.2,.4,scope); box(.2,.07,.13,T(C.plum),0,0,0,slideBox); box(.21,.012,.14,T(C.gold),0,.04,0,slideBox,false);
+col(8.75, 9.65, -2.85, -1.95);
 const mobile = grp(7.6, 3.0, -4.1);
 cyl(.015,.015,.6,T(C.ink),0,.3,0,mobile,4);
 sph(.26, glowM(0xffc35a,.9), 0,0,0, mobile, 16, false);

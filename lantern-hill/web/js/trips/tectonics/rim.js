@@ -10,7 +10,7 @@ import { hero, player } from '../../player.js';
 import { game } from '../../state.js';
 import { tripBus } from '../bus.js';
 import { classmates } from '../class.js';
-import { curio, puffs, tripWorld } from '../stop-kit.js';
+import { curio, puffs, sample, tripWorld } from '../stop-kit.js';
 import { lavaLake } from './lava.js';
 import { plume } from './plume.js';
 import { storySky } from '../sky.js';
@@ -595,6 +595,16 @@ export function buildRim(t){
       fall.position.set(Math.cos(falling.a)*r, y, Math.sin(falling.a)*r); fall.rotation.x += dt*7; fall.rotation.z += dt*5;
       if (k >= 1) { lake.splash(Math.cos(falling.a)*3.6, Math.sin(falling.a)*3.6); fall.position.y = -99; falling = null; nextFall = fr(9, 20); Sound.hiss({dur:.5, vol:.05, type:'bandpass', freq:700}); } }
   });
+
+  // samples for the microscope at home, for whoever wanders: a drift of ash blown into the shoulder's far
+  // corner, and sulfur crusting the very lip of the crater, round the far side from Pip and the ledge
+  const ASH = [Math.cos(TA + .25)*22.4, Math.sin(TA + .25)*22.4], SULF = [Math.cos(-1.75)*7.9, Math.sin(-1.75)*7.9], lip = [Math.cos(-1.75)*7.05, Math.sin(-1.75)*7.05];
+  for (const [dx, dz, r] of [[0, 0, .6], [.55, .35, .38], [-.45, .4, .32], [.2, -.5, .3]]) { const x = ASH[0] + dx, z = ASH[1] + dz; sph(r, T(0x857e7a), x, landY(x, z) - r*.08, z, w.scene, 10).scale.y = .35; }
+  for (const [dx, dz, s, a] of [[0, 0, .16, 0], [.22, .1, .12, .7], [-.2, .14, .1, -.5], [.08, -.2, .09, 1.2], [-.3, -.12, .08, .3]]) {
+    const x = lip[0] + dx, z = lip[1] + dz, c = outline(add(new THREE.OctahedronGeometry(s, 0), T(0xf2c62a, {emissive:0x6a4a00, emissiveIntensity:.3}), x, landY(x, z) + s*.9, z, w.scene), 1.12); c.scale.y = 1.6; c.rotation.set(a*.4, a, a*.3); }
+  puffs(w, lip[0], landY(...lip) + .2, lip[1], {rate:.8, rise:.6, size:.45, color:0xfff2c8, opacity:.3, spread:.25, life:2.4});
+  sample(w, t, {ids:['ash'], at:ASH, y:landY(...ASH) + .6, verb:'Scoop up some ash'});
+  sample(w, t, {ids:['sulfur'], at:lip, y:landY(...lip) + .6, from:SULF, verb:'Scrape off some yellow crystals'});
 
   // ---------- the place's scenes, run by the trip's script ----------
   return {world:w, bus, cls, smoke, lake,

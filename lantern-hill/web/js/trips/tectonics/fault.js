@@ -15,7 +15,7 @@ import { game } from '../../state.js';
 import { tripBus } from '../bus.js';
 import { classmates } from '../class.js';
 import { goggles } from '../goggles.js';
-import { curio, puffs, tripWorld } from '../stop-kit.js';
+import { curio, puffs, sample, tripWorld } from '../stop-kit.js';
 import { storySky } from '../sky.js';
 import { butterflies, duck, flock, groundSquirrel, soarer } from './land-life.js';
 import { quake } from './quake.js';
@@ -711,6 +711,14 @@ function buildFinds(w, t, solid, water){
   const sny = ground(...SNAG); solid.push([SNAG[0], SNAG[1], .4]);
   outline(add(new THREE.CylinderGeometry(.1, .2, 3, 7), T(0x8a7a6a), SNAG[0], sny + 1.5, SNAG[1], w.scene), 1.06);
   for (const [a, l, y] of [[.7, 1.1, 2.1], [-2.3, .8, 1.5], [2.4, .6, 2.6]]) { const b = outline(add(new THREE.CylinderGeometry(.04, .07, l, 5), T(0x8a7a6a), SNAG[0] + Math.cos(a)*l*.35, sny + y + l*.3, SNAG[1] + Math.sin(a)*l*.35, w.scene), 1.08); b.rotation.set(Math.sin(a)*.9, 0, -Math.cos(a)*.9); }
+
+  // samples for the microscope at home: green scum floating at the far edge of the pond, a jarful of tiny
+  // pond life; and the wet moss on the shady side of the old snag, where water bears live
+  const SCUM = [POND[0] - 2, POND[1] - .5], DIP = [POND[0] - 2.9, POND[1] - .7], MOSS = [SNAG[0] + .1, SNAG[1] - .45];
+  meshOf(mergeGeos([[0, 0, .45], [.35, .3, .3], [-.25, .35, .25], [.3, -.3, .22], [-.4, -.15, .2]].map(([dx, dz, r]) => [new THREE.CircleGeometry(r, 10).rotateX(-Math.PI/2), XF(SCUM[0] + dx, POND_Y + .015, SCUM[1] + dz)])), 0x6aa03a, w.scene);
+  meshOf(mergeGeos([[0, 0, .16], [.18, .08, .12], [-.14, .1, .11], [.06, -.14, .1], [.2, -.1, .09]].map(([dx, dz, r]) => [new THREE.SphereGeometry(r, 8, 6), XF(MOSS[0] + dx, sny + r*.4, MOSS[1] + dz, 1, .7, 1)])), 0x4a8a3a, w.scene, .015);
+  sample(w, t, {ids:['daphnia', 'spirogyra', 'rotifer'], at:SCUM, y:POND_Y + .5, from:DIP, verb:'Scoop up some pond water'});
+  sample(w, t, {ids:['tardigrade'], at:MOSS, y:sny + .5, from:[SNAG[0] + .5, SNAG[1] - 1.2], verb:'Pick a bit of wet moss'});
 
   // and life all about: a red-tailed hawk circling high, swallows over the grass, butterflies on the flowers
   life.push(soarer(w.scene, -2, 15, -4, 14, {s:1.6, body:0x7a5034, belly:0xf0e0c4, tail:0xc0583a, sp:.12}).tick);

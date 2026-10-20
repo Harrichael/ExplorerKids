@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { makeLabel } from '../characters/build.js';
 import { PERSONA } from '../characters/cast.js';
-import { C, T, XF, add, box, cyl, grp, leafCloud, mergeGeos, meshOf, outlineMat, rrect, tex } from '../core/kit.js';
+import { C, T, XF, add, box, cyl, grp, leafCloud, mergeGeos, meshOf, outlineMat, rrect, sparkTex, tex } from '../core/kit.js';
 import { Sound } from '../core/sound.js';
 import { addUsable, makeWorld } from '../core/world.js';
 import { blob, hero, player } from '../player.js';
+import { collect, has } from '../samples/index.js';
 import { game } from '../state.js';
 
 // A field trip place: a world whose frame update runs whatever its builders pushed onto w.anims.
@@ -101,4 +102,31 @@ export function curio(w, t, {name, at:[x, z], y, lines, view = [0, 1], lift = .6
       t.cut(null); game.cutscene = false;
       if (post) post();
     }});
+}
+
+// Samples for the microscope at home (samples/index.js), tucked somewhere for the explorer who wanders:
+// a glint now and then draws the eye, and taking it is quick, a note and a cheer with no talk. Dr. Sparks
+// says a word about the first few only. The place draws what's there; a spot found before is just scenery.
+//   sample(w, t, {ids:['ash'], at:[x, z], y:1.2, verb:'Scoop up some ash'})
+const SPARKS_ON = ["A sample, {name}! Keep it safe in your backpack. We'll look at it under my microscope back home.",
+  "More for your collection! You have sharp eyes, {name}.", "Look at you, {name}. A real sample collector!"];
+export function sample(w, t, {ids, at:[x, z], y, verb, from, range = 1.6}){
+  if (ids.every(has)) return null;
+  const [ax, az] = from || [x, z];
+  const glint = new THREE.Sprite(new THREE.SpriteMaterial({map:sparkTex, color:0xfff0c0, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0}));
+  glint.position.set(x, y, z); w.scene.add(glint);
+  const phase = (x*7.3 + z*3.1) % 5;
+  // a twinkle every few seconds, like sun catching something, rather than a steady beacon
+  w.anims.push((dt, tt) => { if (!glint.visible) return; const k = ((tt + phase) % 4.2)/.7;
+    glint.material.opacity = k < 1 ? Math.sin(k*Math.PI)*.95 : 0; glint.scale.setScalar(.25 + (k < 1 ? Math.sin(k*Math.PI)*.45 : 0)); glint.material.rotation = tt*.6; });
+  let taken = false;
+  const u = addUsable(w, {name:'Sample', verb, short:'Take', x:ax, z:az, y:w.ground(ax, az), range, glow:[x, y, z], when: () => !taken && !t.busy,
+    async action(){
+      if (game.cutscene || taken) return;
+      taken = true; glint.visible = false; w.scene.remove(glint);
+      const told = collect(ids);
+      if (told === null || told >= SPARKS_ON.length) return;
+      try { await t.wait(1.4); await t.say([['sparks', SPARKS_ON[told]]]); } catch (e) { if (!t.gone) throw e; }
+    }});
+  return u;
 }
