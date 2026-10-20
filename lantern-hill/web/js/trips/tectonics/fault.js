@@ -19,7 +19,7 @@ import { addUsable } from '../../core/world.js';
 import { curio, signpost, tripWorld } from '../stop-kit.js';
 import { butterflies, duck, flock, groundSquirrel, hawk, soarer } from './land-life.js';
 import { storySky } from '../sky.js';
-import { worries } from './worries.js';
+import { wonders } from './wonders.js';
 
 // The fault runs north to south along x = 0. West of it is the Pacific Plate; everything east of it
 // rides the North American Plate, and has been carried south for as long as it has been riding.
@@ -270,7 +270,7 @@ export function buildFault(t){
                  ['sparks', "Stuck plates bend, then snap free. That jolt is an earthquake."],
                  ['sparks', "And everyone did just right: drop, cover, and hold on!"],
                  ['basil', "I froze. But then I copied you, {name}."]]);
-      worries(3);
+      wonders(3);
       await say([['basil', "The ground shakes, but now I know what to do!"]]);
       t.cut(null);
     }});

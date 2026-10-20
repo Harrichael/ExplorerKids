@@ -44,6 +44,8 @@ export function classmates(w, t, door){
     find(id, f){ f.id = id; f.who = n[id]; f.mark = new THREE.Sprite(new THREE.SpriteMaterial({map:bang, transparent:true, depthWrite:false}));
       f.mark.scale.set(.6, .6, 1); f.mark.visible = false; w.scene.add(f.mark); finds.push(f); return f; },
     saw: name => [...found].some(f => f.name === name),
+    // the names of every find and curio the explorer has seen here
+    seen: () => [...[...found].map(f => f.name), ...(w.curios ? w.curios.seen : [])],
     // curios are the place's own "Look closer" secrets, which it may add any time before this is asked
     tally: () => ({seen:found.size, of:finds.length, curios:{seen:w.curios ? w.curios.seen.size : 0, of:w.curios ? w.curios.all.length : 0}}),
     // Dr. Sparks calls everyone back, teasing what's next; those still with something to show stay out

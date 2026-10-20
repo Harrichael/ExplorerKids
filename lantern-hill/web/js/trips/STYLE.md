@@ -38,6 +38,11 @@ if the child gets to do things. Never cut content to make a trip shorter. Make i
   You can interact with them and talk with them."
 - **Curiosity first.** "I really want field trips to maximize curiosity." Every place needs
   optional things to find. The deep-sea creatures at the ridge are the model he liked.
+- **Finds belong to their place.** A find can teach any science (an echo off canyon walls is
+  fine), and a joke is fine if it's done with care. What he called "filler and not as
+  exciting as the deep sea stuff" was the hawk and ground squirrels at the fault: animal
+  trivia that could sit anywhere. Wildlife earns a find when the place shapes it (vent
+  creatures, goats on cliff ledges, fuzzy alpine flowers); otherwise let it be scenery.
 - **No signs.** "I don't like the signs. It's too telly, too contrived, too limited and
   walled." A spot worth visiting should draw the eye by itself (a jutting ledge, a glow, a
   classmate peering over), never a "Lookout" or "Planted 1975" board.
@@ -61,6 +66,13 @@ if the child gets to do things. Never cut content to make a trip shorter. Make i
   leave the trip.
 - **Notebook.** *(pattern)* Juniper's notebook gets a sticker per place, with a star per find,
   so a page with gaps is a reason to play again (`notebook.js`, `tectonics/pages.js`).
+- **Collectibles are quick, and mostly hidden.** "We already have so much text." Samples for
+  the microscope at home are found with a "You found a sample!" note (sometimes "3 samples"),
+  a happy sound and no dialogue; Dr. Sparks remarks only on the first two or three. Almost all
+  are tucked away to reward wandering, placed with taste, not scattered. They ride home in
+  the backpack as unlabelled jars, a small mystery ("I wonder what it looks like?") that the
+  microscope answers. The microscope shows "N of M" with empty slots, and stays hidden until
+  the first sample.
 - **Quiz.** After the trip, Dr. Sparks offers an optional quiz. "Our first playtester ... really
   enjoyed the quiz." Make it engaging. On the telescope he asked that kids can't just spam
   clicks through things: "require more clicks to prevent spam, not confirmation, thats weak".

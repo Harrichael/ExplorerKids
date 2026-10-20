@@ -1,6 +1,6 @@
 // The plate tectonics field trip: why the ground shakes and how mountains grow, told as one ride.
 // The class lands on a volcano and wonders why it stands in a row with others; drills down through
-// the crust into the mantle and watches it turn over; rides it up to a ridge on the sea floor where
+// the crust into the mantle, too hot and soft to drill, and watches it turn over; rides it up to a ridge on the sea floor where
 // plates pull apart; flies the map to where plates meet, and picks which to see first: where they
 // crash, or where they slide past each other, then goes on to the other; and on the way home, sees
 // the volcano again and knows why it is there.
@@ -22,7 +22,7 @@ import { buildRidge } from './ridge.js';
 import { buildRim } from './rim.js';
 import { buildFault } from './fault.js';
 import { buildValley } from './valley.js';
-import { worries } from './worries.js';
+import { wonders } from './wonders.js';
 
 // A question about the place just left. A wrong answer gets a hint and another go; a second miss
 // gets the answer, so every explorer ends on the right idea without getting stuck.
@@ -70,9 +70,9 @@ export const tectonics = {
       t.cut(cab.shot('teacher'));
       await t.say([['sparks', "That's a volcano! And that's where we're landing."]]);
       t.cut(cab.shot('class'));
-      await t.say([['basil', "I knew I should have stayed home."], ['basil', "I made a worry list. Just in case."]]);
-      worries();
-      await t.say([['sparks', "Let's see how many we can cross off today, Basil!"]]);
+      await t.say([['basil', "I knew I should have stayed home."], ['basil', "I made a list of things I wonder about. Just in case."]]);
+      wonders();
+      await t.say([['sparks', "Wonderful questions, Basil! Let's see how many this trip can answer."], ['basil', "Answers I can handle. It's the surprises I'm not sure about."]]);
     }],
     ['the volcano rim', async (t, {cab, dg, rim, seat, places}) => {
       await rim.arrive();
@@ -84,7 +84,7 @@ export const tectonics = {
       const S = dg.S; S.mode = 'earth'; S.gear = 'drill'; S.depth = true; S.bus = [dg.VOLCANO, 60];
       t.watch(dg.world, dg.frame(800, 300, 1.7));
       const dive = dg.travel([[dg.VOLCANO, 60], [dg.VOLCANO, 120], [dg.VOLCANO, dg.surfaceY(dg.VOLCANO) + 18], [dg.VOLCANO + 6, 330]], 6);
-      await t.say([['sparks', "Here's us, class, drilling down through the volcano!"]]);
+      await t.say([['sparks', "Here's us, class, drilling down through the volcano, nose first!"]]);
       await dive;
       cab.view('rock'); t.watch(cab.world, cab.shot('window'), seat);
       await t.say([['mo', "Rocks! Rocks everywhere!"]]);
@@ -107,12 +107,23 @@ export const tectonics = {
       await deeper;
       t.watch(cab.world, cab.shot('class'), seat);
       await t.say([['basil', "It's getting hot in here. Is the bus going to melt?"]]);
-      const dust = puffs(cab.world, 2, 1.3, 0, {rate:0, rise:.3, size:1.3, color:0x8a6a5a, opacity:.6, spread:1.8, life:1.6});
-      dust.burst = .5; game.camShake = 3; S.gear = null;
-      Sound.tone(110, {type:'sawtooth', dur:.5, vol:.12, f2:45, cut:600}); Sound.hiss({dur:.6, vol:.16, type:'lowpass', freq:500}); Sound.tone(1500, {type:'square', t:.08, dur:.05, vol:.03, cut:3000});
-      await t.wait(1);
-      await t.say([['pip', "Uh oh. The drill bit just snapped off!"], ['basil', "I KNEW I should have stayed home."],
-                   ['sparks', "No drill? Then we'll let the Earth carry us up!"], ['sparks', "Heat bubble, on!"]]);
+      // the drill whirs on, but the hot rock only smears round it, like toothpaste, and the bus slows to a crawl
+      const goo = puffs(cab.world, 2, 1.3, 0, {rate:0, rise:.2, size:1.1, color:0xb0503a, opacity:.5, spread:1.8, life:1.8});
+      cab.view('stuck'); goo.burst = .4; game.camShake = 1.2;
+      Sound.tone(150, {type:'sawtooth', dur:1.6, vol:.06, f2:70, cut:500, vib:[6, 8]}); Sound.hiss({dur:1.2, vol:.08, type:'lowpass', freq:350});
+      await t.wait(1.2);
+      await t.say([['pip', "The drill's still spinning, but we're hardly moving!"], ['mo', "It sounds like a straw at the bottom of a milkshake."],
+                   ['sparks', "That's the mantle for you! Down here, the rock is so hot it's gone soft, like warm toothpaste."],
+                   ['sparks', "It squeezes in round the drill as fast as we dig. A drill needs hard, crunchy rock to bite."],
+                   ['basil', "So we're STUCK? I KNEW I should have stayed home."]]);
+      if (await t.more('sparks', "Want to hear about the deepest hole anyone has ever dug?"))
+        await t.say([['sparks', "Scientists in Russia drilled for twenty years, more than twelve kilometers down."],
+                     ['sparks', "Then the rock got so hot it went squishy, like ours. The hole kept squeezing shut, so they had to stop."],
+                     ['juniper', "And that was still only the crust? Nobody has ever drilled all the way to the mantle?"], ['sparks', "Nobody but us!"]]);
+      await t.say([['sparks', "We're not stuck, Basil. If we can't dig, we'll ride!"],
+                   ['sparks', "Some of this hot rock is slowly rising. We'll float up with it, like a raft on a river."]]);
+      S.gear = null; Sound.tone(1046, {type:'triangle', dur:.2, vol:.07}); Sound.tone(523, {type:'triangle', t:.15, dur:.3, vol:.07});
+      await t.say([['sparks', "Drill in! Heat bubble, on!"]]);
     }],
     ['the mantle', async (t, {cab, dg, rim, seat, places}) => {
       const mantle = buildMantle(t);

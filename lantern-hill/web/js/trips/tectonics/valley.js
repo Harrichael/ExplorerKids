@@ -35,6 +35,8 @@ const BUS = [12, 4], BUS_RY = Math.PI/2;
 const RUG = [-29.4, -29.2], HILL = [-22, -14], LOOKOUT = [6, -9], ROCK = [-5, 6.6], POOL = [HEAD[0] - 3, HEAD[1] + 3.2];
 // the time goggles' cutaway sits deep under the valley, where nothing above it can be seen
 const CUT = [0, -80, 0];
+// the shell layer, pale limestone that was once sea floor: in the canyon walls, the hilltop and the goggles' slice
+const SHELL = 0xe6dccb;
 
 // the land with no canyon or stream cut into it: rolling meadow, foothills rising north to the mountains,
 // steep slopes east and west, a river along the south
@@ -78,7 +80,10 @@ const FLAT_Y = FLATS.map(([x, z]) => land(x, z));
 function H(x, z){
   let h = land(x, z);
   const c = canyonAt(x, z);
-  if (c) { const fl = Math.min(floorY(c.s), h), w = halfW(c.s), k = sm(w, w + 2 + .16*(h - fl), c.d); h = fl + (h - fl)*k; }
+  // the walls are pushed back in places, never forward, into gullies between buttresses: a ripple that
+  // depends on x and z only, so it runs straight up the face and the walls read as standing upright
+  if (c) { const fl = Math.min(floorY(c.s), h), w = halfW(c.s), gul = .5 + .5*Math.sin(x*1.15 + 2.2*Math.sin(z*.43)) * Math.sin(z*1.05 + 1.8*Math.sin(x*.37));
+    const k = sm(w, w + 1.6 + .12*(h - fl), c.d - .8*sm(w, w + 1.5, c.d)*gul); h = fl + (h - fl)*k; }
   FLATS.forEach(([fx, fz, r], i) => { const y = i === 3 ? floorY(1) : FLAT_Y[i]; h = y + (h - y)*sm(r, r + 2.2, Math.hypot(x - fx, z - fz)); });
   const st = streamAt(x, z); if (st && st.d < 1.2) h -= .36*(1 - sm(.35, 1.15, st.d));
   return h;
@@ -102,7 +107,7 @@ export function buildValley(t){
     const k = inCanyon(x, z); if (!k) return null;
     const c = canyonAt(x, z), sx = -c.tz, sz = c.tx, side = sz < 0 ? -1 : 1;
     const ox = (-c.tx*6.2 + sx*side*1.4)*k, oz2 = oz + ((-c.tz*6.2 + sz*side*1.4) - oz)*k, gy = H(x, z);
-    return [ox, Math.max(oy + (3.3 - oy)*k, H(x + ox, z + oz2) - gy + 1.6), oz2];
+    return [ox, Math.max(oy + (2.8 - oy)*k, H(x + ox, z + oz2) - gy + 1.6), oz2];
   };
   w.spawn = [BUS[0] - 1.6, BUS[1] - 1.6, Math.PI];
   storySky(w, {sun:[-9, 16, 7], clouds3d:[[-90, 62, -70, 26], [60, 70, -110, 30], [100, 46, -20, 22], [-120, 50, 10, 26], [140, 56, 40, 28], [-50, 40, 70, 18]]});
@@ -115,9 +120,9 @@ export function buildValley(t){
     const gy = H(...ROCK);
     box2(.22, .06, .1, 0xd9a441, ROCK[0] + .45, gy + .5, ROCK[1] - .5, .3);
     sph(.09, T(0xc0483a), ROCK[0] - .4, gy + .52, ROCK[1] - .45, null, 10);
-    // the shell, in a knob of the bluish shell rock poking out of the hilltop
+    // the shell, in a knob of the pale shell rock poking out of the hilltop
     const hy = H(...HILL);
-    meshOf(mergeGeos([[new THREE.DodecahedronGeometry(.7, 1), XF(HILL[0] + .3, hy + .05, HILL[1] - .9, 1.3, .55, 1)], [new THREE.DodecahedronGeometry(.45, 1), XF(HILL[0] - .5, hy, HILL[1] - .4, 1, .5, 1.1)]]), 0x56688c, w.scene, .03);
+    meshOf(mergeGeos([[new THREE.DodecahedronGeometry(.7, 1), XF(HILL[0] + .3, hy + .05, HILL[1] - .9, 1.3, .55, 1)], [new THREE.DodecahedronGeometry(.45, 1), XF(HILL[0] - .5, hy, HILL[1] - .4, 1, .5, 1.1)]]), 0xcfc2aa, w.scene, .03);
     fossil = sph(.16, T(0xf3e6c8), HILL[0] + .6, hy + .08, HILL[1] - .2, null, 10); fossil.scale.set(1, .4, .9); outline(fossil, 1.12);
     for (let k = 0; k < 4; k++) add(new THREE.BoxGeometry(.02, .03, .3), T(0xb89a72), (k - 1.5)*.05, .1, 0, fossil, false).rotation.y = (k - 1.5)*.4;
     // Basil's pebble, round and pale among the darker stones in the stream
@@ -189,7 +194,7 @@ export function buildValley(t){
       const gy = H(...LOOKOUT);
       t.cut((pos, look) => { pos.set(LOOKOUT[0] + 2, gy + 2.4, LOOKOUT[1] + 5); look.set(LOOKOUT[0] - 1, gy + 7, LOOKOUT[1] - 20); });
       await say([['pip', pick === 0 ? "You were right! It crumpled up into a mountain!" : "Whoa! It didn't do that. It crumpled up into a mountain!"],
-                 ['pip', "And see the blue layer with the shells? It went all the way to the top!"],
+                 ['pip', "And see the pale shell layer, full of seashells? It went all the way to the top!"],
                  ['pip', "Hey! Something's glinting up on that hill!"]]);
       crumpled = glinting = true;
       t.cut(null);
@@ -209,7 +214,7 @@ export function buildValley(t){
       t.cut((pos, look) => { pos.set(HILL[0] - 1.6, fy + 2.2, HILL[1] + 3); look.set(HILL[0] + .6, fy + .1, HILL[1] - .2); });
       fossil.position.y = fy + .42; Sound.tone(880, {type:'triangle', dur:.2, vol:.07}); Sound.tone(1318, {type:'triangle', t:.12, dur:.4, vol:.06});
       await say([['pip', "A seashell! Made of stone. Way up on a mountain!"],
-                 ['pip', "Remember the time goggles? The shell layer went all the way up."],
+                 ['pip', "Remember the time goggles? The pale shell layer went all the way up."],
                  ['pip', "This mountain top was once the sea floor!"]]);
       t.cut(null);
     }});
@@ -298,13 +303,21 @@ const box2 = (wd, h, d, c, x, y, z, ry) => { const m = add(new THREE.BoxGeometry
 // the same layers crumpled the same way; high up they go blue with distance and white with snow.
 const FOLD = `float fold(vec3 p){ return 3.4*cos((p.x + 24.)*.19)*(.65 + .35*cos(p.z*.09)) + 1.1*sin(p.x*.41 + p.z*.23); }`;
 function landMaterial(){
-  const strata = tex(128, 1024, (c, cw, ch) => {
-    const bands = [['#e9d2a2', 140], ['#b9663e', 104], ['#d9a86c', 168], ['#7a4a3a', 80], ['#c98e58', 128], ['#6f88ae', 92], ['#e2c08e', 148], ['#9a5e4e', 164]];
+  const shell = '#' + SHELL.toString(16);
+  const strata = tex(1024, 1024, (c, cw, ch) => {
+    // the shell layer is pale limestone, old sea floor, set between two darker bands so it stands out
+    const bands = [['#e9d2a2', 140], ['#b9663e', 104], ['#d9a86c', 168], ['#7a4a3a', 80], ['#c98e58', 128], [shell, 112], ['#a86848', 136], ['#d6a070', 156]];
     let y = 0;
     for (const [col, hgt] of bands) { c.fillStyle = col; c.fillRect(0, y, cw, hgt);
-      c.fillStyle = 'rgba(255,255,255,.12)'; c.fillRect(0, y, cw, 10);
-      for (let i = 0; i < 40; i++) { c.fillStyle = i % 2 ? 'rgba(40,24,30,.13)' : 'rgba(255,240,220,.16)'; c.beginPath(); c.ellipse(Math.random()*cw, y + 14 + Math.random()*(hgt - 24), 3 + Math.random()*8, 2 + Math.random()*2.5, 0, 0, 7); c.fill(); }
-      c.fillStyle = 'rgba(42,26,34,.8)'; c.fillRect(0, y + hgt - 5, cw, 5);
+      // a sunlit lip on top of each layer and a shadowed underside, so each one sits out like a little ledge
+      c.fillStyle = 'rgba(255,246,226,.3)'; c.fillRect(0, y, cw, 12);
+      const sh = c.createLinearGradient(0, y + hgt - 34, 0, y + hgt); sh.addColorStop(0, 'rgba(60,30,30,0)'); sh.addColorStop(1, 'rgba(60,30,30,.3)'); c.fillStyle = sh; c.fillRect(0, y + hgt - 34, cw, 34);
+      for (let i = 0; i < 160; i++) { c.fillStyle = i % 2 ? 'rgba(40,24,30,.13)' : 'rgba(255,240,220,.16)'; c.beginPath(); c.ellipse(Math.random()*cw, y + 16 + Math.random()*(hgt - 30), 8 + Math.random()*24, 3 + Math.random()*5, 0, 0, 7); c.fill(); }
+      if (col === shell) for (let i = 0; i < 70; i++) { const sx = Math.random()*cw, sy = y + 26 + Math.random()*(hgt - 48), r = 6 + Math.random()*4, a = (Math.random() - .5)*.8;
+        c.save(); c.translate(sx, sy); c.rotate(a); c.fillStyle = '#fbf4e4'; c.strokeStyle = 'rgba(120,90,64,.6)'; c.lineWidth = 1.8;
+        c.beginPath(); c.moveTo(0, r*.7); c.arc(0, 0, r, Math.PI*.95, Math.PI*.05); c.closePath(); c.fill(); c.stroke();
+        for (let k = -1; k <= 1; k++) { c.beginPath(); c.moveTo(0, r*.7); c.lineTo(k*r*.55, -r*.75); c.stroke(); } c.restore(); }
+      c.fillStyle = 'rgba(42,26,34,.85)'; c.fillRect(0, y + hgt - 7, cw, 7);
       y += hgt; }
   });
   strata.wrapS = strata.wrapT = THREE.RepeatWrapping;
@@ -313,10 +326,10 @@ function landMaterial(){
   m.onBeforeCompile = s => {
     Object.assign(s.uniforms, {strata:{value:strata}, gLo:{value:col(0x4f8a46)}, gHi:{value:col(0x76a554)}, gDry:{value:col(0x9aa860)}, gHigh:{value:col(0x5c7e62)},
       sand:{value:col(0xc9ae86)}, far:{value:col(0x6f8cb8)}, snow:{value:col(0xe4e8f0)}});
-    s.vertexShader = s.vertexShader.replace('#include <common>', '#include <common>\nattribute float tint; varying float vTint; varying vec3 vWp; varying vec3 vWn;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWp = (modelMatrix*vec4(transformed, 1.)).xyz; vWn = normalize(mat3(modelMatrix)*objectNormal); vTint = tint;');
+    s.vertexShader = s.vertexShader.replace('#include <common>', '#include <common>\nattribute float tint; attribute float cav; varying float vTint; varying float vCav; varying vec3 vWp; varying vec3 vWn;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWp = (modelMatrix*vec4(transformed, 1.)).xyz; vWn = normalize(mat3(modelMatrix)*objectNormal); vTint = tint; vCav = cav;');
     s.fragmentShader = s.fragmentShader.replace('#include <common>', `#include <common>
-      uniform sampler2D strata; uniform vec3 gLo, gHi, gDry, gHigh, sand, far, snow; varying float vTint; varying vec3 vWp; varying vec3 vWn;
+      uniform sampler2D strata; uniform vec3 gLo, gHi, gDry, gHigh, sand, far, snow; varying float vTint; varying float vCav; varying vec3 vWp; varying vec3 vWn;
       ${FOLD}`)
       .replace('#include <color_fragment>', `
       vec3 n = normalize(vWn); float steep = 1. - n.y;
@@ -327,8 +340,18 @@ function landMaterial(){
       float peb = sin(vWp.x*5.1 + sin(vWp.z*3.7)*2.)*sin(vWp.z*4.3 + sin(vWp.x*2.9)*2.);
       gr = mix(gr, sand*(.9 + .1*smoothstep(.4, .9, peb)), vTint);
       float b = vWp.y - fold(vWp);
-      vec3 rk = sRGBToLinear(texture2D(strata, vec2(fract((vWp.x + vWp.z)*.04), b/9.6))).rgb;
+      vec3 rk = sRGBToLinear(texture2D(strata, vec2(fract((vWp.x + vWp.z)*.1), b/9.6))).rgb;
+      // steep faces a shade darker and cooler than the tops, streaked and cracked by patterns of x and z
+      // alone, so every mark runs straight up and down the face
+      float face = smoothstep(.55, .95, steep);
+      float streak = sin(vWp.x*1.3 + 2.5*sin(vWp.z*.5))*sin(vWp.z*1.1 + 2.5*sin(vWp.x*.45));
+      float crack = (1. - smoothstep(.03, .1, abs(sin(vWp.x*.9 + vWp.z*.7 + 1.6*sin(vWp.x*.37 - vWp.z*.52)))))*smoothstep(-.2, .4, sin(vWp.y*.8 + vWp.x*.6 + vWp.z*.3));
+      rk *= mix(vec3(1.), vec3(.8, .75, .78)*(1. + .12*streak), face);
+      rk = mix(rk, vec3(.12, .07, .08), crack*face*.8);
       vec3 c = mix(gr, rk, smoothstep(.5, .58, steep + .03*mot));
+      // shade where a wall meets the floor, and a warm glint along each cliff's top edge
+      c *= 1. - .4*smoothstep(.1, 1.1, vCav);
+      c += vec3(.2, .12, .04)*smoothstep(.15, .9, -vCav)*(1. - .5*face);
       c = mix(c, far, smoothstep(45., 110., -vWp.z)*.6);
       c = mix(c, snow, smoothstep(31., 33., vWp.y + 3.*mot)*(1. - smoothstep(.55, .75, steep)*.7));
       diffuseColor.rgb *= c;`);
@@ -341,9 +364,15 @@ function grid(x0, x1, z0, z1, step, keep){
     pos[v*3] = x; pos[v*3 + 1] = H(x, z); pos[v*3 + 2] = z;
     const c = canyonAt(x, z), st = streamAt(x, z), dr = Math.abs(z - riverZ(x));
     tint[v] = Math.max(c ? (1 - sm(halfW(c.s) - 1.2, halfW(c.s) + .4, c.d))*sm(.1, .3, c.s) : 0, st ? 1 - sm(.7, 1.6, st.d) : 0, 1 - sm(3, 4.4, dr)); }
+  // how much higher the land a step or two round about is: up where a wall meets the floor (shade it),
+  // down along a cliff's top edge (catch the light on it)
+  const cav = new Float32Array(tint.length), r = Math.max(1, Math.round(1.5/step)), hy = v => pos[v*3 + 1];
+  for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) { let s = 0, n = 0;
+    for (const [di, dj] of [[r, 0], [-r, 0], [0, r], [0, -r], [r, r], [-r, -r], [r, -r], [-r, r]]) { const a = i + di, b = j + dj; if (a < 0 || b < 0 || a > nx || b > nz) continue; s += hy(b*(nx + 1) + a); n++; }
+    cav[j*(nx + 1) + i] = s/n - hy(j*(nx + 1) + i); }
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { if (keep && !keep(x0 + (i + .5)*step, z0 + (j + .5)*step)) continue;
     const a = j*(nx + 1) + i, b = a + nx + 1; idx.push(a, b, a + 1, a + 1, b, b + 1); }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('tint', new THREE.BufferAttribute(tint, 1));
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('tint', new THREE.BufferAttribute(tint, 1)); g.setAttribute('cav', new THREE.BufferAttribute(cav, 1));
   g.setIndex(idx); g.computeVertexNormals(); return g;
 }
 // a strip of water along a path, a little below the banks
@@ -379,6 +408,24 @@ function buildLand(w){
     for (const sd of [-1, 1]) if (frand() < .7) rocks(x - q.tz*hw*sd, z + q.tx*hw*sd, fr(.5, .9), 2); }
   for (let x = -28; x < 30; x += fr(3, 6)) { const z = -18 + 3*Math.sin(x*.2), d = canyonAt(x, z); if (d && d.d < halfW(d.s) + 4) continue; if (slope(x, z) < .9) rocks(x, z, fr(.6, 1.1), 2); }
   for (let z = -16; z < 16; z += fr(3, 5)) { rocks(29 + fr(-1, 1), z, fr(.6, 1.2), 2); rocks(-31 + fr(-1, 1), z, fr(.6, 1.2), 2); }
+  // scree banked against the foot of each canyon wall, bits broken off the layers above
+  for (let i = 4; i < CANYON.length; i += 2) { const [x, z] = CANYON[i], q = along(CANYON, x, z), s = i/(CANYON.length - 1), hw = halfW(s);
+    for (const sd of [-1, 1]) for (let k = 0; k < 3; k++) { if (frand() < .4) continue; const d = hw + fr(.2, .9), o = fr(-.6, .6), bx = x - q.tz*d*sd + q.tx*o, bz = z + q.tx*d*sd + q.tz*o, r = fr(.1, .24);
+      bAdd([0x9a7460, 0x8a6a5a, 0xa8846a][k], new THREE.DodecahedronGeometry(r, 0), XF(bx, H(bx, bz) + r*.2, bz, 1.1, fr(.5, .8), 1, fr(0, 6), fr(0, 6), 0), {ink:.02}); } }
+  // the hard layers, the shell limestone and a sandstone, stand out of the walls as ledges where the softer
+  // rock round them has worn back; each follows its layer's fold, so it lines up with the bands painted on the face
+  const foldAt = (x, z) => 3.4*Math.cos((x + 24)*.19)*(.65 + .35*Math.cos(z*.09)) + 1.1*Math.sin(x*.41 + z*.23);
+  for (const [b0, b1, col] of [[2.74, 3.79, 0xbcae96], [5.74, 7.31, 0xb07e50]]) for (let i = 3; i < CANYON.length - 1; i++) for (const sd of [-1, 1]) {
+    if (frand() < .55) continue;
+    const [cx, cz] = CANYON[i], q = along(CANYON, cx, cz), s = i/(CANYON.length - 1), nx = -q.tz*sd, nz = q.tx*sd, fl = floorY(s);
+    for (let k = -1; k < 3; k++) { const y = foldAt(cx, cz) + b1 - .02 + k*9.6, hb = b1 - b0;
+      if (y - hb < fl + 1.6) continue;
+      let d = halfW(s); while (H(cx + nx*d, cz + nz*d) < y - hb*.5 && d < halfW(s) + 8) d += .05;
+      // only where there's face above it, never perched on the rim
+      if (d >= halfW(s) + 8 || H(cx + nx*(d + 1.2), cz + nz*(d + 1.2)) < y + .8) continue;
+      const x = cx + nx*(d - .06), z = cz + nz*(d - .06), len = fr(1.6, 2.8), tilt = Math.atan((foldAt(x + q.tx*.5, z + q.tz*.5) - foldAt(x - q.tx*.5, z - q.tz*.5)));
+      if (Math.abs(tilt) > .4) continue;
+      bAdd(col, new THREE.DodecahedronGeometry(1, 0), XF(x, y - hb*.2, z, len*.5, hb*.22, .3, 0, Math.atan2(-q.tz, q.tx), tilt), {ink:.03, shadow:true}); } }
 
   // trees in clumps, round and inked like the ones at home
   const trees = [[20, -7], [23, -11], [25, -4], [19, -13], [26, -9], [-24, 6], [-21, 10], [-26, 12], [-18, 14], [24, 12], [27, 7], [21, 15], [-14, -4], [-3, -14], [17, -16]];
@@ -482,7 +529,7 @@ function buildCutaway(w){
   // interfaces bottom to top; the shell layer only exists in the basin between the two continents
   const basin = x => 1 - Math.min(1, Math.max(0, (Math.abs(x) - 1.8)/1.4));
   const tops = [x => -2.2, x => -1.3 - .3*basin(x), x => -.55 - .6*basin(x), x => .8 - 1.5*basin(x), x => .8 - 1.15*basin(x)];
-  const cols = [0x6a3e3a, 0xb0683e, 0xe0b47a, 0x8a5a48, 0x7a9ac4];
+  const cols = [0x6a3e3a, 0xb0683e, 0xe0b47a, 0x8a5a48, SHELL];
   const strip = (mat, z) => { const geo = new THREE.BufferGeometry(), idx = [];
     for (let i = 0; i < N; i++) { const a = i*2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((N + 1)*6), 3)); geo.setIndex(idx);

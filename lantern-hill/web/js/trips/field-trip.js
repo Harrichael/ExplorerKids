@@ -165,7 +165,7 @@ function run(from = 0){
 }
 function makeDirector({leave = true} = {}){
   let held = null;
-  const d = {gone:false, ends:[() => { if (held) held.parent.remove(held); held = null; }]};
+  const d = {gone:false, heard:new Set(), ends:[() => { if (held) held.parent.remove(held); held = null; }]};
   const live = p => p.then(v => { if (d.gone) throw GONE; return v; });
   const frames = test => live(new Promise(ok => { const f = () => d.gone || test() ? ok() : requestAnimationFrame(f); f(); }));
   Object.assign(d, {
@@ -188,8 +188,9 @@ function makeDirector({leave = true} = {}){
     // shown in a shuffled order, so the right answer isn't always first; resolves with its index as given
     ask: (who, text, answers) => { const order = answers.map((a, i) => i).sort(() => Math.random() - .5);
       return live(new Promise(ok => ask(who, text, order.map(i => answers[i]), j => ok(order[j])))); },
-    // an extra the explorer can ask for or skip, its two answers always in the same places; resolves true if asked for
-    more: (who, text) => live(new Promise(ok => ask(who, text, ["Tell me more!", "Let's keep going!"], i => ok(i === 0)))),
+    // an extra the explorer can ask for or skip, its two answers always in the same places; resolves true if asked for.
+    // What was asked for is kept in d.heard, for the Explorer Check.
+    more: (who, text) => live(new Promise(ok => ask(who, text, ["Tell me more!", "Let's keep going!"], i => { if (i === 0) d.heard.add(text); ok(i === 0); }))),
     wait: s => { const end = game.elapsed + s; return frames(() => game.elapsed >= end); },
     // f(k) every frame as k runs from 0 to 1 over s seconds of game time
     tween: (s, f) => { const t0 = game.elapsed; return frames(() => { const k = Math.min(1, (game.elapsed - t0)/s); f(k); return k >= 1; }); },
@@ -217,6 +218,7 @@ function makeDirector({leave = true} = {}){
 }
 const endTrip = d => { if (d) d.ends.splice(0).forEach(f => f()); };
 function returnHome(shared){
+  if (trip.quiz) { const q = trip.quiz, had = (load('trips') || {})[q.pool] || []; save('trips', {[q.pool]: [...new Set([...had, ...q.found(shared, dir.heard)])]}); }
   endTrip(dir); dir = null;
   pageTurn(() => {
     Sound.setTheme('home'); away(false); enterWorld(HQ, [17.4, 2.4, -2.5]); hero.root.visible = false; blob.visible = false; leaveBtn.hidden = true; objective('');
@@ -253,19 +255,20 @@ function offerCheck(t, shared){
   ask('sparks', "Oh, {name}! Before you go… want to try my Explorer Check? It's up on a cloud!", ["Yes, let's go!", "Maybe later"],
     i => i ? story([['sparks', "Any time! Just hop on the Wonder Bus and ask."]]) : startCheck(t, shared));
 }
-// shared: what the trip just played remembered, for hints about what the explorer saw; none when
-// started from the bus at HQ
+// shared: what the trip just played remembered, for its badge; none when started from the bus at HQ.
+// The questions come from what was found on every trip so far, so they're drawn the same way from either.
 export function startCheck(t, shared = null){
   if (TRIP.on || game.cutscene) return;
   trip = t; TRIP.on = true; Sound.setTheme('trip');
   // the check's own way home is the Wonder Bus, parked on the cloud
   const me = dir = makeDirector({leave:false});
   pageTurn(() => { away(true); van.visible = false;
-    explorerCheck(me, t.quiz.questions(shared && shared.places)).then(stars => { if (dir === me) checkDone(t, shared, stars); }, e => { if (e !== GONE) throw e; });
+    const qs = t.quiz.questions((load('trips') || {})[t.quiz.pool]);
+    explorerCheck(me, qs).then(stars => { if (dir === me) checkDone(t, shared, stars, qs.length); }, e => { if (e !== GONE) throw e; });
   }, null, ['The Explorer Check', 'Up on a cloud']);
 }
-function checkDone(t, shared, stars){
-  const saved = load('trips') || {}, best = Math.max(saved[t.quiz.key] || 0, stars), of = t.quiz.questions().length;
+function checkDone(t, shared, stars, of){
+  const saved = load('trips') || {}, best = Math.max(saved[t.quiz.key] || 0, stars);
   // a first perfect score shows the badge again, with its new ring of stars
   const newly = stars === of && (saved[t.quiz.key] || 0) < of;
   save('trips', {[t.quiz.key]: best});

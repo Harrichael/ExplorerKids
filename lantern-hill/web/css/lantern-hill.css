@@ -225,21 +225,7 @@ button.snd:focus-visible,button.word:focus-visible{outline:3px solid #6d3b5e;out
 .use.big{left:16px;right:16px;bottom:auto;top:calc(max(120px, 26%) + env(safe-area-inset-top,0px));margin:0 auto;width:fit-content;max-width:calc(100% - 32px);height:auto;border-radius:24px;padding:18px 28px;font-size:26px;line-height:1.15;z-index:6;animation:popin .25s ease-out,bigpulse 1.2s ease-in-out .25s infinite}
 @keyframes bigpulse{50%{box-shadow:0 0 0 3px var(--ink),0 0 34px rgba(255,211,107,.9)}}
 #prompt.big{bottom:auto;top:calc(max(120px, 26%) + env(safe-area-inset-top,0px));font-size:28px;line-height:1.3;padding:14px 28px;white-space:normal;max-width:calc(100% - 32px);box-sizing:border-box}
-/* Basil's worry list, each worry crossed off as a place shows it can't happen */
-#worries{position:fixed;top:calc(84px + env(safe-area-inset-top,0px));left:16px;right:16px;margin:0 auto;width:fit-content;max-width:min(360px,calc(100% - 32px));box-sizing:border-box;z-index:5;pointer-events:none;
-  background:#efe0bf;color:#1a1320;border:3px solid var(--gold);border-radius:14px;box-shadow:0 0 0 4px var(--ink),0 10px 26px rgba(0,0,0,.45);padding:8px 16px 10px;transform:rotate(-1.5deg);animation:popin .35s cubic-bezier(.3,1.4,.5,1);
-  background-image:repeating-linear-gradient(transparent 0 23px,rgba(52,64,107,.16) 23px 24px)}
-#worries b{display:block;font-family:var(--display);font-weight:400;font-size:17px;color:#6d3b5e;margin-bottom:2px}
-#worries ol{margin:0;padding-left:22px;font-weight:800;font-size:14.5px;line-height:24px}
-#worries li{position:relative;width:fit-content}
-#worries li::after{content:'';position:absolute;left:-2px;top:50%;height:3px;width:0;background:var(--rust);border-radius:2px}
-#worries li.done{opacity:.55}
-#worries li.done::after{width:calc(100% + 4px)}
-#worries li.now::after{animation:strike .6s .9s ease-out forwards}
-#worries li.brave{list-style:none;margin-left:-22px;color:#2f8f8a;opacity:0;animation:appear .4s 1.6s forwards}
-@keyframes strike{to{width:calc(100% + 4px)}}
-@keyframes appear{to{opacity:1}}
-@media (prefers-reduced-motion: reduce){#worries,.use.big{animation:none}#worries li.now::after{animation:none;width:calc(100% + 4px)}#worries li.brave{animation:none;opacity:1}}
+@media (prefers-reduced-motion: reduce){.use.big{animation:none}}
 /* the talk box stays readable over the goggles and binoculars */
 #dialog{z-index:5}
 /* Time goggles: a brass rim round the view and a counter of the years rushing by */

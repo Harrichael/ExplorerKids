@@ -8,6 +8,8 @@
 //     {who:'pip', q:"Which is bigger?", answers:[["The sun", drawSun], ["The moon", drawMoon]],   // the first is right
 //      hint:"Think of how far away it is.", yay:"The sun! It only looks small."}, ...]);
 //
+// A question marked secret:true came from something the explorer found off the path, and says so.
+//
 // A picture is drawn like a notebook sticker, draw(ctx, 240, 170). The explorer may climb back aboard
 // the bus at any time to stop; it resolves with the stars so far.
 
@@ -140,10 +142,10 @@ export function explorerCheck(t, questions){
     c.fillStyle = '#1a1320'; c.font = `900 ${label.length > 22 ? 27 : 33}px Nunito, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; wrap(c, label, 160, 218, 304, 30);
     ct.needsUpdate = true;
   }
-  function paintFloor(n, of, text){
+  function paintFloor(n, of, text, secret){
     const {c, t: ft} = floorPaint;
     c.fillStyle = '#efe0bf'; c.fillRect(0, 0, 1024, 220); c.strokeStyle = '#d9a441'; c.lineWidth = 12; c.strokeRect(8, 8, 1008, 204);
-    c.fillStyle = '#6d3b5e'; c.font = '900 26px Nunito, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; if (n) c.fillText(`QUESTION ${n} OF ${of}`, 512, 42);
+    c.fillStyle = '#6d3b5e'; c.font = '900 26px Nunito, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; if (n) c.fillText(`QUESTION ${n} OF ${of}${secret ? '   ✦ FROM A SECRET YOU FOUND ✦' : ''}`, 512, 42);
     c.fillStyle = '#1a1320'; c.font = `${text.length > 60 ? 46 : 54}px Caprasimo, Georgia, serif`; wrap(c, text, 512, 132, 920, 56); ft.needsUpdate = true;
   }
   // the explorer, lifted along in a hop; resolves on landing
@@ -202,7 +204,7 @@ export function explorerCheck(t, questions){
       // with two answers, the middle arch stays shut and they stand either side
       if (order.length === 2) order.splice(1, 0, undefined);
       t.goal(`Explorer Check  ${'★'.repeat(got)}${'☆'.repeat(questions.length - got)}`);
-      paintFloor(n + 1, questions.length, q.q);
+      paintFloor(n + 1, questions.length, q.q, q.secret);
       raise(q, order);
       await t.say([[q.who, q.q]]);
       let missed = false;
@@ -236,7 +238,7 @@ export function explorerCheck(t, questions){
       t.goal(`Explorer Check  ${'★'.repeat(got)}${'☆'.repeat(of - got)}`); paintFloor(0, of, `${count} out of ${of}!`);
       if (got === of) { party(); cheer(undefined, 4);
         await t.say([['sparks', `${of} stars out of ${of}! A perfect Explorer Check, {name}!`], ['juniper', "Every single one! I'm giving you a gold star in my notebook."],
-                     ['basil', "And every worry, crossed off. Thanks, {name}."]]); }
+                     ['basil', "And every 'I wonder' on my list, answered. Thanks, {name}."]]); }
       else if (got >= of - 2) { cheer(undefined, 2.5);
         await t.say([['sparks', `${count} out of ${of}! Wonderful exploring, {name}!`], ['mo', "That's almost all of them! Snack to celebrate?"]]); }
       else await t.say([['sparks', `${count}, {name}! And you found every answer in the end. That's what explorers do!`],

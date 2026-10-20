@@ -10,18 +10,19 @@ import { hero, player } from '../../player.js';
 import { game } from '../../state.js';
 import { tripBus } from '../bus.js';
 import { classmates } from '../class.js';
-import { curio, puffs, signpost, tripWorld } from '../stop-kit.js';
+import { curio, puffs, tripWorld } from '../stop-kit.js';
 import { lavaLake } from './lava.js';
 import { plume } from './plume.js';
 import { storySky } from '../sky.js';
-import { worries } from './worries.js';
+import { wonders } from './wonders.js';
 
 // the crater sits at the origin; the walkable rim is the ring around it
 const CRATER = 6.6, RIM = 14.2, LAVA = -6.8, SEA = -34;
 // the other volcanoes along the coast, all on one line, the line where two plates meet
 const CHAIN = [[130, -26], [205, -41], [285, -57], [-125, 25], [-215, 43]];
 const VENT = [6.8, 5.4], POOL = [-7.6, 6.2], TOAST = [-9.6, .8];
-// the lookout: off to the south-west, clear of the finds, with the plume rising off to one side
+// the ledge: a slab jutting out over the crater to the south-west, clear of the finds, lit from below by
+// the lava, with the plume rising off to one side
 const LOOK = [-5.5, -5.5];
 // the bus parks on the east of the rim, nose to the north, its door toward the crater
 const BUS = [10.6, 3.2], BUS_RY = Math.PI/2;
@@ -33,7 +34,7 @@ const binoc = document.createElement('div'); binoc.id = 'binoc'; binoc.hidden = 
 const sm = (a, b, v) => { const k = clamp01((v - a)/(b - a)); return k*k*(3 - 2*k); };
 const hash = (x, z) => { const s = Math.sin(x*12.9898 + z*78.233)*43758.5453; return s - Math.floor(s); };
 // the rim's height: a crumbly lip at the crater's edge and low lumps of old lava, smoothed flat
-// wherever something sits on the ground (the bus, the pool, the warm patch, the vent, the lookout)
+// wherever something sits on the ground (the bus, the pool, the warm patch, the vent, the ledge)
 const FLATS = [[POOL[0], POOL[1], 1.4], [TOAST[0], TOAST[1], 1.5], [VENT[0], VENT[1], .6], [LOOK[0], LOOK[1], .8], [BOMB[0], BOMB[1], .5], [FUM[0], FUM[1], .7], [SEIS[0], SEIS[1], .9]];
 function rimY(x, z){
   const r = Math.hypot(x, z), a = Math.atan2(z, x);
@@ -42,6 +43,12 @@ function rimY(x, z){
   let flat = sm(1.4, 3, Math.hypot(x - BUS[0], Math.max(0, Math.abs(z - 2.85) - 2.85)));
   for (const [fx, fz, f0] of FLATS) flat *= sm(f0, f0 + 1.2, Math.hypot(x - fx, z - fz));
   return lip + lump*flat;
+}
+// a rock that sits heavy: a flat base, widest low down and narrowing to its top
+function boulder(r, detail = 0, taper = .4){
+  const g = new THREE.IcosahedronGeometry(r, detail), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) { const y = Math.max(p.getY(i), -r*.55), k = 1 - taper*(y/r + .55)/1.55; p.setXYZ(i, p.getX(i)*k, y, p.getZ(i)*k); }
+  g.computeVertexNormals(); return g;
 }
 // a surface turned round the crater's axis from a profile of [radius, height] rows; at(a, r, y, row, colour)
 // gives each vertex its place, so the rock can bulge, crack and band
@@ -67,6 +74,8 @@ export function buildRim(t){
   storySky(w, {sun:[-9, 16, 7], clouds3d:[[120, 40, 170, 30], [175, 26, 95, 22], [55, 52, 215, 34], [-70, 36, 160, 26], [-140, 46, 50, 32],
     [30, 58, -170, 36], [210, 44, -60, 30], [-95, 30, -125, 24], [95, 20, 60, 14], [-40, 24, 70, 12]]});
   const coneY = r => { for (let i = 1; i < slope.length; i++) if (slope[i].x >= r) { const a = slope[i - 1], b = slope[i]; return a.y + (b.y - a.y)*(r - a.x)/(b.x - a.x); } return SEA; };
+  // the cone's outside surface, as revolve() lays it, for things lying on the slope
+  const coneAt = (a, r) => { const amp = sm(RIM + .3, RIM + 5, r)*(.5 + (r - RIM)/30), f = Math.sin(a*15 + 2.2*Math.sin(a*3 + r*.03)); return coneY(r) + amp*(.55*f + .25*Math.sin(a*41 + r*.3)); };
   const slope = new THREE.CatmullRomCurve3([[RIM + .3, 0], [RIM + 3, -2.6], [24, -9], [40, -20], [62, -29], [90, SEA - .5]].map(([r, y]) => new THREE.Vector3(r, y, 0))).getPoints(30);
   let lake, pumice, pebble, cone;
   inWorld(w, () => {
@@ -111,31 +120,34 @@ export function buildRim(t){
     cone = add(coneGeo, T(0xffffff, {side:THREE.DoubleSide, vertexColors:true, map:slopeTex}), 0, 0, 0, null, false);
 
     // broken rock along the crater's lip, and rubble fallen onto its ledges
-    for (let i = 0; i < 56; i++) { const a = i/56*Math.PI*2 + fr(-.05, .05), r = CRATER + fr(-.35, .15), x = Math.cos(a)*r, z = Math.sin(a)*r, s = fr(.22, .5);
+    // set back from the edge by their own size and sunk in, since the wall drops away right at the edge
+    for (let i = 0; i < 56; i++) { const a = i/56*Math.PI*2 + fr(-.05, .05), s = fr(.22, .5), r = CRATER + s*.6 + fr(0, .2), x = Math.cos(a)*r, z = Math.sin(a)*r;
       if (Math.hypot(x - LOOK[0]*.86, z - LOOK[1]*.86) < 1.1) continue;
-      bAdd([0x2c2228, 0x3e3038, 0x4a3840][i % 3], new THREE.DodecahedronGeometry(s, 0), XF(x, rimY(x, z) - s*.25, z, fr(.9, 1.4), fr(.5, .9), fr(.9, 1.3), fr(0, 6), fr(0, 6), 0), {ink:.03, shadow:true}); }
-    for (const [r0, r1, y, n] of [[4.35, 4.85, -4.6, 26], [5.3, 5.75, -2.75, 30]]) for (let i = 0; i < n; i++) { const a = fr(0, 7), r = fr(r0, r1), s = fr(.12, .3);
-      bAdd([0x3a2a30, 0x5a3c34][i % 2], new THREE.DodecahedronGeometry(s, 0), XF(Math.cos(a)*r, y + s*.2, Math.sin(a)*r, 1, fr(.5, .8), 1, fr(0, 6), fr(0, 6), 0), {ink:.02}); }
+      bAdd([0x2c2228, 0x3e3038, 0x4a3840][i % 3], new THREE.DodecahedronGeometry(s, 0), XF(x, rimY(x, z) - s*.3, z, fr(1.1, 1.4), fr(.5, .8), fr(.9, 1.2), 0, -a, fr(-.15, .15)), {ink:.03, shadow:true}); }
+    // the ledges wander in and out with the wall's buttresses, so the rubble follows them
+    for (const [r0, r1, y, n] of [[4.45, 4.8, -4.6, 26], [5.4, 5.7, -2.75, 30]]) for (let i = 0; i < n; i++) { const a = fr(0, 7), r = fr(r0, r1) + .26*Math.sin(a*17 + 1.3*Math.sin(a*4)), s = fr(.12, .26);
+      bAdd([0x3a2a30, 0x5a3c34][i % 2], new THREE.DodecahedronGeometry(s, 0), XF(Math.cos(a)*r, y, Math.sin(a)*r, 1.2, fr(.5, .7), 1, 0, fr(0, 6), 0), {ink:.02}); }
     // the far side of the crater climbs to a jagged crest, so the crater reads as the top of a mountain
     for (let i = 0; i < 11; i++) { const a = Math.PI*.14 + i/10*Math.PI*.72 + fr(-.04, .04), r = RIM + .6 + fr(0, 1.2), s = fr(2.4, 3.4), h = fr(2.6, 4.6);
-      bAdd([0x3a2c34, 0x45343c][i % 2], new THREE.IcosahedronGeometry(s, 1), XF(Math.cos(a)*r, h*.35, -Math.sin(a)*r, 1, h/s, fr(.8, 1.1), 0, fr(0, 6), fr(-.15, .15)), {ink:.08, shadow:true}); }
+      // rooted well below the rim and leaning back toward the crater, so they read as one heavy ridge, not teeth
+      bAdd([0x3a2c34, 0x45343c][i % 2], boulder(s, 1, .3), XF(Math.cos(a)*r, -.4, -Math.sin(a)*r, fr(1.1, 1.3), h/s*.95, fr(.9, 1.15), 0, a, fr(.04, .12)), {ink:.08, shadow:true}); }
     // outcrops round the outer edge, a boundary you can see; low on the south, where the camera looks over them
     for (let i = 0; i < 40; i++) { const a = fr(0, Math.PI*2), r = RIM + fr(-.3, 1.6), x = Math.cos(a)*r, z = Math.sin(a)*r, b = Math.atan2(-z, x);
       if ((b > .35 && b < 2.75) || Math.hypot(x - BUS[0], z - 8.2) < 3.5 || Math.hypot(x - 4, z - 10) < 3 || Math.hypot(x - BUS[0], z - 2.85) < 5.5) continue;
-      const s = z > 4 ? fr(.3, .6) : fr(.5, 1.2);
-      bAdd([0x332830, 0x45343c, 0x3a2c34][i % 3], new THREE.DodecahedronGeometry(s, 0), XF(x, s*.15, z, fr(1, 1.5), fr(.6, 1.2), fr(1, 1.4), fr(0, 6), fr(0, 6), 0), {ink:.04, shadow:true}); }
+      // sat on the ground at their downhill side and sunk in, leaning back into the slope
+      const s = z > 4 ? fr(.3, .6) : fr(.5, 1.1), base = Math.min(0, coneAt(Math.atan2(z, x), r + s*.9));
+      bAdd([0x332830, 0x45343c, 0x3a2c34][i % 3], boulder(s), XF(x, base + s*.2, z, fr(1.1, 1.4), fr(.6, .9), fr(1, 1.3), 0, -Math.atan2(z, x), fr(.08, .2)), {ink:.04, shadow:true}); }
     // lava-rock bumps about the rim, kept off the paths the class runs along
     for (let i = 0; i < 46; i++) { const a = Math.random()*Math.PI*2, r = CRATER + 1.5 + Math.random()*6, x = Math.cos(a)*r, z = Math.sin(a)*r;
       if (Math.hypot(x - BUS[0], z - BUS[1] + 2) < 4.5 || Math.hypot(x - POOL[0], z - POOL[1]) < 2 || Math.hypot(x - VENT[0], z - VENT[1]) < 2 || Math.hypot(x - LOOK[0], z - LOOK[1]) < 1.6 || FINDS.some(([fx, fz]) => Math.hypot(x - fx, z - fz) < 1.6)) continue;
-      const r0 = .2 + Math.random()*.4; bAdd([0x2c2228, 0x3e3038, 0x5a4048][i % 3], new THREE.DodecahedronGeometry(r0, 0), XF(x, rimY(x, z) + r0*.15, z, fr(1, 1.4), .6, fr(.9, 1.2), fr(0, 6), fr(0, 6), 0), {ink:.03, shadow:true}); }
+      const r0 = .2 + Math.random()*.4; bAdd([0x2c2228, 0x3e3038, 0x5a4048][i % 3], boulder(r0), XF(x, rimY(x, z) + r0*.15, z, fr(1, 1.4), .7, fr(.9, 1.2), 0, fr(0, 6), 0), {ink:.03, shadow:true}); }
     // scree spilling down the cone below the rim
-    for (let i = 0; i < 110; i++) { const a = fr(0, Math.PI*2), r = RIM + 1 + fr(0, 1)**1.6*16, s = fr(.15, .5)*(1 + (r - RIM)/14);
-      bAdd([0x2c2228, 0x3e3038, 0x564048][i % 3], new THREE.DodecahedronGeometry(s, 0), XF(Math.cos(a)*r, coneY(r) - s*.2, Math.sin(a)*r, fr(1, 1.5), fr(.5, .8), 1, fr(0, 6), fr(0, 6), 0), {ink:.02}); }
-    // the lookout: a slab jutting out over the drop, a cairn and a sign
-    const [lx, lz] = LOOK, lu = Math.hypot(lx, lz), [tx, tz] = [-lz/lu, lx/lu], [cx, cz] = [lx - tx*1.1, lz - tz*1.1], [sx, sz] = [lx + tx*1.2, lz + tz*1.2];
-    bAdd(0x4a3a44, new THREE.CylinderGeometry(1, 1.15, .3, 7), XF(lx/lu*(CRATER - .15), .05, lz/lu*(CRATER - .15), 1.1, 1, .8, 0, Math.atan2(lx, lz), 0), {ink:.04, shadow:true});
-    for (const [k, s, y] of [[0, .3, .12], [1, .22, .42], [2, .15, .64]]) bAdd([0x5a4a56, 0x6a5a66, 0x7d6e78][k], new THREE.DodecahedronGeometry(s, 0), XF(cx + k*.03, rimY(cx, cz) + y, cz, 1.2, .7, 1.1, 0, k, 0), {ink:.03, shadow:true});
-    signpost(sx, sz, 'Lookout', rimY(sx, sz), .3);
+    for (let i = 0; i < 110; i++) { const a = fr(0, Math.PI*2), r = RIM + 1 + fr(0, 1)**1.6*16, s = fr(.15, .5)*(1 + (r - RIM)/14), lie = -Math.atan2(coneY(r - 1) - coneY(r + 1), 2)*.8;
+      const m = XF(Math.cos(a)*r, Math.min(coneAt(a, r - s*.8), coneAt(a, r + s*.8)) - s*.1, Math.sin(a)*r, fr(1.1, 1.4), fr(.55, .75), 1, 0, -a, lie);
+      bAdd([0x2c2228, 0x3e3038, 0x564048][i % 3], boulder(s), m, {ink:.02}); }
+    // the ledge: a thick slab of the rim itself, jutting out over the drop
+    const [lx, lz] = LOOK, lu = Math.hypot(lx, lz), [ux, uz] = [lx/lu, lz/lu];
+    bAdd(0x4a3a44, new THREE.CylinderGeometry(1, 1.2, .5, 7), XF(ux*(CRATER - .3), -.05, uz*(CRATER - .3), 1.15, 1, .85, 0, Math.atan2(ux, uz), 0), {ink:.04, shadow:true});
 
     // the sea far below, and the coast's other volcanoes standing in a line across it
     const sea = add(new THREE.PlaneGeometry(1400, 1400), T(0x3a6a9a, {emissive:0x10304a, emissiveIntensity:.4}), 0, SEA, 0, null, false); sea.rotation.x = -Math.PI/2;
@@ -150,8 +162,24 @@ export function buildRim(t){
     // a ring of rounded pebbles, bigger at the back, like the pond at home
     for (let i = 0; i < 18; i++) { const a = i/18*Math.PI*2 + fr(-.08, .08), r0 = Math.sin(a) < 0 ? fr(.2, .3) : fr(.14, .22), k = 1.2 + r0*.4;
       bAdd([0x6a5a66, 0x7d6e78, 0x5a4a56][i % 3], new THREE.SphereGeometry(r0, 9, 6), XF(POOL[0] + Math.cos(a)*k, r0*.3, POOL[1] + Math.sin(a)*k, fr(1.1, 1.4), .6, 1, 0, -a, 0), {ink:.03, shadow:true}); }
-    for (let i = 0; i < 6; i++) { const a = i*1.1; outline(add(new THREE.DodecahedronGeometry(.14, 0), T(0xd8d0c0), POOL[0] + Math.cos(a)*1.65, .1, POOL[1] + Math.sin(a)*1.65), 1.12); }
-    pumice = add(new THREE.DodecahedronGeometry(.16, 0), T(0xe0d8c8), POOL[0] + 1.3, .12, POOL[1] + .9); pumice.visible = false; outline(pumice, 1.12);
+    // pumice: pale, lumpy and dented all over, its skin pocked with the holes of frozen gas bubbles
+    // each pit is a dark hole with its far inside wall catching the light, so it reads as a hole, not a spot
+    const pits = tex(256, 256, (c, cw, ch) => { c.fillStyle = '#ddd6c6'; c.fillRect(0, 0, cw, ch);
+      const pit = (x, y, r) => { for (const dx of [-cw, 0, cw]) for (const dy of [-ch, 0, ch]) {
+        c.fillStyle = 'rgba(120,108,96,.35)'; c.beginPath(); c.ellipse(x + dx, y + dy - r*.2, r*1.3, r*1.2, 0, 0, 7); c.fill();
+        c.fillStyle = '#fbf6ea'; c.beginPath(); c.ellipse(x + dx, y + dy + r*.3, r, r*.9, 0, 0, 7); c.fill();
+        c.fillStyle = '#3e332e'; c.beginPath(); c.ellipse(x + dx, y + dy - r*.08, r*.92, r*.8, 0, 0, 7); c.fill(); } };
+      for (let i = 0; i < 6; i++) pit(Math.random()*cw, Math.random()*ch, 9 + Math.random()*5);
+      for (let i = 0; i < 70; i++) pit(Math.random()*cw, Math.random()*ch, 3 + Math.random()*4);
+      for (let i = 0; i < 160; i++) pit(Math.random()*cw, Math.random()*ch, 1.2 + Math.random()*1.6); });
+    const pumiceM = T(0xffffff, {map:pits, flatShading:true});
+    const lump = r => { const g = new THREE.IcosahedronGeometry(r, 2), p = g.attributes.position, v = new THREE.Vector3(), dents = Array.from({length:16}, () => new THREE.Vector3(fr(-1, 1), fr(-1, 1), fr(-1, 1)).normalize());
+      // dents keyed on direction, so the corners that faces share move together and the lump stays closed
+      for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); const d = v.clone().normalize(); let k = 1;
+        for (const c of dents) k -= .16*Math.max(0, d.dot(c) - .9)*10; v.multiplyScalar(k); p.setXYZ(i, v.x*1.25, v.y*.8, v.z); }
+      g.computeVertexNormals(); return g; };
+    for (let i = 0; i < 6; i++) { const a = i*1.1, m = add(lump(.14), pumiceM, POOL[0] + Math.cos(a)*1.65, .09, POOL[1] + Math.sin(a)*1.65); m.rotation.y = a; outline(m, 1.08); }
+    pumice = add(lump(.2), pumiceM, POOL[0] + 1.3, .12, POOL[1] + .9); pumice.visible = false; outline(pumice, 1.08);
     pebble = add(new THREE.DodecahedronGeometry(.1, 0), T(0x3a2c34), 0, 0, 0, null, false); pebble.visible = false; outline(pebble, 1.15);
     add(new THREE.CircleGeometry(.35, 12), T(0x1a1320), VENT[0], .03, VENT[1], null, false).rotation.x = -Math.PI/2;
     // the warm ground: a soft glow fading out into the rock, with hot cracks at its heart
@@ -162,7 +190,7 @@ export function buildRim(t){
   });
   lake = lavaLake(w, {r:4.3, y:LAVA});
   // the plume rises off the lake's north side: beyond the lava as the camera usually looks, and
-  // off to one side of a look down from the lookout
+  // off to one side of a look down from the ledge
   const smoke = plume(w, [1.2, LAVA + .8, -2.6], {scale:1.3, base:2, top:40, mouth:-LAVA});
   smoke.onBurp = () => lake.surge();
   const vent = puffs(w, VENT[0], .1, VENT[1], {rate:2.5, rise:.9, size:.8, opacity:.6});
@@ -174,7 +202,9 @@ export function buildRim(t){
   let thrown = null, tossed = null;
   w.anims.push((dt, tt) => {
     if (thrown) { thrown.t += dt; const k = clamp01(thrown.t/.9);
-      pumice.position.set(thrown.x + (POOL[0] - thrown.x)*k, .12 + Math.sin(k*Math.PI)*1.6 + (k >= 1 ? Math.sin(tt*2.5)*.03 : 0), thrown.z + (POOL[1] - thrown.z)*k);
+      pumice.position.set(thrown.x + (POOL[0] - thrown.x)*k, .1 + Math.sin(k*Math.PI)*1.6 + (k >= 1 ? Math.sin(tt*2.5)*.03 : 0), thrown.z + (POOL[1] - thrown.z)*k);
+      // afloat, it bobs and turns slowly, rocking like a cork
+      if (k >= 1) { pumice.rotation.y += dt*.3; pumice.rotation.z = Math.sin(tt*1.7)*.12; }
       if (k >= 1 && !thrown.splash) { thrown.splash = true; Sound.hiss({dur:.4, vol:.1, type:'bandpass', freq:1400}); Sound.tone(620, {type:'sine', dur:.2, vol:.07, f2:900}); } }
     // a pebble over the edge: up out of the hand, then the long fall into the lake
     if (tossed) { tossed.t += dt; const s = tossed.t, k = Math.min(1, s/1.6);
@@ -182,7 +212,13 @@ export function buildRim(t){
       if (pebble.position.y <= LAVA) { lake.splash(tossed.tx, tossed.tz); pebble.visible = false; tossed = null; Sound.hiss({dur:.8, vol:.12, type:'bandpass', freq:700, q:.7}); } }
   });
 
-  // ---------- the lookout: a peek into the crater, any time the class is out exploring ----------
+  // the ledge draws the eye by itself: lava light glowing up under its tip, and heat shimmering past it
+  const ledgeGlow = new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex, color:0xff8a3a, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.7}));
+  ledgeGlow.position.set(LOOK[0]/Math.hypot(...LOOK)*(CRATER - 2.7), -2.4, LOOK[1]/Math.hypot(...LOOK)*(CRATER - 2.7)); ledgeGlow.scale.setScalar(4.5); w.scene.add(ledgeGlow);
+  const shimmer = puffs(w, ledgeGlow.position.x, -1.5, ledgeGlow.position.z, {rate:.9, rise:1.1, size:.9, color:0xffb070, opacity:.22, spread:1.2, life:2.6});
+  w.anims.push((dt, tt) => { ledgeGlow.material.opacity = .55 + .2*Math.sin(tt*1.7) + .1*Math.sin(tt*4.3); });
+
+  // ---------- the ledge: a peek into the crater, any time the class is out exploring ----------
   let peering = false, peeks = 0;
   const objEl = document.getElementById('obj');
   async function lookDown(){
@@ -205,7 +241,7 @@ export function buildRim(t){
         await t.wait(1.8);
         await say([['basil', "IT BURPED! The volcano just BURPED at us!"], ['mo', "Say excuse me, volcano."],
                    ['sparks', "Gas from deep down, pushing its way out. That's why nobody ever comes here without a heat-proof bus and an expert!"],
-                   ['basil', "“We'll sink in lava.” It's on my list, and it's RIGHT THERE."]]);
+                   ['basil', "“What's under the crust? A lava ocean?” It's on my wonder list. Is THAT the lava ocean?!"]]);
       } else {
         await t.until(() => game.elapsed - t0 > 2.4);
         lake.fountain(-ux*.8, -uz*.8, 1.2);
@@ -228,7 +264,7 @@ export function buildRim(t){
       lake.busy = 0; smoke.dim = 1; lookout.x -= 1e4; peering = false;
     }
   }
-  const lookout = addUsable(w, {name:'Lookout', x:LOOK[0], z:LOOK[1], range:1.5, verb:'Look down into the crater', short:'Look down', glow:[LOOK[0]*.93, 1.1, LOOK[1]*.93], action:lookDown});
+  const lookout = addUsable(w, {name:'Crater ledge', x:LOOK[0], z:LOOK[1], range:1.5, verb:'Look down into the crater', short:'Look down', glow:[LOOK[0]*.93, 1.1, LOOK[1]*.93], action:lookDown});
   t.onEnd(() => { if (peering) game.cutCam = null; });
 
   // ---------- what the class finds ----------
@@ -263,15 +299,28 @@ export function buildRim(t){
       else await say([['basil', "Good thinking. Let's watch from here."]]);
       await say([['basil', "That's steam coming right out of the ground. Something under us is really, really hot."],
                  ['basil', "But the heat is way down deep. It can't burn us up here!"]]);
-      await say([['basil', worries(0)]]);
+      await say([['basil', wonders(0)]]);
     }});
   cls.find('juniper', {name:'pumice', at:[POOL[0] + .7, POOL[1] + 1.5, -2.6], pose:'crouch', call:"Rocks that float? Come see!", after:["Pumice. It's full of holes, like a sponge made of stone."],
     async scene(){
       await say([['juniper', "Pick one up, {name}. These rocks are as light as a cookie!"]]);
       const pick = await t.ask('juniper', "If you toss one in the pool, will it float or sink?", ["It will float", "It will sink"]);
       pumice.visible = true; thrown = {t:0, x:player.x, z:player.z}; Sound.tone(500, {type:'triangle', dur:.1, vol:.05});
-      await t.wait(1.6);
-      await say([['juniper', (pick === 0 ? "You were right, it floats! " : "Surprise, it floats! ") + "It's full of tiny holes, from gas bubbles in the lava."]]);
+      await t.wait(1.2);
+      t.cut((pos, look) => { pos.set(POOL[0] - .7, .6, POOL[1] + .75); look.set(POOL[0], .1, POOL[1]); });
+      await t.wait(.6);
+      await say([['juniper', (pick === 0 ? "You were right, it floats! " : "Surprise, it floats! ") + "It's full of tiny holes, from gas bubbles in the lava."],
+                 ['juniper', "Look at it bob, like a cork! A rock that floats!"],
+                 ['juniper', "When a volcano blows, its lava can be all frothy with gas, like a soda you shook up."],
+                 ['juniper', "This bit cooled so fast that the bubbles froze right where they were."],
+                 ['sparks', "And all that trapped air makes it lighter than the same amount of water. Like a life jacket! So it floats."]]);
+      if (await t.more('juniper', "Want to know why most volcano rocks sink?"))
+        await say([['sparks', "Most lava lets its gas bubble out first. Then it cools packed solid and heavy, and it sinks like a stone."],
+                   ['juniper', "Same lava, two different rocks! I bet there's a heavy one lying around up here somewhere."],
+                   ['sparks', "After a big eruption, whole rafts of pumice float out to sea. They can drift across an ocean, carrying tiny sea creatures to new homes!"],
+                   ['sparks', "But after a long, long time, water seeps into all those holes, and down it goes."],
+                   ['mo', "My grandma scrubs her feet with one of these. It's scratchy!"]]);
+      t.cut(null);
     }});
   cls.find('mo', {name:'toast', at:[TOAST[0] + .8, TOAST[1] + .9, -2.3], pose:'crouch', call:"Snack time! Come here!", after:["Best. Field trip. Ever."],
     async scene(){
@@ -281,14 +330,12 @@ export function buildRim(t){
       const pick = await t.ask('mo', "Want one?", ["Yes, please!", "No, thank you"]);
       await say([['mo', pick ? "More for me! But where's all this heat coming from?" : "Here you go! Hey, where's all this heat coming from, anyway?"]]);
     }});
-  cls.hint = () => cls.saw('row') ? "Back to the bus whenever you're ready, {name}! Or go see anyone still waving, peek in from the lookout, or go exploring. Volcanoes leave treasures lying all over!" :
-    "Pip has the binoculars, Basil found something hissing, and Mo smells like marshmallows. And there's a lookout over the crater, if you dare!";
+  cls.hint = () => cls.saw('row') ? "Back to the bus whenever you're ready, {name}! Or go see anyone still waving, peek over the ledge, or go exploring. Volcanoes leave treasures lying all over!" :
+    "Pip has the binoculars, Basil found something hissing, and Mo smells like marshmallows. And that ledge sticks right out over the crater, if you dare!";
 
   // ---------- things to look closer at, round the far side of the rim, for anyone who wanders ----------
   const after = async f => { await t.wait(.01); f && f(); await t.until(() => !game.cutscene); };
   const glint = (col, s) => { const g = new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex, color:col, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0})); g.scale.setScalar(s); w.scene.add(g); return g; };
-  // the cone's outside surface, as revolve() lays it, for things lying on the slope
-  const coneAt = (a, r) => { const amp = sm(RIM + .3, RIM + 5, r)*(.5 + (r - RIM)/30), f = Math.sin(a*15 + 2.2*Math.sin(a*3 + r*.03)); return coneY(r) + amp*(.55*f + .25*Math.sin(a*41 + r*.3)); };
   let bomb, obsGlint, strands = [], light, screen, scr;
   inWorld(w, () => {
     // a volcanic bomb, landed with a thump: a lemon of lava, twisted at the ends where it spun in flight
@@ -379,7 +426,7 @@ export function buildRim(t){
   const BOMB_LINES = [null,
     ['sparks', "It's a volcanic bomb: a blob of lava the volcano threw high up into the sky."],
     ['sparks', "It spun as it flew, and cooled into this lemon shape, with twisty ends."],
-    ['sparks', "Pumice is full of gas bubbles, so it's light. This one is packed solid, so it's heavy."],
+    ['sparks', "It's the same lava as Juniper's pumice! Pumice cooled full of gas bubbles, so it's light. This one let its gas out and cooled packed solid, so it's heavy."],
     ['basil', "The volcano THROWS rocks?! Everybody look UP!"]];
   const FLOW_LINES = [null,
     ['sparks', "The brown one came later. And the black one is the newest of all. Nothing has grown on it yet."],
@@ -469,7 +516,7 @@ export function buildRim(t){
                  ['sparks', "Alive and bubbling! Nobody should ever come up here without a heat-proof magic bus and an expert. Lucky for us, we have both!"],
                  ['mo', "Which one's the expert, you or the bus?"],
                  ['juniper', "Most people only ever see a volcano in a book. We're standing on one!"],
-                 ['sparks', "So stay back from the edge. If you want a peek at the lava, use the lookout, and only the lookout!"]]);
+                 ['sparks', "So stay back from the edge. If you want a peek at the lava, there's one safe spot: the big flat ledge that sticks out over the crater. Only there!"]]);
       if (await t.more('sparks', "Want to know just how hot that lava is?"))
         await say([['sparks', "About eleven hundred degrees! More than ten times hotter than boiling water."],
                    ['sparks', "Hot enough to melt a frying pan like a pat of butter."], ['mo', "So… no marshmallows down there."], ['basil', "I did NOT need to know that."]]);
@@ -495,7 +542,7 @@ export function buildRim(t){
       await bus.fly([[BUS[0], 0, BUS[1]], [BUS[0], 2.5, -1], [6, 6.5, -6], [-3, 8, -2], [-4, 8, 0]], 3.6, {roll:.6});
       bus.gear('drill'); Sound.tone(523, {type:'triangle', dur:.2, vol:.08}); Sound.tone(1046, {type:'triangle', t:.15, dur:.4, vol:.07}); Sound.tone(80, {type:'sawtooth', dur:2.4, vol:.05, f2:160, cut:600});
       await say([['mo', "Um, Dr. Sparks? Why does the bus have a drill?"], ['sparks', "Seatbelts on! Next stop: down!"]]);
-      await bus.fly([[-4, 8, 0], [-1, 7.6, 0], [.6, 4, 0], [.8, LAVA, 0], [.8, LAVA - 6, 0]], 2.2, {easing:k => k*k});
+      await bus.fly([[-4, 8, 0], [-1, 7.6, 0], [.6, 4, 0], [.8, LAVA, 0], [.8, LAVA - 6, 0]], 2.2, {easing:k => k*k, level:false});
       lake.splash(.8, 0); game.camShake = 3; Sound.hiss({dur:1, vol:.18, type:'lowpass', freq:300}); Sound.tone(60, {dur:1, vol:.18, f2:40});
       await t.wait(.5);
     },

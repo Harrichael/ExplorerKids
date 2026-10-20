@@ -4,7 +4,7 @@
 // out of the window.
 //
 //   const cab = cabin();
-//   cab.view('rock');                   // what the windows show, and which way it streams
+//   cab.view('rock');                   // what the windows show, which way it streams, and how the bus tilts
 //   game.cutCam = cab.shot('class');    // or 'teacher', 'window'
 //
 // The cabin runs along x with the windshield at +x, like the bus outside.
@@ -19,15 +19,22 @@ import { puffs, spawnNPC, tripWorld } from './stop-kit.js';
 // [x, z] for each seat, facing the front; the explorer has their own
 const SEATS = {pip:[1.25, -.72], juniper:[1.25, .72], basil:[0, -.72], mo:[-1.25, .72]}, MINE = [0, .72];
 const FACE = Math.PI/2;
-// each view is a tileable painting and the way it streams past: +x out the back, +y down past the glass
+// each view is a tileable painting and the way it streams past: +x out the back, +y down past the glass.
+// A dive tips the bus nose down by its pitch; the rock out there stays level, so its layers slant
+// across the glass while it streams past along the bus, from the nose to the tail.
+const DIVE = -.32;
 const VIEWS = {
   sky:    {flow:[.12, 0], light:0xffd8b8, draw: (c, w, h) => { grad(c, w, h, ['#3a3a7a', '#a46a9a', '#f2a67a']); clouds(c, w, h, .35, 'rgba(255,236,220,.85)'); }},
   sea:    {flow:[.07, 0], light:0xcfe0ff, draw: (c, w, h) => { grad(c, w, h*.55, ['#4a4a8a', '#c88aa0', '#ffc69a']); clouds(c, w, h*.5, .25, 'rgba(255,236,220,.8)');
             const g = c.createLinearGradient(0, h*.55, 0, h); g.addColorStop(0, '#3a7aa0'); g.addColorStop(1, '#1e3a62'); c.fillStyle = g; c.fillRect(0, h*.55, w, h*.45);
             c.fillStyle = 'rgba(255,240,210,.7)'; for (let i = 0; i < 70; i++) c.fillRect(rnd(w), h*.58 + rnd(h*.4), 6 + rnd(18), 2); }},
-  rock:   {flow:[0, -1.6], light:0xffa070, draw: (c, w, h) => strata(c, w, h, ['#6b4430', '#5a3826', '#7a5038', '#4e3020'], 'rgba(255,200,140,.5)')},
-  magma:  {flow:[0, -1.1], light:0xff7a3a, draw: (c, w, h) => { grad(c, w, h, ['#ff9a3a', '#e0502a', '#ffb050', '#e0502a', '#ff9a3a']); blobs(c, w, h, 'rgba(255,230,140,.6)', 26); }},
-  mantle: {flow:[0, -.5], light:0xff8a5a, draw: (c, w, h) => strata(c, w, h, ['#7a2c1e', '#8a3624', '#6a2418', '#943c26'], 'rgba(255,150,90,.35)')},
+  rock:   {flow:[1.5, 0], pitch:DIVE, light:0xffa070, draw: (c, w, h) => strata(c, w, h, ['#6b4430', '#5a3826', '#7a5038', '#4e3020'], 'rgba(255,200,140,.5)')},
+  magma:  {flow:[1.1, 0], pitch:DIVE, light:0xff7a3a, draw: (c, w, h) => { grad(c, w, h, ['#ff9a3a', '#e0502a', '#ffb050', '#e0502a', '#ff9a3a']); blobs(c, w, h, 'rgba(255,230,140,.6)', 26); }},
+  mantle: {flow:[.6, 0], pitch:DIVE, light:0xff8a5a, draw: (c, w, h) => strata(c, w, h, ['#7a2c1e', '#8a3624', '#6a2418', '#943c26'], 'rgba(255,150,90,.35)')},
+  // the drill can't bite the soft, hot rock: the bus barely creeps, and gooey rock smears past the glass
+  stuck:  {flow:[.05, 0], pitch:DIVE, light:0xff8a5a, draw: (c, w, h) => { strata(c, w, h, ['#7a2c1e', '#8a3624', '#6a2418', '#943c26'], 'rgba(255,150,90,.35)');
+            c.strokeStyle = 'rgba(255,170,110,.35)'; c.lineWidth = 9; c.lineCap = 'round'; for (let i = 0; i < 26; i++) { const x = rnd(w), y = rnd(h), l = 40 + rnd(90);
+              tiled(w, h, (dx, dy) => { c.beginPath(); c.moveTo(x + dx, y + dy); c.bezierCurveTo(x + dx + l*.3, y + dy + 14, x + dx + l*.6, y + dy - 14, x + dx + l, y + dy); c.stroke(); }); } }},
   // rising through magma, it streams down past the glass
   magmaUp:{flow:[0, 1.1], light:0xff7a3a, draw: (c, w, h) => { grad(c, w, h, ['#ffa040', '#e8582a', '#ffc060', '#e8582a', '#ffa040']); blobs(c, w, h, 'rgba(190,50,20,.3)', 14);
             c.fillStyle = 'rgba(255,240,170,.6)'; for (let i = 0; i < 70; i++) { const x = rnd(w), y = rnd(h), rx = 3 + rnd(6), ry = 18 + rnd(50); tiled(w, h, (dx, dy) => { c.beginPath(); c.ellipse(x + dx, y + dy, rx, ry, 0, 0, 7); c.fill(); }); } blobs(c, w, h, 'rgba(255,236,150,.55)', 18); }},
@@ -112,6 +119,8 @@ export function cabin(){
     // enough that Dr. Sparks, hopping and spinning with an arm up, never puts her head through it.
     const roof = add(new THREE.CylinderGeometry(1.45, 1.45, 7.2, 20, 1, true, 0, Math.PI), T(0xb07a52, {side:THREE.BackSide}), 0, 2.6, 0, null, false);
     roof.rotation.z = Math.PI/2; roof.scale.set(.32, 1, 1);
+    // the arch's open ends, above the front and back walls, would be holes onto the painted view
+    for (const sx of [-1, 1]) { const cap = add(new THREE.CircleGeometry(1.45, 20, 0, Math.PI), T(0xb07a52, {side:THREE.DoubleSide}), sx*3.53, 2.6, 0, null, false); cap.rotation.y = Math.PI/2; cap.scale.set(1, .32, 1); }
     ink(0x2f8f8a, .1, .95, 2.8, 3.5, 2.275, 0); ink(0x2f8f8a, .1, .7, 2.8, 3.5, .35, 0);
     for (const sz of [-1, 1]) ink(0x24706b, .12, 1.3, .2, 3.5, 1.35, sz*1.3);
     ink(C.plum, .6, .55, 2.6, 3.1, .6, 0); ink(C.gold, .62, .06, 2.62, 3.1, .9, 0);
@@ -131,7 +140,7 @@ export function cabin(){
     for (const [x, z, ry, wd] of [[0, -2.6, 0, 9], [0, 2.6, Math.PI, 9], [4.6, 0, -Math.PI/2, 5], [-4.4, 0, Math.PI/2, 5]]) {
       // drawn first and leaving no depth, so the painting is a backdrop that the island out there stands in front of
       const m = new THREE.MeshBasicMaterial({map:views.sky.t.clone(), fog:false, depthWrite:false}); m.map.needsUpdate = true;
-      const pane = add(new THREE.PlaneGeometry(wd, 4), m, x, 1.5, z, null, false); pane.rotation.y = ry; pane.renderOrder = -1; panes.push({pane, dir: ry === Math.PI ? -1 : 1});
+      const pane = add(new THREE.PlaneGeometry(wd, 4), m, x, 1.5, z, null, false); pane.rotation.y = ry; pane.renderOrder = -1; panes.push({pane, dir: ry === Math.PI ? -1 : 1, side: !x, wd});
     }
     // the volcano island the class is flying to, a real one out past the glass, framed by the window shot
     isle = grp(-5.9, .3, -15.1);
@@ -147,16 +156,23 @@ export function cabin(){
   for (const [id, [x, z]] of Object.entries(SEATS)) { const n = kids[id] = spawnNPC(w, id, x + .05, z, FACE); n.pose = 'sit'; n.range = 0; n.label.visible = false; }
   // by the door, out of the class shot's frame but facing the class for her own
   const sparks = spawnNPC(w, 'sparks', 3.0, -1.0, -Math.PI/2 - .5); sparks.range = 0; sparks.label.visible = false;
-  let cur = null, scroll = 0, sway = 0;
+  let cur = null, scroll = 0, sway = 0, pitch = 0;
   w.anims.push((dt, t) => {
-    if (cur) { scroll += dt; for (const {pane, dir} of panes) { pane.material.map.offset.set(dir*cur.flow[0]*scroll, cur.flow[1]*scroll*.35); } }
+    if (cur) { scroll += dt; pitch += ((cur.pitch || 0) - pitch)*Math.min(1, dt*1.5);
+      // a side pane's painting is turned against the pitch, so the rock stays level, and streams along the bus;
+      // through the windshield and the back window, a dive shows the rock rushing up
+      for (const {pane, dir, side, wd} of panes) { const q = side ? dir*pitch : 0, a = wd/4, co = Math.cos(q), si = Math.sin(q), u = side ? dir*cur.flow[0]*scroll : 0,
+        v = (cur.flow[1] + (side ? 0 : cur.flow[0]*Math.sin(pitch)*2))*scroll*.35;
+        pane.material.map.matrix.set(co, -si/a, u*co, a*si, co, u*a*si + v, 0, 0, 1); } }
     // the bus bobs and sways under the class; shakes come through stronger in here
     sway = Math.sin(t*1.3)*.012 + Math.sin(t*2.9)*.006;
-    w.scene.rotation.x = sway;
+    w.scene.rotation.x = sway; w.scene.rotation.z = pitch;
     // the explorer rides in their seat like everyone else
     hero.root.position.set(MINE[0] + .05, 0, MINE[1]); hero.root.rotation.y = FACE;
     hero.legL.rotation.x = hero.legR.rotation.x = -1.45; hero.body.position.y = -.32; hero.armL.rotation.x = hero.armR.rotation.x = -.35;
   });
+  // the shots ride with the bus as it tips, but the camera stays upright, so the cabin is seen tilted
+  const tip = f => (pos, look) => { f(pos, look); for (const p of [pos, look]) { const c = Math.cos(pitch), s = Math.sin(pitch), x = p.x, y = p.y; p.x = x*c - y*s; p.y = x*s + y*c; } };
   const SHOTS = {
     // from just out past the windshield frame: inside the cab the front row is too close to see their faces
     class:   (pos, look) => { pos.set(4.4, 1.6 + sway, .3); look.set(-3, .6, .7); },
@@ -166,8 +182,8 @@ export function cabin(){
     window:  (pos, look) => { pos.set(-1.1, 1.5 + sway, .2); look.set(-1.6, innerHeight < 500 ? 1.22 : 1.45, -1.4); },
   };
   return {world:w, kids, sparks,
-    view(name){ cur = views[name]; scroll = 0; for (const {pane} of panes) { pane.material.map = cur.t.clone(); pane.material.map.needsUpdate = true; pane.material.needsUpdate = true; } light.color.setHex(cur.light);
+    view(name){ cur = views[name]; scroll = 0; for (const {pane} of panes) { pane.material.map = cur.t.clone(); pane.material.map.matrixAutoUpdate = false; pane.material.map.needsUpdate = true; pane.material.needsUpdate = true; } light.color.setHex(cur.light);
       isle.visible = name === 'sea'; smoke.rate = isle.visible ? 1.6 : 0; },
-    shot: name => SHOTS[name],
+    shot: name => tip(SHOTS[name]),
   };
 }
