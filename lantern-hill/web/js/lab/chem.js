@@ -4,6 +4,7 @@
 //
 // A container's contents are {l, p}: `l` is the liquid, with whatever has dissolved into it, and
 // `p` is the undissolved pile of powder at the bottom. Amounts are in game millilitres (or grams).
+// `t` is how hot it is in °C, room temperature when it isn't there.
 
 export const SUB = {
   water:   {liquid:true, d:1,    col:0x6fb8e0, tint:.7, cloud:.25},
@@ -29,7 +30,11 @@ export const SUB = {
 export const empty = () => ({l:{}, p:{}});
 export function fill(spec){ const c = empty(); for (const k in spec) add(c, k, spec[k]); return c; }
 export function add(c, k, n){ if (!(n > 0)) return; const box = SUB[k].powder ? c.p : c.l; box[k] = (box[k] || 0) + n; }
-export function merge(c, o){ for (const k in o.l) c.l[k] = (c.l[k] || 0) + o.l[k]; for (const k in o.p) c.p[k] = (c.p[k] || 0) + o.p[k]; }
+export function merge(c, o){
+  const a = liquidVol(c), b = liquidVol(o);
+  if (c.t !== undefined || o.t !== undefined) c.t = a + b > 0 ? (temp(c)*a + temp(o)*b)/(a + b) : temp(c);
+  for (const k in o.l) c.l[k] = (c.l[k] || 0) + o.l[k]; for (const k in o.p) c.p[k] = (c.p[k] || 0) + o.p[k];
+}
 function tidy(c){ for (const b of [c.l, c.p]) for (const k in b) if (b[k] < 1e-3) delete b[k]; }
 
 const sum = (o, f) => { let s = 0; for (const k in o) if (!f || f(SUB[k])) s += o[k]; return s; };
@@ -53,6 +58,7 @@ export function take(c, n){
     const pv = pileVol(c), f = pv > 0 ? Math.min(1, n/pv) : 0;
     for (const k in c.p) { const t = c.p[k]*f; out.p[k] = t; c.p[k] -= t; }
   }
+  if (c.t !== undefined) out.t = c.t;
   tidy(c); return out;
 }
 
@@ -79,6 +85,20 @@ export function step(c, dt, stir=0, contact=1){
   }
   if (c.l.tablet) { const r = Math.min(c.l.tablet, c.l.tablet*(1 - Math.exp(-1.4*dt)) + .2*dt); c.l.tablet -= r; gas += r*2; }
   tidy(c); return gas;
+}
+
+// Heat in watts goes into the watery layer (4.2 J per °C per millilitre). At 100 °C the rest boils
+// water away as steam, 2260 J a millilitre; only plain water boils off here, and what was dissolved in
+// it stays behind. Anything hotter than the room cools back toward it. Returns the water boiled.
+export const ROOM = 20, BOIL = 100;
+const COOL = .012;
+export const temp = c => c.t === undefined ? ROOM : c.t;
+export function warm(c, dt, watts){
+  const wv = waterVol(c); if (!wv) { delete c.t; return 0; }
+  let t = temp(c) + watts*dt/(4.2*wv) - (temp(c) - ROOM)*COOL*dt, boiled = 0;
+  if (t > BOIL) { boiled = Math.min(c.l.water || 0, (t - BOIL)*4.2*wv/2260); c.l.water = (c.l.water || 0) - boiled; t = BOIL; }
+  if (Math.abs(t - ROOM) < .05) delete c.t; else c.t = t;
+  tidy(c); return boiled;
 }
 
 // how heavy the watery layer is for its size; floating things compare themselves to this

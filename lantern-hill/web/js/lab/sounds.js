@@ -96,6 +96,20 @@ export const labSound = {
   snap(x){ const p = pan(x); VOICE.metal(1, p); Sound.tone(rnd(160, 190), {type:'triangle', dur:.05, vol:.06, f2:110, pan:p}); },
   // a boat going under: one big gulp of air let go, and a gurgle after it
   sink(x){ const p = pan(x); bubble(.007, .07, p); bubble(.004, .04, p, .12); bubble(.0028, .03, p, .22); Sound.hiss({t:.05, dur:.5, vol:.04, type:'lowpass', freq:700, f2:300, attack:.05, pan:p}); },
+  // a burner's knob: a click, and the soft whump of the flame catching; off, just the click and a sigh
+  ignite(x, on){
+    const p = pan(x); Sound.tone(rnd(1800, 2100), {type:'triangle', dur:.02, vol:.03, pan:p});
+    if (on) { Sound.hiss({t:.05, dur:.3, vol:.05, type:'lowpass', freq:500, f2:1400, attack:.02, pan:p}); Sound.tone(90, {t:.05, dur:.25, vol:.05, f2:140, pan:p}); }
+    else Sound.hiss({t:.03, dur:.2, vol:.02, type:'lowpass', freq:900, f2:300, pan:p});
+  },
+  // a lit flame's low, steady roar, kept very soft
+  burn(key, x){ if (every(key, .45)) Sound.hiss({dur:.55, vol:.014, type:'lowpass', freq:rnd(320, 420), attack:.15, pan:pan(x)}); },
+  // water at a rolling boil: big soft bubbles bursting at the top
+  boil(key, x, rate){ if (!every(key, .09)) return; const p = pan(x); bubble(rnd(.004, .009), .025 + Math.min(.02, rate*.01), p); if (Math.random() < .5) bubble(rnd(.002, .004), .015, p, rnd(.02, .06)); },
+  // steam forced out of a nozzle: a thin hiss, louder as it comes faster
+  hiss(key, x, rate){ if (every(key, .12)) Sound.hiss({dur:.18, vol:Math.min(.05, .008 + rate*.00002), type:'bandpass', freq:rnd(5200, 6200), q:1.4, attack:.03, pan:pan(x)}); },
+  // a spinning paddle wheel: a soft flutter that climbs with its speed
+  whirr(key, x, spin){ if (every(key, .15)) Sound.tone(120 + spin*14, {type:'triangle', dur:.16, vol:Math.min(.025, .004 + spin*.0012), vib:[spin*1.27, 30], cut:900, pan:pan(x)}); },
   // paper drinking up a drop: a soft wet touch
   dip(x){ const p = pan(x); Sound.hiss({dur:.09, vol:.022, type:'lowpass', freq:900, attack:.01, pan:p}); bubble(rnd(.0025, .0035), .012, p, .03); },
   // the last of the dull oxide lets go and the copper gleams

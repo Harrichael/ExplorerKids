@@ -1,6 +1,7 @@
 // What happens inside a container's liquid: bubbles, lava-lamp blobs, food coloring sinking through
 // oil, oil drops stirred loose, and the skin on top where food coloring swirls and pepper scatters.
-// These ride along in the container's own frame; anything that leaves a container is fluid.js's.
+// These ride along in the container's own frame; anything that leaves a container is fluid.js's,
+// except steam, which drifts off in soft wisps in the desk's frame.
 
 import * as THREE from 'three';
 import { grad } from '../core/kit.js';
@@ -20,6 +21,10 @@ export function makeFx(world){
   const ps = [], m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), pos = new THREE.Vector3(), col = new THREE.Color();
   let parent = null;
   const spawn = p => { if (ps.length < MAX) ps.push(Object.assign({t:0}, p)); };
+  // a wisp swells as it goes, slows as the air takes it, and thins away
+  const WISPS = 260, WISP_LIFE = 1.6, wisps = [];
+  const wispMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:.3, depthWrite:false}), WISPS);
+  wispMesh.frustumCulled = false; wispMesh.count = 0; wispMesh.renderOrder = 5; wispMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 
   function step(p, dt){
     p.t += dt;
@@ -108,15 +113,24 @@ export function makeFx(world){
       else { solid.setMatrixAt(ns, m4); solid.setColorAt(ns++, col.setHex(p.col)); }
     }
     solid.count = ns; fizz.count = nf; solid.instanceMatrix.needsUpdate = fizz.instanceMatrix.needsUpdate = true; solid.instanceColor.needsUpdate = true;
+    let nw = 0;
+    for (let i = wisps.length - 1; i >= 0; i--) {
+      const w = wisps[i]; w.t += dt; if (w.t > WISP_LIFE) { wisps.splice(i, 1); continue; }
+      const k = Math.exp(-1.6*dt); w.vx *= k; w.vz *= k; w.vy = w.vy*k + .12*dt;
+      w.x += w.vx*dt; w.y += w.vy*dt; w.z += w.vz*dt;
+      const u = w.t/WISP_LIFE; sc.setScalar((.006 + .03*u)*(1 - u*u)); pos.set(w.x, w.y, w.z); m4.compose(pos, q, sc); wispMesh.setMatrixAt(nw++, m4);
+    }
+    wispMesh.count = nw; wispMesh.instanceMatrix.needsUpdate = true;
     for (const f of films.values()) filmStep(f, dt);
   }
   function clear(){
-    ps.length = 0; solid.count = fizz.count = 0;
+    ps.length = 0; solid.count = fizz.count = 0; wisps.length = 0; wispMesh.count = 0;
     for (const f of films.values()) { if (f.mesh.parent) f.mesh.parent.remove(f.mesh); f.mesh.material.dispose(); f.texture.dispose(); } films.clear();
   }
   const rnd = (a, b) => a + Math.random()*(b - a);
   return {
-    attach(root){ parent = root; root.add(solid, fizz); },
+    attach(root){ parent = root; root.add(solid, fizz, wispMesh); },
+    wisp(x, y, z, vx, vy, vz){ if (wisps.length < WISPS) wisps.push({x, y, z, vx, vy, vz, t:0}); },
     update, clear, film, hasFilm: v => films.has(v), dropFilm(v){ const f = films.get(v); if (f) f.clear(); },
     // from anywhere on the bottom, or from the patch `at` {x, z, r} where the fizzing is
     bubble(v, at){ const a = Math.random()*7, R = v.def.ri*.8, r = Math.random()*(at ? Math.min(at.r, R) : R), cx = at ? at.x : 0, cz = at ? at.z : 0;

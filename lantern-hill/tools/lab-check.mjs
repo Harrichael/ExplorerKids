@@ -66,6 +66,8 @@ const HARNESS = `(async () => {
   const click = async p => { point('pointermove', p); await sleep(100); point('pointerdown', p); await sleep(60); cv.dispatchEvent(new PointerEvent('pointerup', {...O, buttons:0, clientX:p[0], clientY:p[1]})); await sleep(100); };
   const right = () => /prediction was right|got all/.test(status());
   window.lab = {sleep, until, carry, move, tip, shake, stir, open, choose, status, listen, click, screen, right, D, C, chem, pos};
+  // the Heat Rises experiment also needs the field trip where it's learned
+  localStorage.setItem('lantern-hill-trips', JSON.stringify({heatRises:true}));
   localStorage.setItem('lantern-hill-lab', JSON.stringify({done:['sinkfloat', 'magnets', 'volcano', 'rainbow', 'egg', 'dissolve', 'balloon', 'lava', 'fizztest', 'makemagnet']}));
   return true;
 })()`;
@@ -266,6 +268,22 @@ const STORIES = [
     const d = pos('dish');
     await carry('magnet', {x:d.x + .4, y:0, z:d.z}, async h => { for (const dx of [.3, .22, .2, .19]) { await move(h, {x:d.x + dx, z:d.z}); await sleep(700); } });
     return await until(right, 4000) ? '' : 'through the glass: ' + lab.status() + ' clip at ' + JSON.stringify(pos('clip'));
+  })()`],
+  ['rising steam spins the wheel above a boiling flask and not beside it, and the jet from a stoppered flask spins it sideways', `(async () => { const {open, choose, carry, move, click, screen, sleep, until, right, listen, D, chem, pos} = lab;
+    await open('heat'); await choose(0);
+    const b = pos('burner'), f = D.find('flask'), w = D.find('wheel');
+    await click(screen(b.x, .012, b.z + .05));
+    if (!D.find('burner').lit) return 'tapping the burner did not light it';
+    if (!await until(() => chem.temp(f.c) >= 100, 30000)) return 'the water never boiled: ' + chem.temp(f.c).toFixed(0) + ' C';
+    const fl = pos('flask');
+    // held a little to one side of the flask, so the plume pushes the paddles on one side of the axle
+    await carry('wheel', {x:fl.x + .03, y:0, z:fl.z}, async h => { await until(() => w.spin > 3, 6000); await sleep(500); await move(h, {x:fl.x + .3, z:fl.z}); await until(right, 8000); });
+    if (!right()) return 'above and beside: ' + lab.status() + ' spin ' + w.spin.toFixed(1) + ' blown ' + JSON.stringify(w.blown);
+    await listen(); await choose(0);
+    await carry('tube', 'flask');
+    if (!D.find('tube').plugged) return 'the stopper did not go into the flask';
+    await carry('wheel', {x:fl.x + .17, y:0, z:fl.z});
+    return await until(right, 10000) ? '' : 'the jet: ' + lab.status() + ' spin ' + w.spin.toFixed(1) + ' blown ' + JSON.stringify(w.blown) + ' jet ' + (D.find('tube').jet || 0).toFixed(0);
   })()`],
   ['the Free Lab cabinet hands out a tub, then the water, then the same cup three times running', `(async () => { const {open, click, screen, sleep, until, D, C} = lab;
     await open('free');

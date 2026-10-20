@@ -81,6 +81,40 @@ function balance(b){
   }
   return {beam};
 }
+// a little lab burner under a wire gauze; it stays where it's put, and a tap turns it on and off
+function burner(b){
+  const iron = T(0x3a3440), brass = T(0xd9a441);
+  outline(cyl(.05, .055, .018, iron, 0, .009, 0, b, 18), 1.04); outline(cyl(.012, .016, .032, brass, 0, .034, 0, b, 12), 1.06);
+  for (let i = 0; i < 3; i++) { const a = i*2.09 + .5, l = box(.005, .07, .005, iron, Math.cos(a)*.045, .053, Math.sin(a)*.045, b); l.rotation.set(Math.sin(a)*.12, 0, -Math.cos(a)*.12); }
+  const gauze = outline(box(.11, .004, .11, own(0x77727c), 0, .088, 0, b), 1.03);
+  const flame = new THREE.Group(); flame.position.y = .05; b.add(flame); flame.visible = false;
+  add(new THREE.ConeGeometry(.011, .034, 12), new THREE.MeshBasicMaterial({color:0x5a8cff, transparent:true, opacity:.8, depthWrite:false}), 0, .017, 0, flame, false);
+  add(new THREE.ConeGeometry(.006, .02, 10), new THREE.MeshBasicMaterial({color:0xbfe0ff, transparent:true, opacity:.9, depthWrite:false}), 0, .01, 0, flame, false);
+  return {gauze, flame};
+}
+function flask(b){
+  const w = add(new THREE.CylinderGeometry(.042 + .006, .042 + .004, .1, 22, 1, true), GLASS, 0, .05, 0, b, false); w.renderOrder = 3;
+  const sh = add(new THREE.CylinderGeometry(.018, .048, .03, 22, 1, true), GLASS, 0, .115, 0, b, false); sh.renderOrder = 3;
+  const nk = add(new THREE.CylinderGeometry(.017, .018, .02, 16, 1, true), GLASS, 0, .14, 0, b, false); nk.renderOrder = 3;
+  const f = cyl(.046, .046, .008, GLASS, 0, .004, 0, b, 22, false); f.renderOrder = 3;
+  const rim = add(new THREE.TorusGeometry(.018, .003, 5, 16), RIM, 0, .15, 0, b, false); rim.rotation.x = Math.PI/2; rim.renderOrder = 4;
+}
+// a rubber stopper with a glass tube bent up, over and down, ending in a nozzle that points sideways
+function steamTube(b){
+  outline(cyl(.014, .017, .03, T(0x8a6a5a), 0, .015, 0, b, 14), 1.06);
+  const g = T(0xd6eef4, {transparent:true, opacity:.75}), J = ITEMS.steamtube.jet;
+  for (const [x0, y0, x1, y1] of [[0, .03, 0, .06], [0, .06, J.x - .015, .06], [J.x - .015, .06, J.x - .015, J.y], [J.x - .015, J.y, J.x, J.y]]) {
+    const len = Math.hypot(x1 - x0, y1 - y0), t = cyl(.0035, .0035, len + .004, g, (x0 + x1)/2, (y0 + y1)/2, 0, b, 8, false); t.rotation.z = Math.atan2(x0 - x1, y1 - y0); }
+}
+// a paddle wheel on a stand; the rotor is its own body, turning on an axle that runs front to back
+function wheel(b){
+  const wood = T(0x8a5a3a), tin = T(0xc8ced8), B = ITEMS.wheel.beam;
+  outline(box(.1, .014, .07, wood, 0, .007, 0, b), 1.04); outline(box(.012, B.y, .012, wood, 0, B.y/2 + .006, -.012, b), 1.06);
+  const beam = new THREE.Group(); beam.position.y = B.y; b.add(beam);
+  outline(cyl(.012, .012, .02, T(0x3a3440), 0, 0, 0, beam, 12), 1.06).rotation.x = Math.PI/2;
+  for (let i = 0; i < 8; i++) { const a = i*Math.PI/4, p = outline(box(.036, .003, .03, i ? tin : T(0xd8303a), Math.cos(a)*.031, Math.sin(a)*.031, 0, beam), 1.08); p.rotation.z = a; }
+  return {beam};
+}
 function chart(b){
   const t = tex(512, 168, (g, W, H) => {
     g.fillStyle = '#fbf4e2'; g.fillRect(0, 0, W, H);
@@ -214,8 +248,16 @@ export const ITEMS = {
   // a few times heavier than real foil, which is too light for the physics to float smoothly at its step size
   boat:   {name:'Foil boat', kind:'vessel', afloat:true, w:.13, d:.1, r:.082, h:.03, ri:.048, floor:.002, hi:.028, flow:'liquid', rate:60, density:.8, build: foilBoat(.13, .1, .03)},
   wideboat: {name:'Wide foil boat', kind:'vessel', afloat:true, w:.16, d:.12, r:.1, h:.03, ri:.058, floor:.002, hi:.028, flow:'liquid', rate:70, density:.8, build: foilBoat(.16, .12, .03)},
-  balance: {name:'Balance', kind:'balance', r:.27, h:.15, density:7.8, build: balance}
+  balance: {name:'Balance', kind:'balance', r:.27, h:.15, density:7.8, build: balance},
+  burner: {name:'Burner', kind:'solid', r:.06, h:.09, density:3, knob:true, build: burner},
+  flask:  {name:'Flask', kind:'vessel', r:.048, h:.15, ri:.042, floor:.008, hi:.09, see:true, flow:'liquid', rate:40, mouth:.016, neck:true, build: flask},
+  steamtube: {name:'Stopper and tube', kind:'solid', r:.017, h:.03, density:1.2, stopper:true, build: steamTube},
+  wheel:  {name:'Steam wheel', kind:'solid', r:.05, h:.25, density:.6, build: wheel}
 };
+// where the steam tube's nozzle is, and which way it points, in its own frame
+ITEMS.steamtube.jet = {x:.095, y:.01, z:0, dir:{x:1, y:0, z:0}};
+// the wheel's rotor: light paddles on an axle, which a stream of air or steam turns by pushing the paddles on one side
+ITEMS.wheel.beam = {y:.2, density:.04, damping:.4, friction:1e-5, blades:.05, shape:[['ball', .05, 0]]};
 // a balance's beam: swung on the top of its post, in its own frame centred on the hinge, with a pan
 // hanging from each end of its arm
 ITEMS.balance.beam = {y:.14, density:2.7, arm:.22, pan:{y:-.1, w:.13, h:.022, d:.11}};
@@ -255,7 +297,10 @@ const SHAPE = {
   magnet: [['box', .085, .03, .022, .05], ['box', .022, .05, .022, 0, -.03], ['box', .022, .05, .022, 0, .03]],
   strip: [['bar', .14, .012, 'y', 0]], bar: [['box', .14, .026, .024, 0]],
   boat: [['hollow-box', .13, .03, .1, .002]], wideboat: [['hollow-box', .16, .03, .12, .002]],
-  balance: [['box', .16, .02, .1, 0], ['box', .016, .12, .016, .02]]
+  balance: [['box', .16, .02, .1, 0], ['box', .016, .12, .016, .02]],
+  burner: [['cyl', .055, .018, 0], ['cyl', .016, .032, .018], ['box', .11, .004, .11, .086]],
+  flask: [['hollow', .042, .1, .006, .008], ['neck', .016, .1, .15, .046]], steamtube: [['cyl', .016, .03, 0]],
+  wheel: [['box', .1, .014, .07, 0], ['box', .012, .2, .012, .006, 0]]
 };
 { const B = ITEMS.balance.beam, {w, h, d, y} = B.pan, inner = B.arm - w/2;
   // the arm stops short of the pans so things dropped in don't land on it; the wires either side of each pan are solid
@@ -266,14 +311,14 @@ const POLES = {magnet: [[-.03, .004, 0, 1], [.03, .004, 0, -1]], bar: [[-.066, .
   nail: [[-.033, .005, 0, 1], [.036, .005, 0, -1]], paperclip: [[-.02, .003, 0, 1], [.02, .003, 0, -1]], key: [[-.028, .004, 0, 1], [.028, .004, 0, -1]]};
 for (const k in POLES) ITEMS[k].poles = POLES[k].map(([x, y, z, n]) => ({x, y, z, n}));
 // where a container opens: liquid and powder inside this cylinder belong to it; it pours from its rim
-const OPEN = {bottle: {y:.19, r:.022, neckY:.12}, volcano: {y:.17, r:.03, neckY:.14}, soda: {y:.13, r:.04}, sugar: {y:.13, r:.04}, saltbox: {y:.13, r:.04}, balloon: {y:.11, r:.03}};
+const OPEN = {bottle: {y:.19, r:.022, neckY:.12}, flask: {y:.15, r:.016, neckY:.1}, volcano: {y:.17, r:.03, neckY:.14}, soda: {y:.13, r:.04}, sugar: {y:.13, r:.04}, saltbox: {y:.13, r:.04}, balloon: {y:.11, r:.03}};
 // what each thing is made of, which is how it sounds when it's set down or knocked
 const MATTER = {
-  glass: ['cup', 'jar', 'dish', 'bottle', 'pitcher', 'cabbage', 'oil'], clay: ['saucer', 'volcano'], metal: ['coin', 'paperclip', 'nail', 'key', 'spoon', 'magnet', 'bar', 'balance'],
+  glass: ['cup', 'jar', 'dish', 'bottle', 'pitcher', 'cabbage', 'oil', 'flask'], clay: ['saucer', 'volcano'], metal: ['coin', 'paperclip', 'nail', 'key', 'spoon', 'magnet', 'bar', 'balance', 'burner'],
   plastic: ['tub', 'vinegar', 'soap', 'red', 'yellow', 'blue', 'salt', 'pepper', 'lemon', 'sand', 'button', 'crayon'], card: ['milk', 'soda', 'sugar', 'saltbox', 'chart'],
-  wood: ['tray', 'cork'], rubber: ['duck', 'balloon'], stone: ['rock'], food: ['apple', 'egg'], foil: ['foil', 'boat', 'wideboat'], chalk: ['tablet'], soft: ['swab', 'strip']};
+  wood: ['tray', 'cork', 'wheel'], rubber: ['duck', 'balloon', 'steamtube'], stone: ['rock'], food: ['apple', 'egg'], foil: ['foil', 'boat', 'wideboat'], chalk: ['tablet'], soft: ['swab', 'strip']};
 for (const m in MATTER) for (const k of MATTER[m]) ITEMS[k].matter = m;
 // glass weighs what glass weighs; plastic tubs and trays are lighter
-for (const k of ['cup', 'jar', 'dish', 'bottle', 'pitcher', 'cabbage']) ITEMS[k].glass = true;
+for (const k of ['cup', 'jar', 'dish', 'bottle', 'pitcher', 'cabbage', 'flask']) ITEMS[k].glass = true;
 for (const k in ITEMS) { const d = ITEMS[k]; d.shape = SHAPE[k];
   if (d.kind === 'vessel') d.open = Object.assign({y:d.h, r:d.mouth || d.ri}, OPEN[k]); }

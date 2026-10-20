@@ -178,8 +178,8 @@ function makeItem(id, type, x, z, o, i){
   if (def.beam) {
     // the beam is its own body, swinging on the post; its group lives in the desk's frame, not the base's
     const B = def.beam; desk.root.add(it.refs.beam);
-    it.beam = makeBody({kind:'solid', shape:B.shape, density:B.density}, x, .002 + B.y, z, it); it.beam.setAngularDamping(1.5);
-    hinge(it.body, it.beam, {x:0, y:B.y, z:0}, {x:0, y:0, z:0}, {x:0, y:0, z:1}, .02);
+    it.beam = makeBody({kind:'solid', shape:B.shape, density:B.density}, x, .002 + B.y, z, it); it.beam.setAngularDamping(B.damping ?? 1.5);
+    hinge(it.body, it.beam, {x:0, y:B.y, z:0}, {x:0, y:0, z:0}, {x:0, y:0, z:1}, B.friction ?? .02);
     it.calm = 0; it.swing = 0;
   }
   return it;
@@ -213,7 +213,7 @@ export function clearDesk(){
       if (m.geometry !== UNIT_CYL && m.geometry !== HEMI) m.geometry.dispose();
       if (m.material.map) { m.material.map.dispose(); m.material.dispose(); } else if (m.userData.own) m.material.dispose(); });
   }
-  desk.items.length = 0; desk.held = null; leaving.length = 0;
+  desk.items.length = 0; desk.held = null; leaving.length = 0; flows = [];
   if (desk.fx) { desk.fx.clear(); desk.fluid.clear(); }
 }
 // A thing that's used up (a fizzy tablet) leaves the world, and puddles on it fall off. It's switched
@@ -257,6 +257,8 @@ export function deskPoint(worldRay, y){
   return _p.copy(worldRay.direction).multiplyScalar(t).add(_o);
 }
 export function grab(it){
+  // a burner isn't carried about: a tap turns it on or off
+  if (it.def.knob) { it.lit = !it.lit; labSound.ignite(it.body.translation().x, it.lit); return; }
   if (desk.held) release();
   desk.held = it; it.tilt = 0;
   if (it.attached) { it.raised = true; return; }
@@ -397,7 +399,7 @@ const rubber = i => .12 + .3*i;
 const balloonRoom = b => UNITS_PER_M3*4/3*Math.PI*.036**3*((1 + 1.6*b.inflate)**3 - 1);
 function pressure(v){
   const b = balloonOn(v), room = Math.max(v.cap*.05, v.cap - chem.liquidVol(v.c) - chem.pileVol(v.c)) + (b ? balloonRoom(b) : 0);
-  return v.gas/room;
+  return (v.gas + (v.vapor || 0))/room;
 }
 function plug(c, v){
   c.plugged = v; c.body.setBodyType(P.R.RigidBodyType.KinematicPositionBased, true);
@@ -416,6 +418,8 @@ function unplug(c){
 function stopper(c){
   const v = c.plugged, q = v.body.rotation(), p = toWorld(v.body, 0, v.def.open.y - c.def.h*.65, 0, {});
   c.body.setNextKinematicTranslation(p); c.body.setNextKinematicRotation(q);
+  // a stopper with a tube lets the steam out as fast as it comes, as a jet from its nozzle
+  if (c.def.jet) { const out = (v.vapor || 0)*Math.min(1, NOZZLE*STEP); v.vapor -= out; c.jet = (c.jet || 0)*.85 + .15*out/STEP; }
   const press = pressure(v);
   if (press < CORK_GRIP) return;
   const up = rot(q, {x:0, y:1, z:0}), speed = Math.min(2.6, 1 + press*.9), bv = v.body.linvel();
@@ -691,6 +695,71 @@ function shaking(v){
   }
 }
 
+// ---------- heat ----------
+// A lit burner heats what stands on its gauze, four times or so faster than a real one. Hot air rises
+// off it in a plume, and steam with it from an open container boiling on top. Water boiling to steam
+// swells about 1700 times, which is what presses on a stopper; a tube in the stopper lets it out as a
+// jet. A plume or jet crossing the steam wheel's paddles to one side of its axle turns it, harder the
+// more flows and the squarer it hits; dead centre, both sides push alike and it stays still. The air
+// drags on the paddles harder the faster they go, so no stream spins it faster than it can push.
+const BURNER = 2500, STEAM = 1700, HOT_AIR = 500, NOZZLE = 54, WIND = 2e-4, AIR_DRAG = 3.3e-6;
+function heater(v){
+  if (uprightness(v) < .8) return null;
+  const t = v.body.translation();
+  for (const b of live()) {
+    if (!b.lit) continue;
+    const l = toLocal(b.body, t.x, t.y, t.z, {});
+    if (Math.abs(l.x) < .05 && Math.abs(l.z) < .05 && l.y > b.def.h - .01 && l.y < b.def.h + .02) return b;
+  }
+  return null;
+}
+let flows = [];
+function streams(){
+  const out = [];
+  for (const b of live()) {
+    if (!b.lit) continue;
+    const v = vessels().find(v => heater(v) === b), steam = v && !capOn(v) ? v.steam : 0;
+    out.push({kind:'plume', s: v ? toWorld(v.body, 0, v.def.open.y, 0, {}) : toWorld(b.body, 0, b.def.h, 0, {}), d:{x:0, y:1, z:0}, flow:HOT_AIR + steam, steam, r0:.02, spread:.2, reach:.35});
+  }
+  for (const c of live()) if (c.plugged && c.def.jet && c.jet > 1) {
+    const j = c.def.jet;
+    out.push({kind:'jet', s:toWorld(c.body, j.x, j.y, j.z, {}), d:rot(c.body.rotation(), {...j.dir}), flow:c.jet*.5, steam:c.jet, r0:.006, spread:.12, reach:.3, src:c});
+  }
+  return out;
+}
+function blow(w){
+  const R = w.def.beam.blades, C = w.beam.translation(), a = rot(w.beam.rotation(), {x:0, y:0, z:1});
+  let tq = 0, best = null, most = 0;
+  for (const st of flows) {
+    const {s:S, d} = st, cx = C.x - S.x, cy = C.y - S.y, cz = C.z - S.z, t = cx*d.x + cy*d.y + cz*d.z;
+    if (t < 0 || t > st.reach) continue;
+    // from the axle to where the stream passes closest, and how far off the wheel's face that is
+    const ox = d.x*t - cx, oy = d.y*t - cy, oz = d.z*t - cz, axial = ox*a.x + oy*a.y + oz*a.z, rs = st.r0 + st.spread*t;
+    const cover = 1 - Math.abs(axial)/(rs + .02); if (cover <= 0) continue;
+    let ex = a.y*d.z - a.z*d.y, ey = a.z*d.x - a.x*d.z, ez = a.x*d.y - a.y*d.x; const side = Math.hypot(ex, ey, ez); if (side < .1) continue;
+    ex /= side; ey /= side; ez /= side;
+    const off = ox*ex + oy*ey + oz*ez;
+    let sum = 0, on = 0; for (let k = -2; k <= 2; k++) { const sk = off + rs*k/2.5; if (Math.abs(sk) > .012 && Math.abs(sk) < R) { sum += sk; on++; } }
+    const push = WIND*st.flow*Math.exp(-t/st.reach)*cover*side*sum/5;
+    tq -= push;
+    if (Math.abs(push) > most) { most = Math.abs(push); best = {kind:st.kind, cover:cover*on/5}; }
+  }
+  const av = w.beam.angvel(), spin = av.x*a.x + av.y*a.y + av.z*a.z; tq -= AIR_DRAG*spin*Math.abs(spin);
+  w.beam.applyTorqueImpulse({x:a.x*tq*STEP, y:a.y*tq*STEP, z:a.z*tq*STEP}, true);
+  w.blown = best;
+}
+function puffs(dt){
+  for (const st of flows) {
+    if (!(st.steam > 0)) continue;
+    const n = st.steam*dt/(st.kind === 'jet' ? 90 : 140), sp = st.kind === 'jet' ? .7 : .24;
+    for (let i = 0; i < Math.floor(n + Math.random()); i++) {
+      const j = () => (Math.random() - .5)*.012;
+      desk.fx.wisp(st.s.x + j(), st.s.y + j(), st.s.z + j(), st.d.x*sp + j()*4, st.d.y*sp + .03 + Math.abs(j())*4, st.d.z*sp + j()*4);
+    }
+    if (st.src) labSound.hiss(st.src, st.s.x, st.steam);
+  }
+}
+
 // ---------- chemistry in every container ----------
 function chemStep(v, dt){
   // liquid carries the fizz across a container much faster than it creeps through a dry pile
@@ -709,6 +778,11 @@ function chemStep(v, dt){
     const ixz = kg*(r*r/4 + h*h/12), iy = kg*r*r/2;
     v.body.setAdditionalMassProperties(kg, {x:0, y:v.def.floor + h/2, z:0}, {x:ixz, y:iy, z:ixz}, {x:0, y:0, z:0, w:1}, true);
   }
+  // over a lit burner it heats and boils; its steam rises from an open mouth or is shut in as gas
+  const boiled = chem.warm(v.c, dt, heater(v) ? BURNER : 0), vapor = boiled*STEAM;
+  if (capOn(v)) { v.vapor = (v.vapor || 0) + vapor; v.steam = 0; }
+  else { v.steam = (vapor + (v.vapor || 0))/dt; v.vapor = 0; }
+  if (boiled > 0) { labSound.boil(v, v.body.translation().x, boiled/dt); if (Math.random() < dt*25) desk.fx.bubble(v); }
   // gas sealed in builds pressure; once the mouth opens, what was held rushes out with what's still coming
   const made = gas;
   if (capOn(v)) { v.gas += made*GAS_ROOM; gas = 0; }
@@ -743,6 +817,17 @@ function draw(it, dt){
   const t = it.body.translation(), r = it.body.rotation();
   it.g.position.set(t.x, t.y, t.z); it.g.quaternion.set(r.x, r.y, r.z, r.w);
   if (it.tarnish !== undefined && Math.abs(it.tarnish - it.drawnT) > .004) { it.def.shade(it.refs, it.tarnish); it.drawnT = it.tarnish; }
+  if (it.def.knob) {
+    // the flame flickers; the gauze over it glows as it heats, and fades slowly once it's off
+    it.glow = (it.glow || 0) + ((it.lit ? 1 : 0) - (it.glow || 0))*Math.min(1, dt*(it.lit ? .6 : .25));
+    it.refs.flame.visible = !!it.lit; if (it.lit) it.refs.flame.scale.set(1, .85 + Math.random()*.3, 1);
+    const gm = it.refs.gauze.material; gm.color.setHex(chem.lerpCol(0x77727c, 0xff7a3a, it.glow)); gm.emissive.setHex(0xff5a1a); gm.emissiveIntensity = it.glow*.7;
+    if (it.lit) labSound.burn(it, t.x);
+  }
+  if (it.beam && it.def.beam.blades) {
+    const av = it.beam.angvel(), a = rot(it.beam.rotation(), {x:0, y:0, z:1}); it.spin = Math.abs(av.x*a.x + av.y*a.y + av.z*a.z);
+    if (it.spin > 1) labSound.whirr(it, t.x, it.spin);
+  }
   if (it.beam) { const bt = it.beam.translation(), br = it.beam.rotation(), bm = it.refs.beam; bm.position.set(bt.x, bt.y, bt.z); bm.quaternion.set(br.x, br.y, br.z, br.w); bm.scale.copy(it.g.scale); }
   if (it.liq) {
     const L = levels(it), lk = chem.look(it.c), ri = it.def.ri*.97, fl = it.def.floor, q = it.liq;
@@ -763,7 +848,7 @@ function clack(it, dt){
   if (!it.beam) return;
   // a beam swinging down onto the mat knocks; one that has stopped moving has weighed what's in its pans
   const w = Math.abs(it.beam.angvel().z);
-  if (it.swing > .8 && w < .2) labSound.land(it, it.body.translation().x, it.swing/3);
+  if (it.def.beam.arm && it.swing > .8 && w < .2) labSound.land(it, it.body.translation().x, it.swing/3);
   it.swing = w; it.calm = w < .03 ? it.calm + dt : 0;
 }
 
@@ -794,6 +879,7 @@ export function updateDesk(dt){
     for (const m of live()) if (pulls(m)) magnetism(m);
     const mags = live().filter(m => m.def.tool === 'magnet');
     for (let i = 0; i < mags.length; i++) for (let j = i + 1; j < mags.length; j++) poleToPole(mags[i], mags[j]);
+    for (const w of live()) if (w.beam && w.def.beam.blades) blow(w);
     while (leaving.length) retire(leaving.pop());
     P.world.step();
     for (const v of vessels()) spill(v, STEP);
@@ -809,6 +895,7 @@ export function updateDesk(dt){
     clack(it, dt);
   }
   for (const v of vessels()) chemStep(v, dt);
+  flows = streams(); puffs(dt);
   catchers = vessels().filter(v => !v.attached && uprightness(v) >= .35).map(v => ({v, seal:capOn(v)}));
   desk.fluid.step(dt);
   showAim();

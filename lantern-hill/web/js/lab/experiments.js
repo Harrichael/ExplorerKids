@@ -7,12 +7,14 @@
 //   sort:   put each thing in the tray for your guess; observe() returns {thing: bin} for things tested so far
 // hints are offered one at a time, only to an explorer who seems stuck or asks.
 //
-// An experiment opens once everything in its `after` is done, and is listed after those. The book
+// An experiment opens once everything in its `after` is done (and its `unlock`, for something outside
+// the lab, says yes), and is listed after those. The book
 // shows the opened ones by `level`, how hard each is from 1 to 5, then in this order. What an
 // experiment puts on the desk is what finishing it stocks in the Free Lab's cabinet.
 
 import * as chem from './chem.js';
 import { desk, find, isVessel, poleMeets, restingIn, totalGas, weighing } from './desk.js';
+import { load } from '../save.js';
 import { ITEMS } from './stuff.js';
 
 const S = text => ['sparks', text];
@@ -67,15 +69,20 @@ function weighed(){
   const [l, r] = [w.left[0], w.right[0]];
   return Math.abs(w.tilt) < .02 ? {level:true, l, r} : w.tilt > 0 ? {down:r, up:l} : {down:l, up:r};
 }
-// How many pennies a boat carried while it still floated steady, once it has gone under (null till then).
-// A penny that lands and sinks it at once never floated with it, so it doesn't count.
+// How many pennies a boat carried while it still floated, once it has gone under (null till then). A
+// load counts once it has ridden a moment with the boat still dry inside; a penny that lands and sinks
+// it at once never floated with it.
 function carried(id, run, key){
   const b = find(id); if (!b) return null;
   if (chem.liquidVol(b.c) > b.cap*.5) return run[key] === undefined ? null : run[key];
-  if (b.still > .5 && b.settled && b.settled.floating) run[key] = desk.items.filter(c => !c.gone && c.type === 'coin' && restingIn(c.id) === id).length;
+  const n = desk.items.filter(c => !c.gone && c.type === 'coin' && restingIn(c.id) === id).length, was = run[key + 'Load'];
+  if (!was || was.n !== n) run[key + 'Load'] = {n, t:desk.t};
+  else if (desk.t - was.t > .8 && b.wet && chem.liquidVol(b.c) < b.cap*.05) run[key] = n;
   return null;
 }
 const HOW_MANY = n => n <= 2 ? 'few' : n <= 5 ? 'some' : 'lots';
+// how far the wheel is, across the mat, from the lit burner's plume
+const offPlume = () => { const w = find('wheel'), b = find('burner'); if (!w || !b) return 0; const a = w.beam.translation(), c = b.body.translation(); return Math.hypot(a.x - c.x, a.z - c.z); };
 
 export const EXPERIMENTS = [
   {id:'sinkfloat', after:[], title:'Sink or Float?', level:1, blurb:'Which treasures float in a tub of water?',
@@ -343,6 +350,34 @@ export const EXPERIMENTS = [
     explain:[S("Water can only hold so much of something dissolved in it, and how much depends on what it is."),
              S("Warm water holds even more sugar. That's how syrup is made!")]},
 
+  {id:'heat', after:['volcano'], unlock: () => !!(load('trips') || {}).heatRises, title:'Heat Rises', level:3, blurb:'Where does hot air go?',
+    setup:[['burner', 'burner', .1, .16], ['flask', 'flask', .1, .16, {y:.09, fill:{water:60}}], ['wheel', 'wheel', .58, .38], ['tube', 'steamtube', -.4, .36]],
+    rounds:[
+      {q:"Will the wheel spin above the hot flask, or beside it?", ask:[S("This is a burner, {name}. It's a grown-up's tool: in a real lab, only a grown-up lights it. Here, tap it and I'll light it for you."),
+          S("Once the water's hot, will this paddle wheel spin if you hold it above the flask? What about beside it?")],
+        choose:[{id:'above', label:'Above it', icon:'⬆️'}, {id:'beside', label:'Beside it', icon:'↔️'}, {id:'neither', label:'Neither', icon:'😶'}],
+        test:[S("Tap the burner to light it. Then hold the wheel high above the flask, a little to one side, and then off beside it.")],
+        hints:[[S("Tap the burner. Watch for the blue flame, and wait for the water to steam.")], [S("Hold the wheel above the flask, with the steam passing one side of the middle.")],
+               [S("Now carry the wheel off to the side of the flask. Does it keep spinning?")]],
+        // spun hard in the plume, and slowed nearly still out of it, in either order
+        observe: run => {
+          const w = find('wheel'), b = find('burner'); if (!w || !b || !b.lit) return null;
+          if (w.blown && w.blown.kind === 'plume' && w.spin > 3) run.above = true;
+          run.calm = offPlume() > .16 && w.spin < .6 ? (run.calm || 0) + desk.t - (run.at || desk.t) : 0; run.at = desk.t;
+          if (run.calm > 1.5) run.beside = true;
+          return run.above && run.beside ? 'above' : null;
+        },
+        say:{above:"It spins above, and stops beside! Hot air and steam are lighter for their size than the cool air around them, so they rise and push the paddles on the way up. Remember the mantle on the field trip? Hot rock rises just like this."}},
+      {q:"What happens when the steam has only one way out?", ask:[S("Now let's trap the steam. This stopper has a bent glass tube through it."), S("Push it into the flask. What happens when the steam has only one way out?")],
+        choose:[{id:'spins', label:'A jet spins the wheel', icon:'💨'}, {id:'nothing', label:'Nothing, steam only goes up', icon:'😶'}, {id:'pop', label:'The stopper pops off', icon:'🍾'}],
+        test:[S("Push the stopper into the flask. Then stand the wheel beside the end of the tube, so the steam hits its paddles.")],
+        hints:[[S("Carry the stopper over the flask's neck and let go.")], [S("The tube's end points sideways. Stand the wheel on the mat right in front of it.")], [S("Is the burner still lit? The water has to boil to make steam.")]],
+        observe: () => { const w = find('wheel'), t = find('tube'); if (t && t.popped) return 'pop'; return w && w.blown && w.blown.kind === 'jet' && w.spin > 3 ? 'spins' : null; },
+        say:{spins:"Whoosh! Trapped steam pushes harder and harder, and the tube is its only way out, so it shoots out fast enough to spin the wheel sideways.", pop:"Pop! The steam pushed the stopper right out, just like the gas in Pop the Cork."}}],
+    explain:[S("Hot air and steam rise because they're lighter for their size. Cool air sinks and takes their place."),
+             S("Trap the steam and it builds pressure, like the gas in Pop the Cork. Let it out through a narrow tube and it rushes out as a jet."),
+             S("That's how steam engines worked, and how power stations still spin giant turbines to make electricity. And remember: a burner is always a grown-up's job!")]},
+
   {id:'balloon', after:['volcano'], title:'Balloon Blow-Up', level:4, blurb:'Blow up a balloon without blowing.',
     setup:[['bottle', 'bottle', 0, 0], ['balloon', 'balloon', -.4, .26], ['soda', 'soda', -.55, -.26], ['vinegar', 'vinegar', .46, -.22]],
     rounds:[{
@@ -500,7 +535,7 @@ export const EXPERIMENTS = [
              S("Each step on the pH scale is ten times stronger. Lemon juice at 2 is about a hundred thousand times more acidic than water!")]}
 ];
 
-export const opened = (e, done) => done.has(e.id) || e.after.every(id => done.has(id));
+export const opened = (e, done) => done.has(e.id) || e.after.every(id => done.has(id)) && (!e.unlock || e.unlock());
 
 // Trays only show a guess, so they stay behind. What was poured in for the explorer counts too: a jar
 // that came full of water stocks the water pitcher.
