@@ -12,7 +12,7 @@ import { LANDFORMS, LANDMARKS, landformBy, landformOf } from '../../web/js/earth
 import { arc, makeEarth } from '../../web/js/earth/model.js';
 import { foundedSaying, governmentOf } from '../../web/js/earth/nations.js';
 import { WONDERS } from '../../web/js/earth/wonders.js';
-import { arrivals, asked, eatenBy, makers, whatIf } from '../../web/js/globe/food-web.js';
+import { eatenBy, makers, plural, question, questions, whatIf } from '../../web/js/globe/food-web.js';
 import { choices } from '../../web/js/globe/landform-quiz.js';
 import { oddOneOut } from '../../web/js/globe/photos.js';
 import { judge } from '../../web/js/globe/wonder-hunt.js';
@@ -67,9 +67,9 @@ test('water knows which sea it is', () => {
   assert.deepEqual([southern.name, southern.biomeId, southern.web.id], ['Southern Ocean', 'polar-sea', 'antarctic']);
 });
 
-test('the ice sheets borrow the food web of their own pole', () => {
+test("Antarctica's land has its own tiny food web; Greenland's ice borrows the Arctic Ocean's", () => {
   const ant = earth.placeAt(-80, 0), green = earth.placeAt(72, -40);
-  assert.deepEqual([ant.name, ant.biomeId, ant.web.id], ['Antarctica', 'ice', 'antarctic']);
+  assert.deepEqual([ant.name, ant.biomeId, ant.web.id], ['Antarctica', 'ice', 'antarctic-land']);
   assert.deepEqual([green.name, green.biomeId, green.web.id], ['Greenland', 'ice', 'arctic-ocean']);
 });
 
@@ -133,14 +133,17 @@ test("Hoot's riddles point the right way: most of each biome lies in the band of
 
 test("every food web can carry Hoot's lessons", () => {
   for (const w of WEBS) {
-    // built a piece at a time: the makers, then every animal once, each after everything it eats
-    const order = [...makers(w), ...arrivals(w).map(s => s.name)];
-    assert.deepEqual([...order].sort(), w.species.map(s => s.name).sort(), `${w.id}: someone never arrives`);
-    for (const s of arrivals(w)) for (const f of s.eats) assert.ok(order.indexOf(f) < order.indexOf(s.name), `${w.id}: ${s.name} arrives before ${f}`);
-    // Hoot asks about a handful of them, mostly hunters; plant eaters that only eat plants are easy and samey
-    const ask = [...asked(w)].map(n => w.species.find(s => s.name === n)), grazers = ask.filter(s => s.eats.every(f => makers(w).includes(f)));
-    assert.ok(ask.length >= 5 && ask.length <= 6, `${w.id} asks about ${ask.length}`);
-    assert.ok(grazers.length <= 2, `${w.id} asks about ${grazers.length} plant eaters`);
+    // a handful of questions (fewer in a web as small as a vent's), the makers among them, no one asked
+    // about twice, each with its answers among its choices and at least two that are wrong
+    const qs = questions(w), who = qs.map(q => q.who && q.who.name);
+    assert.ok(qs.length >= 4 && qs.length <= 6, `${w.id} asks ${qs.length} questions`);
+    assert.equal(qs.filter(q => q.kind === 'makers').length, 1, `${w.id} asks about the makers once`);
+    assert.equal(new Set(who).size, who.length, `${w.id} asks about someone twice`);
+    for (const q of qs) {
+      const names = q.choices.map(c => c.name), truth = q.kind === 'makers' ? makers(w) : q.kind === 'eats' ? q.who.eats : eatenBy(w, q.who.name);
+      for (const n of q.right) assert.ok(truth.includes(n) && names.includes(n), `${w.id}: ${n} isn't an answer about ${who}`);
+      assert.ok(names.length - q.right.size - q.bonus.size >= 2 && names.length <= 8, `${w.id}: ${names.length} choices`);
+    }
     const q = whatIf(w);
     assert.ok(q, `${w.id} has nothing to make disappear`);
     assert.ok(q.gone.eats.includes(q.food.name), `${w.id}: ${q.gone.name} doesn't eat ${q.food.name}`);
@@ -151,12 +154,33 @@ test("every food web can carry Hoot's lessons", () => {
   assert.deepEqual([plains.gone.name, plains.food.name, plains.eater.name], ['Prairie dog', 'Grass', 'Black-footed ferret']);
 });
 
+test("Hoot's wrong answers are surely wrong: never what an animal sometimes eats, nor anything lower in the web for a hunter", () => {
+  // the web leaves out that a jaguar might snatch an agouti, so the agouti mustn't be a wrong answer
+  const web = {species: [
+    {name: 'Leaves', eats: [], sometimes: []}, {name: 'Fruit', eats: [], sometimes: []},
+    {name: 'Sloth', eats: ['Leaves'], sometimes: []}, {name: 'Agouti', eats: ['Fruit'], sometimes: []}, {name: 'Peccary', eats: ['Fruit'], sometimes: []},
+    {name: 'Jaguar', eats: ['Peccary'], sometimes: ['Sloth']}, {name: 'Eagle', eats: ['Sloth'], sometimes: []},
+  ]};
+  for (let i = 0; i < 50; i++) {
+    const q = question(web, 'eats', 'Jaguar'), wrong = q.choices.filter(c => !q.right.has(c.name) && !q.bonus.has(c.name)).map(c => c.name).sort();
+    assert.deepEqual([...q.right], ['Peccary']);
+    assert.deepEqual(wrong, ['Eagle', 'Fruit', 'Leaves'], 'only the plants it never eats, and its rival');
+    assert.ok(!q.bonus.size || q.bonus.has('Sloth'));
+    const by = question(web, 'eaten', 'Sloth');
+    assert.deepEqual([...by.right], ['Eagle']);
+    assert.ok(by.choices.every(c => c.name !== 'Jaguar' || by.bonus.has('Jaguar')), 'what sometimes eats it is never wrong');
+  }
+  assert.deepEqual(['Jaguar', 'Poison dart frog', 'Mouse', 'Butterfly', 'Arctic fox', 'Salmon'].map(name => plural({name})),
+    ['Jaguars', 'Poison dart frogs', 'Mice', 'Butterflies', 'Arctic foxes', 'Salmon']);
+});
+
 test('everyone in every food web has a photo, with credit to whoever took it', () => {
   const photos = JSON.parse(readFileSync(new URL('../../web/wildlife/photos.json', import.meta.url), 'utf8'));
   for (const w of WEBS) for (const s of w.species) {
     const p = photos[`${w.id}/${s.name}`] || photos[s.name];
     assert.ok(p, `${w.id}: no photo of ${s.name}; run tools/earth/photos.mjs`);
     assert.ok(existsSync(new URL(`../../web/wildlife/${p.file}`, import.meta.url)), `${s.name}: ${p.file} is missing`);
+    assert.ok(existsSync(new URL(`../../web/wildlife/small/${p.file}`, import.meta.url)), `${s.name}: small/${p.file} is missing`);
     assert.ok(p.by && p.license && p.page, `${s.name}: the photo has no credit`);
   }
 });

@@ -1,6 +1,7 @@
 // Fetches a photo of everyone in the globe's food webs from Wikimedia Commons into web/wildlife/,
 // with web/wildlife/photos.json naming each one's file, photographer and licence, and a sentence or
-// two about them from the opening of their Wikipedia article.
+// two about them from the opening of their Wikipedia article. A small copy of each goes in
+// web/wildlife/small/, for the food web's tokens and choices, which show dozens at once.
 //
 //   node tools/earth/photos.mjs           (from lantern-hill/; fetches only what's missing)
 //   node tools/earth/photos.mjs Jaguar    (fetches that one again, after changing its SOURCE)
@@ -22,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { WEBS } from '../../web/js/earth/biomes.js';
 
 const OUT = join(dirname(fileURLToPath(import.meta.url)), '../../web/wildlife');
-const WIDTH = 640;
+const WIDTH = 640, SMALL = 200;   // SMALL is the short side, so any square cut from it is that sharp
 const UA = 'ExplorerKids/1.0 (https://github.com/Harrichael/ExplorerKids)';
 
 const SOURCE = {
@@ -387,6 +388,104 @@ const SOURCE = {
   'Dune grass & sedges': 'Dune', 'Butia palms & fruit': 'Butia odorata',
   'salt-range/Monitor lizard': 'Bengal monitor', 'salt-range/Hare': 'Indian hare', 'restinga/Caiman': 'Broad-snouted caiman', 'uvs/Gerbils': 'Mongolian gerbil',
   'free-state/Gerbils': 'Highveld gerbil', 'nagaland/Macaque': 'Assam macaque', 'uvs/Jerboa': 'Siberian jerboa', 'balearics/Hedgehog': 'North African hedgehog',
+  'Flowers': 'Heliconia',
+  'amazon/Water plants': 'Victoria amazonica',
+  'Leaf-cutter ants': 'Atta sexdens',
+  'Blue morpho': 'Morpho peleides',
+  'Capuchin monkey': 'Tufted capuchin',
+  'Fruit bats': 'Seba\'s short-tailed bat',
+  'Hummingbirds': 'Rufous-breasted hermit',
+  'amazon/Small fish': 'Cardinal tetra',
+  'Pink river dolphin': 'Amazon river dolphin',
+  'Figs': 'File:Ficus thonningii, twyge, loof en vrugte, a, Pretoria.jpg',
+  'Oil palm': 'File:Elaeis guineensis - African Oil Palm tree with fruit.jpg',
+  'congo/Termites': 'File:Macrotermes bellicosus minor soldier.jpg',
+  'Driver ants': 'File:Dorylus sp s ants Colony(1) 02.jpg',
+  'Freshwater crabs': 'Potamonautes',
+  'Fish': 'Congo tetra',
+  'Reed frogs': 'Hyperolius',
+  'Water chevrotain': 'File:Em - Hyemoschus aquaticus.jpg',
+  'Brush-tailed porcupine': 'File:Atherurus africanus Zoo Berlin 01.jpg',
+  'congo/Giant pouched rat': 'Emin\'s pouched rat',
+  'congo/Tree pangolin': 'File:Tree pangolin (Phataginus tricuspis) Nyamebe Bepo.jpg',
+  'Dwarf crocodile': 'Osteolaemus',
+  'congo/Gaboon viper': 'Bitis gabonica',
+  'congo/African rock python': 'Central African rock python',
+  'Seeds & nuts': 'File:Dipterocarp Winged Seeds (Shorea sp.) (15891764082).jpg',
+  'Giant honey bee': 'Apis dorsata',
+  'Rajah Brooke\'s birdwing': 'Trogonoptera brookiana',
+  'River fish': 'Trigonostigma heteromorpha', 'Roots & tubers': 'Dioscorea',
+  'Flying lizard': 'Draco sumatranus',
+  'borneo/Gibbon': 'Müller\'s gibbon',
+  'Mouse-deer': 'Lesser mouse-deer',
+  'borneo/Rats': 'Maxomys whiteheadi',
+  'Bornean bristlehead': 'File:Bornean Bristlehead (14057133146) (cropped).jpg',
+  'Paradise tree snake': 'Chrysopelea paradisi',
+  'costa-rica/Seeds & nuts': 'Seed',
+  'Army ants': 'File:Eciton burchellii army ants.jpg',
+  'Hummingbird': 'Rufous-tailed hummingbird',
+  'costa-rica/Parrot': 'Red-lored amazon',
+  'Jacamar': 'Rufous-tailed jacamar',
+  'costa-rica/Fruit bat': 'Jamaican fruit bat',
+  'costa-rica/Tapir': 'Baird\'s tapir',
+  'Anteater': 'Northern tamandua',
+  'costa-rica/Armadillo': 'Nine-banded armadillo',
+  'Opossum': 'Common opossum',
+  'Iguana': 'Green iguana',
+  'Basilisk lizard': 'Brown basilisk',
+  'Eyelash viper': 'File:Bothriechis nigroadspersus (La Selva Biological Station).jpg',
+  'costa-rica/Boa': 'Boa imperator',
+  'costa-rica/Hawk-eagle': 'Ornate hawk-eagle',
+  'Fig trees': 'Ficus sycomorus',
+  'serengeti/Dik-dik': 'Kirk\'s dik-dik',
+  'serengeti/Warthog': 'Common warthog',
+  'serengeti/Hare': 'Cape hare',
+  'serengeti/Mice': 'Natal multimammate mouse',
+  'Ticks': 'Rhipicephalus appendiculatus',
+  'serengeti/Baboon': 'Olive baboon',
+  'Guineafowl': 'Helmeted guineafowl',
+  'Oxpecker': 'Red-billed oxpecker',
+  'serengeti/Mongoose': 'Banded mongoose',
+  'serengeti/Secretary bird': 'Secretarybird',
+  'Jackal': 'Black-backed jackal',
+  'Vulture': 'White-backed vulture',
+  'serengeti/Leopard': 'African leopard',
+  'Sea cucumber': 'Holothuria atra',
+  'Sea urchin': 'Diadema setosum',
+  'Nudibranch': 'Chromodoris annae',
+  'Damselfish': 'Chromis viridis',
+  'Blue tang': 'File:Paracanthurus hepatus a coral reef fish.jpg',
+  'great-barrier-reef/Butterflyfish': 'Chevron butterflyfish',
+  'great-barrier-reef/Manta ray': 'Reef manta ray',
+  'great-barrier-reef/Hawksbill turtle': 'Hawksbill sea turtle',
+  'Mantis shrimp': 'Odontodactylus scyllarus',
+  'great-barrier-reef/Moray eel': 'Giant moray',
+  'Sea anemone': 'Radianthus magnifica',
+  'coral-triangle/Damselfish': 'Pomacentrus moluccensis',
+  'Sea snails': 'File:Turbo petholatus Voavah.JPG',
+  'Cuttlefish': 'Ascarosepion latimanus',
+  'Coral grouper': 'Leopard coral grouper',
+  'Sea krait': 'Yellow-lipped sea krait',
+  'antarctic-land/Algae': 'Prasiola crispa',
+  'Moss': 'File:Musgo Antartico.jpg',
+  'Lichen': 'File:Usnea antarctica Du Rietz.JPG',
+  'Springtails': 'Cryptopygus',
+  'Mites': 'Oribatida',
+  'Antarctic midge': 'Belgica antarctica',
+  'Rotifers': 'File:The Rotifer Notholca sp.jpg', 'African golden cat': 'File:Caracal aurata 2.jpg', 'Tambaqui': 'File:Colossoma macropomum - Flickr - Dick Culbert.jpg',
+  'Nematodes': 'Nematode',
+  'Tardigrades': 'Tardigrade',
+  'Predatory mite': 'File:Acugamasus sp.jpg',
+  'Bacteria': 'Beggiatoa',
+  'Giant tube worm': 'Riftia',
+  'Vent mussel': 'Bathymodiolus thermophilus',
+  'Giant white clam': 'Calyptogena magnifica',
+  'Limpets': 'File:Lepetodrilus sp ESR.png',
+  'east-pacific-rise/Amphipods': 'Amphipoda',
+  'Squat lobster': 'File:VonDamm Crustaceans.jpg',
+  'Vent crab': 'File:Brachyuran crabs on hydrothermal vents, Galapagos Rift (Expl6510 9784126816).jpg',
+  'Vent fish': 'Thermarces cerberus',
+  'Vent octopus': 'Vulcanoctopus'
 };
 
 const get = async url => {
@@ -425,8 +524,13 @@ async function fetchPhoto(key, source){
   writeFileSync(tmp, Buffer.from(await (await get(info.thumburl)).arrayBuffer()));
   // Commons' thumbnails are kind to the eye and heavy; twice the card's width is plenty
   execFileSync('sips', ['--resampleWidth', String(WIDTH), '-s', 'format', 'jpeg', '-s', 'formatOptions', 'normal', tmp, '--out', join(OUT, name)], {stdio: 'ignore'});
-  unlinkSync(tmp);
+  unlinkSync(tmp); shrink(name);
   return {file: name, by: plain(m.Artist && m.Artist.value) || 'Unknown', license: plain(m.LicenseShortName && m.LicenseShortName.value), page: info.descriptionurl};
+}
+
+function shrink(name){
+  const [w, h] = execFileSync('sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', join(OUT, name)], {encoding: 'utf8'}).match(/\d+(?=\s*$)/gm).map(Number);
+  execFileSync('sips', [w < h ? '--resampleWidth' : '--resampleHeight', String(SMALL), '-s', 'format', 'jpeg', '-s', 'formatOptions', 'normal', join(OUT, name), '--out', join(OUT, 'small', name)], {stdio: 'ignore'});
 }
 
 async function about(key, source){
@@ -439,12 +543,13 @@ async function about(key, source){
   return (text.match(/(?:[^.!?]|[.!?](?!\s|$))+[.!?]+(?=\s|$)/g) || []).slice(0, 2).join(' ').replace(/\s+/g, ' ').trim();
 }
 
-mkdirSync(OUT, {recursive: true});
+mkdirSync(join(OUT, 'small'), {recursive: true});
 const manifest = existsSync(join(OUT, 'photos.json')) ? JSON.parse(readFileSync(join(OUT, 'photos.json'), 'utf8')) : {};
 const again = new Set(process.argv.slice(2));
 const wanted = new Set();
 for (const w of WEBS) for (const s of w.species) wanted.add(SOURCE[`${w.id}/${s.name}`] ? `${w.id}/${s.name}` : s.name);
-for (const key of Object.keys(manifest)) if (!wanted.has(key)) { rmSync(join(OUT, manifest[key].file), {force: true}); delete manifest[key]; }
+for (const key of Object.keys(manifest)) if (!wanted.has(key)) { for (const f of [manifest[key].file, 'small/' + manifest[key].file]) rmSync(join(OUT, f), {force: true}); delete manifest[key]; }
+for (const m of Object.values(manifest)) if (!existsSync(join(OUT, 'small', m.file))) shrink(m.file);
 const failed = [];
 for (const key of wanted) {
   const source = SOURCE[key] || key;
