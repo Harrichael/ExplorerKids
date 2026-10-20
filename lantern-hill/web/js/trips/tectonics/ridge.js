@@ -7,13 +7,13 @@
 import * as THREE from 'three';
 import { T, XF, add, bAdd, bFlush, cyl, ease, fr, glowM, glowTex, grad, grp, mergeGeos, meshOf, outline, sph, tex } from '../../core/kit.js';
 import { Sound } from '../../core/sound.js';
-import { addUsable, inWorld } from '../../core/world.js';
+import { inWorld } from '../../core/world.js';
 import { hero, player } from '../../player.js';
 import { game } from '../../state.js';
 import { tripBus } from '../bus.js';
 import { classmates } from '../class.js';
 import { goggles } from '../goggles.js';
-import { puffTex, puffs, tripWorld } from '../stop-kit.js';
+import { curio as kitCurio, puffTex, puffs, tripWorld } from '../stop-kit.js';
 import { anglerfish, atolla, ghostOctopus, glowJelly, seaPig, whaleFall, yetiCrab } from './deep-life.js';
 import { PAD, buildRift, crackX, ground, ledgeX, onLedge, walkable, wallAt } from './rift.js';
 import { worries } from './worries.js';
@@ -374,21 +374,7 @@ export function buildRidge(t){
     "Mo is standing on the crack, and Juniper found some lumpy rocks. Go see! I think there's a job for my time goggles.";
 
   // ---------- things to look closer at, for anyone who goes exploring ----------
-  const looked = new Set();
-  // view: which way from the animal the camera looks in from, where it isn't hemmed in by rock
-  const curio = (name, [x, z], y, lines, view, lift = .6) => addUsable(w, {name, verb:'Look closer', short:'Look', x, z, y:ground(x, z), range:2.2, glow:[x, y, z], when: () => !looked.has(name),
-    async action(){
-      if (game.cutscene) return;
-      looked.add(name); game.cutscene = true;
-      const [vx, vz] = view, d = Math.hypot(vx, vz), ux = vx/d, uz = vz/d, cy = ground(x, z);
-      // the explorer steps to one side of the shot and peers in, rather than blocking it
-      const sx = x + ux*.8 + uz*1.8, sz = z + uz*.8 - ux*1.8;
-      if (walkable(sx, sz)) { player.x = sx; player.z = sz; player.angle = Math.atan2(x - sx, z - sz); }
-      player.pose = 'peer';
-      t.cut((pos, look) => { pos.set(x + ux*4.2 - uz*.9, cy + lift + 1.5, z + uz*4.2 + ux*.9); look.set(x, cy + lift, z); });
-      try { await say(lines); } catch (e) { if (t.gone) return; throw e; } finally { player.pose = null; }
-      t.cut(null); game.cutscene = false;
-    }});
+  const curio = (name, at, y, lines, view, lift) => kitCurio(w, t, {name, at, y, lines, view, lift});
   curio('Fuzzy crabs', at(-7.8, -2.4), ground(...SMOKER) + 1, [['sparks', "Yeti crabs! See their fuzzy, hairy arms?"],
     ['sparks', "They grow tiny living things called bacteria in all that fuzz. Then they eat them!"],
     ['sparks', "They wave their arms in the warm vent water, to help their garden grow."]], [-.6, 1]);
@@ -404,7 +390,7 @@ export function buildRidge(t){
     ['sparks', "Lots of deep-sea animals make their own light. It's called bioluminescence."],
     ['sparks', "If something tries to eat this one, it flashes like a burglar alarm. That calls a bigger animal to scare the attacker away!"]], [-.15, 1], 2);
   curio('Big bones', [WHALE[0] + .9, WHALE[1] + 1], ground(...WHALE) + 1, [['sparks', "Whale bones! When a whale dies, it sinks all the way down here."],
-    ['sparks', "Crabs, fish, and red bone-eating worms come to feast on it."], ['sparks', "One whale can feed them for years and years!"]], [1, .8]);
+    ['sparks', "Crabs, fish, and red bone-eating worms come to feast on it."], ['sparks', "One whale can feed them for years and years!"]], [1, .2]);
 
   return {world:w, bus, cls,
     // the magma the class rode up the mantle on brings the bus with it: up out of the crack's mouth

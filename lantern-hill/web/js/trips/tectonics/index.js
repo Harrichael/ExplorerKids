@@ -9,6 +9,7 @@
 // What happens at each place lives with the place.
 
 import { Sound } from '../../core/sound.js';
+import { load } from '../../save.js';
 import { game } from '../../state.js';
 import { cabin } from '../cabin.js';
 import { notebook } from '../notebook.js';
@@ -16,6 +17,7 @@ import { puffs } from '../stop-kit.js';
 import { diagram } from './diagram.js';
 import { buildMantle } from './mantle.js';
 import { PAGES } from './pages.js';
+import { quiz } from './quiz.js';
 import { buildRidge } from './ridge.js';
 import { buildRim } from './rim.js';
 import { buildFault } from './fault.js';
@@ -174,7 +176,7 @@ export const tectonics = {
       cab.view('sky'); t.watch(cab.world, cab.shot('class'), seat);
       await t.say(slide ? [['pip', "Crumpled-up mountains! What could beat that?"], ['basil', "Nothing. Let's have nothing beat it. Let's go home."]]
                         : [['basil', "My knees are STILL wobbly."], ['mo', "And I still can't find my snack."]]);
-      t.cut(cab.shot('window'));
+      cab.view(slide ? 'hills' : 'peaks'); t.cut(cab.shot('window'));
       await t.say([slide ? ['juniper', "Look, the hills down there are all gold. And there's a long crack running across them!"]
                          : ['pip', "Snowy mountains, way out there! Is that where we're going?"]]);
       t.cut(cab.shot('teacher'));
@@ -214,17 +216,24 @@ export const tectonics = {
   outro: [['sparks', "Home sweet Lantern Hill! So, {name}: the ground shakes and mountains grow because Earth's crust is broken into plates."],
           ['sparks', "And they're always moving, very, very slowly."],
           ['basil', "Can we go on another field trip tomorrow?"]],
-  badge: {title:'Plate Tectonics Explorer', draw: (c, s) => drawBadge(c, full(s)),
+  badge: {title:'Plate Tectonics Explorer', draw: (c, s) => drawBadge(c, full(s), aced()),
     text: (name, s) => `You stood on a volcano, rode the mantle up to the sea floor, and made mountains rise and a fault snap. Splendid work, ${name}!` +
-      (full(s) ? " And you found every single thing in Juniper's notebook!" : "")}
+      (full(s) ? " And you found every single thing in Juniper's notebook!" : "") + (aced() ? " And you aced Dr. Sparks's Explorer Check!" : "")},
+  quiz,
 };
+// every star in Dr. Sparks's Explorer Check, on some try
+const aced = () => ((load('trips') || {})[quiz.key] || 0) >= quiz.questions().length;
 
-function drawBadge(c, gold){
+function drawBadge(c, gold, ring){
   const g = c.getContext('2d'), s = c.width/360; g.setTransform(s, 0, 0, s, 0, 0); g.clearRect(0, 0, 360, 360); g.translate(180, 170);
   g.lineJoin = 'round';
   // a full notebook earns a golden burst behind the badge
   if (gold) { g.beginPath(); for (let k = 0; k < 32; k++) { const r = k % 2 ? 140 : 168, a = k*Math.PI/16; g.lineTo(Math.cos(a)*r, Math.sin(a)*r); } g.closePath();
     g.fillStyle = '#ffd36b'; g.fill(); g.strokeStyle = '#1a1320'; g.lineWidth = 5; g.stroke(); }
+  // a perfect Explorer Check rings it with stars
+  if (ring) for (let k = 0; k < 16; k++) { const a = k*Math.PI/8 - Math.PI/2; if (Math.abs(Math.sin(a)) > .9 && Math.sin(a) > 0) continue;
+    g.beginPath(); for (let j = 0; j < 10; j++) { const r = j % 2 ? 6 : 14, b = j*Math.PI/5 - Math.PI/2; g.lineTo(Math.cos(a)*150 + Math.cos(b)*r, Math.sin(a)*150 + Math.sin(b)*r); }
+    g.closePath(); g.fillStyle = '#ffd36b'; g.fill(); g.strokeStyle = '#1a1320'; g.lineWidth = 2.5; g.stroke(); }
   g.fillStyle = '#b5552f'; for (const sx of [-1, 1]) { g.beginPath(); g.moveTo(sx*34, 70); g.lineTo(sx*70, 180); g.lineTo(sx*46, 160); g.lineTo(sx*24, 182); g.closePath(); g.fill(); g.strokeStyle = '#1a1320'; g.lineWidth = 5; g.stroke(); }
   g.fillStyle = '#d9a441'; g.beginPath(); g.arc(0, 0, 128, 0, 7); g.fill(); g.strokeStyle = '#1a1320'; g.lineWidth = 6; g.stroke();
   g.fillStyle = '#2f5552'; g.beginPath(); g.arc(0, 0, 100, 0, 7); g.fill();

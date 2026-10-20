@@ -267,6 +267,8 @@ button.snd:focus-visible,button.word:focus-visible{outline:3px solid #6d3b5e;out
 #notebook .slot.full{background:#fff1c4;border-color:#b07a1e;box-shadow:0 0 0 3px #ffd36b}
 #notebook .stars{display:block;font-size:17px;letter-spacing:2px;color:#d9a441;-webkit-text-stroke:1px #1a1320;margin-top:2px}
 #notebook .stars i{font-style:normal;color:#fff8e8;opacity:.8}
+#notebook .curios{display:table;margin:3px auto 0;padding:1px 8px;border-radius:99px;background:rgba(52,64,107,.1);font-weight:900;font-size:12px;letter-spacing:.3px;color:#34406b}
+#notebook .curios.all{background:#ffd36b;color:#1a1320;box-shadow:0 0 0 2px #1a1320}
 #notebook .cap{font-weight:800;font-size:13.5px;line-height:1.35;text-align:center;padding:4px 2px 2px}
 #notebook .cap b{display:block;font-family:var(--display);font-weight:400;font-size:16px}
 @media (max-width:520px){#notebook .slots{grid-template-columns:1fr 1fr;gap:8px}#notebook .slot,#notebook .slot:nth-child(3n+1):nth-last-child(2){grid-column:auto}#notebook .cap{font-size:12px}}

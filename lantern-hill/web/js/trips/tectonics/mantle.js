@@ -5,21 +5,25 @@
 // cools and sinks, and the plates on top are dragged apart.
 
 import * as THREE from 'three';
-import { T, XF, add, bAdd, bFlush, clamp01, ease, fr, glowTex, outline, sph, tex } from '../../core/kit.js';
+import { T, XF, add, bAdd, bFlush, clamp01, ease, fr, glowTex, mergeGeos, outline, sph, tex } from '../../core/kit.js';
 import { Sound } from '../../core/sound.js';
 import { inWorld } from '../../core/world.js';
+import { player } from '../../player.js';
 import { save } from '../../save.js';
 import { game } from '../../state.js';
 import { tripBus } from '../bus.js';
 import { classmates } from '../class.js';
 import { goggles } from '../goggles.js';
-import { puffs, tripWorld } from '../stop-kit.js';
+import { curio, puffs, tripWorld } from '../stop-kit.js';
 import { worries } from './worries.js';
 
 // the ledge is the floor of the heat bubble, an ellipse; the cliff stands across the chasm to the north
 const BX = 12.5, BZ = 6, BC = 3, CLIFF = -14, EDGE = -2.6;
 const BUS = [-8, 6.2], ROOF = 16;
 const ROCK = [-5.6, .4], PUTTY = [5.2, .9];
+// things to find round the ledge's ends and along its back, away from where the class stands
+const OLIV = [3.6, 8.1], DIAM = [-10.4, 2.4], ECHO = [8.2, -1.3], POKE = [-3.4, 8.3], CRACK = [-9.4, -.4];
+const FINDS = [OLIV, DIAM, ECHO, POKE, CRACK];
 // the cliff's painting: 34 x 18 world units drawn on a 1024 x 512 canvas
 const CW = 1024, CH = 512, WW = 34, WH = 18;
 // the two loops of rock, side by side, rising together up the middle and sinking at the outer edges
@@ -55,7 +59,7 @@ export function buildMantle(t){
     for (let i = 0; i < 22; i++) { const h = 1.5 + Math.random()*3; bAdd(0x3a2040, new THREE.ConeGeometry(.6 + Math.random()*.6, h, 7), XF(-16 + Math.random()*32, ROOF - h/2, -12 + Math.random()*20, 1, 1, 1, Math.PI, 0, 0), {ink:.05}); }
     // boulders on the ledge, chunky and solid, away from where the class stands
     for (let i = 0; i < 26; i++) { const x = -11 + Math.random()*22, z = EDGE + .8 + Math.random()*8;
-      if (!inside(x, z) || Math.hypot(x - BUS[0], z - BUS[1]) < 4 || Math.hypot(x - PUTTY[0], z - PUTTY[1]) < 2 || Math.hypot(x - ROCK[0], z - ROCK[1]) < 2 || Math.abs(x) < 2.5) continue;
+      if (!inside(x, z) || Math.hypot(x - BUS[0], z - BUS[1]) < 4 || Math.hypot(x - PUTTY[0], z - PUTTY[1]) < 2 || Math.hypot(x - ROCK[0], z - ROCK[1]) < 2 || Math.abs(x) < 2.5 || FINDS.some(([fx, fz]) => Math.hypot(x - fx, z - fz) < 2.4)) continue;
       const r0 = .25 + Math.random()*.45; bAdd([0x5a2c24, 0x4a2420, 0x6a3428][i % 3], new THREE.SphereGeometry(r0, 8, 6), XF(x, r0*.3, z, fr(1, 1.3), .65, fr(.9, 1.2), 0, fr(0, 6), 0), {ink:.035, shadow:true}); }
     bFlush(w.scene);
     // Basil's rock to tap, and Juniper's flat warm stone with her putty on it
@@ -172,8 +176,89 @@ export function buildMantle(t){
       await say([['mo', pick === 1 ? "Yes! As hot as the surface of the sun!" : "Even hotter! As hot as the surface of the sun!"],
                  ['mo', "Good thing we have the heat bubble. My snacks would melt."]]);
     }});
-  cls.hint = () => cls.saw('goggles') ? "Hop on the bus when you're ready, {name}. We're riding the rock up!" :
+  cls.hint = () => cls.saw('goggles') ? "Hop on the bus when you're ready, {name}. We're riding the rock up! Or poke around first. Even way down here, there are treasures." :
     "Basil has a question, Juniper has putty, and Pip has my time goggles!";
+
+  // ---------- things to look closer at, for anyone who pokes around the ledge ----------
+  const glint = (col, s, x, y, z) => { const g = new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex, color:col, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0})); g.scale.setScalar(s); g.position.set(x, y, z); w.scene.add(g); return g; };
+  let gem, ripple;
+  const sparkles = [];
+  inWorld(w, () => {
+    // olivine: a nest of green crystals in a boulder at the back of the ledge
+    const [ox, oz] = OLIV, xs = [];
+    const host = add(new THREE.SphereGeometry(.8, 10, 7), T(0x4a2420, {emissive:0x2a0a06, emissiveIntensity:.5}), ox, .35, oz + .5); host.scale.set(1.3, .8, 1); outline(host, 1.03);
+    // on the boulder's face toward the chasm, each leaning out from it
+    for (let i = 0; i < 18; i++) { const a = fr(-1.2, 1.2), tilt = fr(.3, 1), h = fr(.25, .5), r = fr(.06, .1), px = ox + Math.sin(a)*.8, pz = oz + .5 - Math.cos(a)*.62, py = fr(.15, .75);
+      const m = XF(px, py, pz, 1, 1, 1, -Math.cos(a)*tilt, 0, -Math.sin(a)*tilt);
+      xs.push([new THREE.CylinderGeometry(r, r, h, 6).translate(0, h/2, 0), m], [new THREE.ConeGeometry(r, r*1.6, 6).translate(0, h + r*.8, 0), m]); }
+    outline(add(mergeGeos(xs), T(0x8ccf4a, {emissive:0x3a7a18, emissiveIntensity:.55}), 0, 0, 0), 1.04);
+    for (let i = 0; i < 4; i++) sparkles.push(glint(0xd8ffb0, .5, ox + fr(-.5, .5), .75 + fr(0, .3), oz + .2 + fr(-.1, .2)));
+    // a dark lump of deep rock with a diamond winking out of it
+    const [dx, dz] = DIAM;
+    const lump = add(new THREE.DodecahedronGeometry(.75, 1), T(0x3a3a4e, {emissive:0x0e0a1a, emissiveIntensity:.4}), dx, .4, dz); lump.scale.set(1.2, .85, 1); outline(lump, 1.04);
+    gem = add(new THREE.OctahedronGeometry(.1, 0), new THREE.MeshPhongMaterial({color:0xe8f4ff, emissive:0x4a6aa0, specular:0xffffff, shininess:120, flatShading:true}), dx + .35, .78, dz + .55); outline(gem, 1.15);
+    sparkles.push(glint(0xe0f0ff, .7, dx + .38, .82, dz + .62));
+    // a boulder split open: its crack glows red at the edges, orange, then yellow in the hot middle
+    const [cx, cz] = CRACK;
+    for (const sx of [-1, 1]) { const half = add(new THREE.DodecahedronGeometry(.6, 1), T(0x4a2420, {emissive:0x2a0a06, emissiveIntensity:.5}), cx + sx*.62, .45, cz); half.scale.set(.7, 1, 1); half.rotation.y = sx*.3; outline(half, 1.04); }
+    const heat = tex(64, 128, (c, cw, ch) => { const g = c.createLinearGradient(0, 0, cw, 0); [[0, '#6a1408'], [.2, '#c8301a'], [.34, '#ff7a2a'], [.5, '#fff2b0'], [.66, '#ff7a2a'], [.8, '#c8301a'], [1, '#6a1408']].forEach(([k, col]) => g.addColorStop(k, col)); c.fillStyle = g; c.fillRect(0, 0, cw, ch); });
+    heat.wrapS = heat.wrapT = THREE.ClampToEdgeWrapping;
+    add(new THREE.PlaneGeometry(.5, 1), new THREE.MeshBasicMaterial({map:heat, side:THREE.DoubleSide}), cx, .45, cz, null, false);
+    // the chasm's lip, where a shout carries out across the cave
+    for (const [ex, ez, s] of [[-.8, -.5, .35], [.9, -.4, .28], [1.4, .3, .22]]) bAdd(0x5a2c24, new THREE.SphereGeometry(s, 8, 6), XF(ECHO[0] + ex, s*.3, ECHO[1] + ez, 1.2, .6, 1, 0, ex, 0), {ink:.035, shadow:true});
+    bFlush(w.scene);
+  });
+  // the bubble's edge rings where it's poked, like a drop on a pond
+  ripple = new THREE.Mesh(new THREE.RingGeometry(.08, .13, 32), new THREE.MeshBasicMaterial({color:0xaef0ff, transparent:true, opacity:0, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide}));
+  const ry = .9, rz = BC + BZ*Math.sqrt(1 - (POKE[0]/BX)**2 - (ry/7)**2);
+  ripple.position.set(POKE[0], ry, rz); ripple.lookAt(POKE[0] + POKE[0]/BX**2*20, ry + ry/49*20, rz + (rz - BC)/BZ**2*20); w.scene.add(ripple);
+  let boing = 0, glow = 0;
+  // embers drifting up out of the chasm, and grit sifting from the roof now and then
+  const embers = Array.from({length:26}, () => { const s = glint(0xffa050, fr(.15, .35), fr(-12, 12), fr(-13, 12), fr(CLIFF + 1, EDGE - 1.5)); s.material.opacity = .8; s.v = fr(.5, 1.4); return s; });
+  const grit = puffs(w, 0, ROOF - .3, 0, {rate:0, rise:-1.5, size:.7, color:0x8a5a4a, opacity:.5, spread:.6, life:2.6});
+  let nextGrit = 5;
+  w.anims.push((dt, tt) => {
+    sparkles.forEach((s, i) => { s.material.opacity = Math.max(s.material.opacity - dt*2, Math.max(0, Math.sin(tt*.8 + i*1.9) - .94)*14, glow); });
+    glow = Math.max(0, glow - dt*.5);
+    if (boing > 0) { boing = Math.max(0, boing - dt*.8); const k = 1 - boing; ripple.scale.setScalar(1 + k*14); ripple.material.opacity = boing; dome.material.opacity = .07 + boing*.2; }
+    for (const e of embers) { e.position.y += dt*e.v; e.position.x += Math.sin(tt + e.v*9)*dt*.2; if (e.position.y > 13) e.position.y = -13; }
+    if ((nextGrit -= dt) < 0) { nextGrit = fr(7, 15); const a = fr(0, 7); grit.x = Math.cos(a)*fr(6, 13); grit.z = CLIFF + fr(2, 10); grit.burst = .4; }
+  });
+
+  const CRACK_LINES = [null,
+    ['sparks', "Hot rock glows. Red is hot, orange is hotter, and yellow is hottest of all!"],
+    ['sparks', "Blacksmiths read the colour of hot metal the very same way."],
+    ['mo', "Like the coils in a toaster. Red means toast is coming!"]];
+  curio(w, t, {name:'Glowing crack', at:CRACK, y:1.2, view:[.4, 1], verb:'Peek in the crack', lines:CRACK_LINES,
+    async pre(){ player.x = CRACK[0] + 1.6; player.z = CRACK[1] + 1.1; player.angle = Math.atan2(-1.6, -1.1);
+      t.cut((pos, look) => { pos.set(CRACK[0] - .5, 1.3, CRACK[1] + 2.4); look.set(CRACK[0], .45, CRACK[1]); });
+      const pick = await t.ask('sparks', "See how the crack glows in different colours? Which part do you think is hottest?", ["The yellow middle", "The orange part", "The red edges"]);
+      CRACK_LINES[0] = ['sparks', pick === 0 ? "You got it! The yellow middle is the hottest." : "It's the yellow middle! That's the hottest part."]; }});
+  curio(w, t, {name:'Green crystals', at:OLIV, y:1.3, view:[.3, -1], verb:'Look closer', lines:[
+    ['sparks', "Green crystals! This is olivine. The mantle is made mostly of it."],
+    ['sparks', "When it's clear and sparkly, people call it peridot, and wear it as a gem."],
+    ['juniper', "There's a beach in Hawaii with GREEN sand! Is it made of this?"],
+    ['sparks', "It is! A volcano carried bits of olivine up from deep down, and the waves washed them into a green beach."]],
+    async act(){ glow = 1; [1047, 1319, 1568, 2093].forEach((f, i) => Sound.tone(f, {type:'sine', t:i*.12, dur:.4, vol:.05})); }});
+  curio(w, t, {name:'Twinkle in the rock', at:DIAM, y:1.3, view:[1, .5], verb:'Look closer', lines:[
+    ['sparks', "A twinkle! That's a tiny diamond."],
+    ['sparks', "Diamonds are made of carbon, the same stuff as the black in your pencil."],
+    ['sparks', "Deep in the mantle, it's so hot, and the rock above squeezes so hard, that carbon gets pressed into diamond."],
+    ['mo', "So if I squeeze my pencil really, really hard…"],
+    ['basil', "You'd need a whole mountain sitting on it. For a very, very long time."]],
+    async act(){ glow = 1; Sound.tone(2637, {type:'sine', dur:.5, vol:.05}); Sound.tone(3136, {type:'sine', t:.15, dur:.5, vol:.04}); }});
+  curio(w, t, {name:'Edge of the chasm', at:ECHO, y:1.2, view:[.5, 1], verb:'Shout hello', lines:[
+    ['pip', "It echoes! This cave must be HUGE."],
+    ['sparks', "Here's a secret, class. The real mantle has no caves at all. It's solid rock, all the way down."],
+    ['sparks', "This cave is a little Wonder Bus magic, so we can look around. Don't tell anyone!"],
+    ['sparks', "And we're deep! Deeper than ten tall mountains stacked on top of each other."],
+    ['sparks', "The mantle goes down much farther still: almost halfway to the middle of the Earth!"]],
+    async act(){ for (let i = 0; i < 4; i++) { const v = .09*(.55**i); Sound.tone(392, {type:'triangle', dur:.18, vol:v, cut:1800}); Sound.tone(523, {type:'triangle', t:.2, dur:.3, vol:v, cut:1800}); await t.wait(.75); } }});
+  curio(w, t, {name:'Edge of the bubble', at:POKE, y:1.2, view:[.6, -1], verb:'Poke the bubble', lines:[
+    ['sparks', "Boing! The heat bubble is tougher than it looks."],
+    ['sparks', "Out there, the rock is more than a thousand degrees. The bubble keeps the heat out, like a cooler keeps a picnic cold."],
+    ['mo', "Please keep my sandwiches cold, bubble."]],
+    async act(){ for (let i = 0; i < 3; i++) { boing = 1; Sound.tone(330, {type:'sine', dur:.5, vol:.08 - i*.02, f2:660, vib:[12, 20]}); Sound.tone(880, {type:'triangle', t:.1, dur:.3, vol:.04}); await t.wait(1.3); } }});
 
   // ---------- the place's scenes, run by the trip's script ----------
   return {world:w, bus, cls,
