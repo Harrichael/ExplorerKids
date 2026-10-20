@@ -14,7 +14,7 @@ const el = document.createElement('div'); el.id = 'goggles'; el.hidden = true;
 el.innerHTML = '<div class="ring"></div><div class="count"><span class="lbl">Time goggles</span><b>0</b> years</div>';
 document.body.append(el);
 const countEl = el.querySelector('b');
-const fmt = y => y >= 1e6 ? (Math.round(y/1e5)/10).toLocaleString() + ' million' : Math.round(y/1000)*1000 >= 1000 ? (Math.round(y/1000)*1000).toLocaleString() : Math.round(y).toLocaleString();
+const fmt = y => y >= 1e6 ? (Math.round(y/1e5)/10).toLocaleString() + ' million' : y >= 1000 ? (Math.round(y/1000)*1000).toLocaleString() : Math.round(y).toLocaleString();
 
 export async function goggles(t, {shot, years, dur = 7, step}){
   const prevCam = game.cutCam, wasCut = game.cutscene;
