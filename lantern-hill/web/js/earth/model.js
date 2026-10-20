@@ -8,7 +8,7 @@
 //   here.biome.name        // 'Savanna'
 //   here.web.place         // 'the Serengeti'
 
-import { BIOMES, WEBS } from './biomes.js';
+import { BIOMES, VENTS, WEBS } from './biomes.js';
 
 let loading = null;
 export function loadEarth(){
@@ -31,6 +31,10 @@ export function makeEarth(d){
   const cell = (lat, lon) => Math.min(H - 1, Math.max(0, Math.floor((90 - lat)/d.step)))*W + Math.floor((((lon + 180) % 360 + 360) % 360)/d.step) % W;
   const deg = r => withBox(Float64Array.from(r, v => v/100));
   const land = d.land.map(deg), lakes = d.lakes.map(l => ({name: l.name, ring: deg(l.ring)})), reefs = d.reefs.map(r => ({name: r.name, ring: deg(r.ring)}));
+  // a vent field is a few hundred metres across, far too small to find on a globe, so each is shown as a spot a degree wide
+  const vents = VENTS.map(v => ({name: v.name, ring: withBox(Float64Array.from({length: 48}, (_, i) => {
+    const a = Math.floor(i/2)/24*Math.PI*2; return i % 2 ? v.at[0] + Math.sin(a) : v.at[1] + Math.cos(a)/Math.cos(v.at[0]*Math.PI/180);
+  }))}));
 
   const ecoregion = (lat, lon) => { const c = ecoGrid[cell(lat, lon)]; if (!c) return null; const [id, name, biome, realm] = d.ecoregions[c - 1]; return {id, name, biome, realm}; };
   const sea = (lat, lon) => { const [name, kind] = d.seas[seaGrid[cell(lat, lon)] - 1]; return {name, kind}; };
@@ -46,22 +50,43 @@ export function makeEarth(d){
 
   function placeAt(lat, lon){
     const lake = lakes.find(l => inRing(l.ring, lon, lat));
-    if (lake) return place(lat, lon, lake.name, 'lake', null, null, lake.name);
+    if (lake) return place(lat, lon, lake.name, 'lake', null, null, lake.name, ringRegion(lake));
     if (onLand(lat, lon)) {
-      const e = ecoregion(lat, lon), kind = landKind(e, lat, lon);
-      const name = e && e.id !== ROCK_AND_ICE ? e.name : kind === 'mountains' ? 'Mountain glaciers' : lat < 0 ? 'Antarctica' : 'Greenland';
-      return place(lat, lon, name, kind, e && e.id !== ROCK_AND_ICE ? e.realm : null);
+      const e = ecoregion(lat, lon), kind = landKind(e, lat, lon), own = e && e.id !== ROCK_AND_ICE;
+      const name = own ? e.name : kind === 'mountains' ? 'Mountain glaciers' : lat < 0 ? 'Antarctica' : 'Greenland';
+      return place(lat, lon, name, kind, own ? e.realm : null, null, undefined, own ? cellRegion(ecoGrid[cell(lat, lon)]) : null);
     }
-    const s = sea(lat, lon), reef = reefs.find(r => inRing(r.ring, lon, lat));
-    if (reef) return place(lat, lon, reef.name, 'reef', null, s.name, reef.name);
-    return place(lat, lon, s.name, seaKind(s), null, null, s.name);
+    const s = sea(lat, lon), reef = reefs.find(r => inRing(r.ring, lon, lat)), vent = vents.find(v => inRing(v.ring, lon, lat));
+    if (vent) return place(lat, lon, vent.name, 'vent', null, s.name, vent.name, ringRegion(vent));
+    if (reef) return place(lat, lon, reef.name, 'reef', null, s.name, reef.name, ringRegion(reef));
+    return place(lat, lon, s.name, seaKind(s), null, null, s.name, null);
   }
-  function place(lat, lon, name, biomeId, realm, within, water){
+  function place(lat, lon, name, biomeId, realm, within, water, region){
     const web = webFor(biomeId, realm, lat, lon, water);
-    return {lat, lon, name, within: within || null, biomeId, biome: BIOMES[biomeId], realm, web, webFits: fits(web, realm, lat, lon, water)};
+    return {lat, lon, name, within: within || null, biomeId, biome: BIOMES[biomeId], realm, web, webFits: fits(web, realm, lat, lon, water), region};
   }
 
-  return {land, lakes, reefs, credits: d.credits, landBiome, seaBiome, placeAt};
+  // The stretch of map a place belongs to, to light it up: an ecoregion, a lake or a reef. The open
+  // sea and the ice have none, since they'd light up half the world. Its box is {w, s, e, n}; one
+  // that wraps past 180° spans the whole width.
+  const regions = new Map();
+  function cellRegion(c){
+    if (!regions.has(c)) {
+      const b = {w: 180, s: 90, e: -180, n: -90};
+      for (let k = 0; k < ecoGrid.length; k++) if (ecoGrid[k] === c) {
+        const lon = (k % W)*d.step - 180, lat = 90 - Math.floor(k/W)*d.step;
+        b.w = Math.min(b.w, lon); b.e = Math.max(b.e, lon + d.step); b.n = Math.max(b.n, lat); b.s = Math.min(b.s, lat - d.step);
+      }
+      regions.set(c, {key: 'eco' + c, has: (lat, lon) => ecoGrid[cell(lat, lon)] === c, box: b});
+    }
+    return regions.get(c);
+  }
+  function ringRegion(x){
+    const [w, s, e, n] = x.ring.box;
+    return regions.get(x) || regions.set(x, {key: x.name, ring: x.ring, box: {w, s, e, n}}).get(x);
+  }
+
+  return {land, lakes, reefs, vents, credits: d.credits, landBiome, seaBiome, placeAt};
 }
 
 // The web for a biome from the same realm if there is one, else the nearest; animals differ more
