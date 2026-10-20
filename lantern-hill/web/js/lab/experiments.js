@@ -8,7 +8,7 @@
 // hints are offered one at a time, only to an explorer who seems stuck or asks.
 //
 // An experiment opens once everything in its `after` is done (and its `unlock`, for something outside
-// the lab, says yes), and is listed after those. The book
+// the lab, says yes; `from` then names the trip it was found on), and is listed after those. The book
 // shows the opened ones by `level`, how hard each is from 1 to 5, then in this order. What an
 // experiment puts on the desk is what finishing it stocks in the Free Lab's cabinet.
 
@@ -235,7 +235,7 @@ export const EXPERIMENTS = [
       test:[S("Let's test it! Mix them any way you like. The volcano is there if you want it.")],
       hints:[[S("Baking soda is the white powder in the orange box. Vinegar is in the white bottle.")], [S("Tip some baking soda into the volcano, then pour vinegar on top.")],
              [S("For a really big eruption, add a squirt of dish soap and some red drops first!")]],
-      baseline: totalGas, observe: r => totalGas() - r.base > 10 ? 'fizz' : null,
+      baseline: totalGas, observe: r => totalGas() - r.base > 15 ? 'fizz' : null,
       say:{fizz:"FOOSH! Vinegar is an acid and baking soda is a base. When they meet, they make a gas called carbon dioxide."}}],
     explain:[S("All those bubbles are carbon dioxide gas. With soap in there, the gas gets trapped in foam, and up it goes like lava!")]},
 
@@ -350,7 +350,7 @@ export const EXPERIMENTS = [
     explain:[S("Water can only hold so much of something dissolved in it, and how much depends on what it is."),
              S("Warm water holds even more sugar. That's how syrup is made!")]},
 
-  {id:'heat', after:['volcano'], unlock: () => !!(load('trips') || {}).heatRises, title:'Heat Rises', level:3, blurb:'Where does hot air go?',
+  {id:'heat', after:['volcano'], unlock: () => !!(load('trips') || {}).heatRises, from:{trip:'tectonics', icon:'🌋', name:'Plate Tectonics', short:'Tectonics'}, title:'Heat Rises', level:3, blurb:'Where does hot air go?',
     setup:[['burner', 'burner', .1, .16], ['flask', 'flask', .1, .16, {y:.09, fill:{water:60}}], ['wheel', 'wheel', .58, .38], ['tube', 'steamtube', -.4, .36]],
     rounds:[
       {q:"Will the wheel spin above the hot flask, or beside it?", ask:[S("This is a burner, {name}. It's a grown-up's tool: in a real lab, only a grown-up lights it. Here, tap it and I'll light it for you."),
@@ -367,7 +367,7 @@ export const EXPERIMENTS = [
           if (run.calm > 1.5) run.beside = true;
           return run.above && run.beside ? 'above' : null;
         },
-        say:{above:"It spins above, and stops beside! Hot air and steam are lighter for their size than the cool air around them, so they rise and push the paddles on the way up. Remember the mantle on the field trip? Hot rock rises just like this."}},
+        say:{above:"It spins above, and stops beside! Hot air and steam are lighter for their size than the cool air around them, so they rise and push the paddles on the way up. Remember the mantle on the plate tectonics trip? Hot rock rises just like this."}},
       {q:"What happens when the steam has only one way out?", ask:[S("Now let's trap the steam. This stopper has a bent glass tube through it."), S("Push it into the flask. What happens when the steam has only one way out?")],
         choose:[{id:'spins', label:'A jet spins the wheel', icon:'💨'}, {id:'nothing', label:'Nothing, steam only goes up', icon:'😶'}, {id:'pop', label:'The stopper pops off', icon:'🍾'}],
         test:[S("Push the stopper into the flask. Then stand the wheel beside the end of the tube, so the steam hits its paddles.")],
@@ -388,7 +388,8 @@ export const EXPERIMENTS = [
              [S("Carry the balloon over and let go right on top of the bottle's neck.")], [S("Now grab the floppy balloon and lift it up, so the soda falls in.")]],
       observe: () => { const b = find('balloon'); return b && b.inflate >= .5 ? 'inflate' : null; },
       say:{inflate:"It blew itself up! The fizzing made carbon dioxide gas, and the gas needed somewhere to go."}}],
-    explain:[S("Gas takes up space, even though you can't see it. Enough gas can fill a whole balloon!")]},
+    explain:[S("Gas takes up space, even though you can't see it. Enough gas can fill a whole balloon!"),
+             S("Rubber can only stretch so far, though. Make lots of gas and the balloon pops, so go easy on the vinegar!")]},
 
   {id:'cork', after:['balloon'], title:'Pop the Cork', level:4, blurb:'What happens when gas has nowhere to go?',
     setup:[['bottle', 'bottle', 0, 0, {fill:{water:40}}], ['cork', 'cork', -.36, .26], ['t1', 'tablet', .4, .2], ['t2', 'tablet', .52, .28]],
@@ -437,7 +438,7 @@ export const EXPERIMENTS = [
           if (!v.full.soda) continue;
           const got = ['vinegar', 'lemon', 'soap', 'water'].filter(k => v.stats.got[k] !== undefined);
           if (got.length !== 1) continue;
-          if (v.stats.gas > 1) r[got[0]] = 'fizz'; else if (desk.t - v.stats.got[got[0]] > 3) r[got[0]] = 'none';
+          if (v.stats.gas > 1.5) r[got[0]] = 'fizz'; else if (desk.t - v.stats.got[got[0]] > 3) r[got[0]] = 'none';
         }
         return r;
       },

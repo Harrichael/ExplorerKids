@@ -10,6 +10,7 @@ import { clamp01, grad } from '../core/kit.js';
 import * as chem from './chem.js';
 import { makeFluid, spread } from './fluid.js';
 import { makeFx } from './fx.js';
+import * as gas from './gas.js';
 import { P, STEP, THING, ghost, hinge, makeBody, makeWorld, retire, rot, toLocal, toWorld, upOf } from './physics.js';
 import { labSound } from './sounds.js';
 import { ITEMS, UNITS_PER_M3, capacity } from './stuff.js';
@@ -18,6 +19,10 @@ const BOUNDS = {x:.8, z:.52};
 const MAX_TIP = 2.5, SPOONFUL = 5;
 
 export const desk = {root:null, fx:null, fluid:null, items:[], held:null, ray:null, tip:false, endless:false, t:0};
+// chance that has to come out the same in a test (how far each balloon stretches before it bursts)
+let seed = Math.random()*2**32 >>> 0;
+export const reseed = s => { seed = s >>> 0; };
+function rand(){ seed = seed + 0x6d2b79f5 >>> 0; let t = seed; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0)/2**32; }
 export const isVessel = it => it.def.kind === 'vessel';
 export const find = id => desk.items.find(it => it.id === id && !it.gone);
 const live = () => desk.items.filter(it => !it.gone);
@@ -149,7 +154,7 @@ export function initDesk(root){
   desk.fx = makeFx({frame: v => v.g, inside: v => !v.gone && uprightness(v) > .8, top, waterTop, oilTop,
     deliver: (v, p) => { const t = v.body.translation(); deliver(v, p, t.x, t.z, true); }});
   desk.fx.attach(root);
-  desk.fluid = makeFluid(root, {catches, deliver, fizz: (pool, gas, rate) => labSound.fizz(pool, pool.wx, rate, gas/rate)});
+  desk.fluid = makeFluid(root, {catches, deliver, fizz: (pool, n, rate) => labSound.fizz(pool, pool.wx, rate, n/rate)});
 }
 
 // ---------- building and clearing ----------
@@ -161,19 +166,20 @@ function liquidMesh(parent, geo, order){
 function makeItem(id, type, x, z, o, i){
   const def = ITEMS[type], g = new THREE.Group(); desk.root.add(g);
   // got: when each substance first arrived; spoons: spoonfuls of each powder put in
-  const it = {id, type, def, g, pop:-i*.04, stats:{gas:0, stir:0, bursts:0, blobs:0, dye:new Set(), got:{}, spoons:{}}, vy:0, still:0, tilt:0, lastDir:{x:0, z:0}, shakeT:0};
+  const it = {id, type, def, g, pop:-i*.04, stats:{gas:0, rise:0, stir:0, bursts:0, blobs:0, dye:new Set(), got:{}, spoons:{}}, vy:0, still:0, tilt:0, lastDir:{x:0, z:0}, shakeT:0};
   it.refs = def.build(g, o) || {};
   it.body = makeBody(def, x, .002 + (o.y || 0), z, it);
   if (o.rot) it.body.setRotation({x:0, y:Math.sin(o.rot/2), z:0, w:Math.cos(o.rot/2)}, false);
   it.grip = def.grip !== undefined ? def.grip : def.h*.7;
   if (isVessel(it)) {
     it.full = o.fill || def.fill || {}; it.c = chem.fill(it.full); it.cap = capacity(def);
-    it.foam = 0; it.head = 0; it.stir = 0; it.mass = -1; it.gas = 0;
+    if (o.t !== undefined) it.c.t = o.t;
+    it.foam = 0; it.head = 0; it.stir = 0; it.mass = -1; it.gas = gas.room(headspace(it), chem.temp(it.c));
     if (def.see) it.liq = {w: liquidMesh(g, UNIT_CYL, 1), o: liquidMesh(g, UNIT_CYL, 1), p: liquidMesh(g, HEMI, 1), f: liquidMesh(g, UNIT_CYL, 2)};
   }
   g.traverse(m => { if (m.isMesh) m.userData.item = it; });
   if (def.fizz) it.stock = def.fizz;
-  if (def.balloon) it.inflate = 0;
+  if (def.balloon) { it.inflate = 0; it.vol = 0; it.burstAt = 6 + 2*rand(); }
   if (o.tarnish !== undefined) it.tarnish = it.drawnT = o.tarnish;
   if (def.beam) {
     // the beam is its own body, swinging on the post; its group lives in the desk's frame, not the base's
@@ -363,11 +369,14 @@ function attach(b, v){
   reshapeBalloon(b);
   labSound.cap(v.body.translation().x, 'rubber');
 }
+// pulled off, or popped, the balloon lets go of its share of the gas
 function detach(b, burst){
+  const v = b.attached, k = b.vol/space(v);
+  for (const key in v.gas) v.gas[key] *= 1 - k;
   b.attached = null; b.raised = false;
   b.body.setBodyType(P.R.RigidBodyType.Dynamic, true); b.body.setGravityScale(desk.held === b ? 0 : 1, true);
   if (burst && b.inflate > .1) labSound.deflate(b.body.translation().x);
-  b.inflate = 0; reshapeBalloon(b);
+  b.vol = 0; b.inflate = 0; reshapeBalloon(b);
 }
 function seat(b, dt){
   const v = b.attached;
@@ -390,17 +399,16 @@ function reshapeBalloon(b){
 }
 
 // ---------- pressure ----------
-// Gas made in a container with its mouth closed stays in and presses on whatever closes it. Pressure
-// here is how far over the room's it is: the room the gas would take up at the room's pressure, over
-// the room it has. A balloon stretches until its rubber pushes back as hard; a cork holds until the
-// push beats its grip, then flies, and the bottle kicks back the other way.
-const GAS_ROOM = 8, CORK_GRIP = 1.4;
-const rubber = i => .12 + .3*i;
-const balloonRoom = b => UNITS_PER_M3*4/3*Math.PI*.036**3*((1 + 1.6*b.inflate)**3 - 1);
-function pressure(v){
-  const b = balloonOn(v), room = Math.max(v.cap*.05, v.cap - chem.liquidVol(v.c) - chem.pileVol(v.c)) + (b ? balloonRoom(b) : 0);
-  return (v.gas + (v.vapor || 0))/room;
-}
+// Every container holds gas over its contents (gas.js), room air to start with. Gas made with its
+// mouth closed stays in and presses on whatever closes it, harder as it warms and softer as it cools.
+// A balloon stretches until its rubber pushes back as hard, and bursts once stretched too far; a cork
+// holds until the push beats its grip, about an atmosphere for one pushed in by hand, then flies, and
+// the bottle kicks back the other way.
+const CORK_GRIP = 100;
+const headspace = v => Math.max(v.cap*.05, v.cap - chem.liquidVol(v.c) - chem.pileVol(v.c));
+const space = v => { const b = balloonOn(v); return headspace(v) + (b ? b.vol : 0); };
+// how much over the room's pressure the gas inside is, in kPa
+const pressure = v => gas.pressure(v.gas, space(v), chem.temp(v.c)) - gas.P0;
 function plug(c, v){
   c.plugged = v; c.body.setBodyType(P.R.RigidBodyType.KinematicPositionBased, true);
   for (let i = 0; i < c.body.numColliders(); i++) c.body.collider(i).setEnabled(false);
@@ -411,25 +419,24 @@ function unplug(c){
   const v = c.plugged; c.plugged = null;
   c.body.setBodyType(P.R.RigidBodyType.Dynamic, true); c.body.setGravityScale(desk.held === c ? 0 : 1, true);
   for (let i = 0; i < c.body.numColliders(); i++) c.body.collider(i).setEnabled(true);
-  if (pressure(v) > .15) labSound.uncork(v.body.translation().x, pressure(v));
+  if (pressure(v) > 15) labSound.uncork(v.body.translation().x, pressure(v)/CORK_GRIP);
   return v;
 }
 // seated in its neck, moving with the bottle, until the gas pushes it out
 function stopper(c){
   const v = c.plugged, q = v.body.rotation(), p = toWorld(v.body, 0, v.def.open.y - c.def.h*.65, 0, {});
   c.body.setNextKinematicTranslation(p); c.body.setNextKinematicRotation(q);
-  // a stopper with a tube lets the steam out as fast as it comes, as a jet from its nozzle
-  if (c.def.jet) { const out = (v.vapor || 0)*Math.min(1, NOZZLE*STEP); v.vapor -= out; c.jet = (c.jet || 0)*.85 + .15*out/STEP; }
   const press = pressure(v);
   if (press < CORK_GRIP) return;
-  const up = rot(q, {x:0, y:1, z:0}), speed = Math.min(2.6, 1 + press*.9), bv = v.body.linvel();
+  // the gas's push over the cork's length is what launches it, so its speed goes as √ΔP
+  const up = rot(q, {x:0, y:1, z:0}), speed = Math.min(2.6, 2.2*Math.sqrt(press/CORK_GRIP)), bv = v.body.linvel();
   unplug(c); c.popped = true;
   c.body.setTranslation({x:p.x + up.x*.03, y:p.y + up.y*.03, z:p.z + up.z*.03}, true);
   c.body.setLinvel({x:bv.x + up.x*speed, y:bv.y + up.y*speed, z:bv.z + up.z*speed}, true);
   c.body.setAngvel({x:(Math.random() - .5)*30, y:(Math.random() - .5)*10, z:(Math.random() - .5)*30}, true);
   const k = c.body.mass()*speed*6;
   if (v !== desk.held) v.body.applyImpulse({x:-up.x*k, y:-up.y*k, z:-up.z*k}, true);
-  labSound.pop(p.x, press);
+  labSound.pop(p.x, press/CORK_GRIP*2);
 }
 
 // ---------- forces: floating, magnets, stirring, balloons ----------
@@ -614,7 +621,8 @@ function tablet(it, dt){
   for (const v of vessels()) { if (v === it) continue; const l = localOf(v, c); if (within(v, l) && l.y < waterTop(v) && chem.waterVol(v.c) > 10) { into = v.c; break; } }
   if (!into) { const pool = desk.fluid.poolAt(c.x, c.y - it.def.h/2, c.z, .005); if (pool && chem.waterVol(pool.c) > 3) into = pool.c; }
   if (!into) return;
-  const n = Math.min(it.stock, .9*dt); it.stock -= n; chem.add(into, 'tablet', n);
+  // it melts away over about nine seconds
+  const n = Math.min(it.stock, it.def.fizz/9*dt); it.stock -= n; chem.add(into, 'tablet', n);
   it.g.scale.setScalar(.35 + .65*it.stock/it.def.fizz);
   if (it.stock <= 0) vanish(it);
 }
@@ -631,12 +639,28 @@ function balloons(b){
     }
     return;
   }
-  // the gas in the bottle stretches the balloon until it stands up on its own
-  const was = b.inflate;
-  b.inflate = Math.max(0, Math.min(1.6, b.inflate + (pressure(b.attached) - rubber(b.inflate))*1.5*STEP));
+  // The gas in the bottle and the balloon is one: it swells the balloon wherever it pushes harder than
+  // the rubber and the room together. Rubber answers in milliseconds, much faster than a tick, so each
+  // step leans on the slope of that push (an implicit step) and can't overshoot.
+  const v = b.attached, t = chem.temp(v.c), hs = headspace(v), was = b.inflate, k = 150*STEP/4;
+  const push = vol => gas.pressure(v.gas, hs + vol, t) - gas.P0 - gas.rubber(vol, b.def.rest);
+  for (let i = 0; i < 4; i++) { const f = push(b.vol), slope = Math.min(0, (push(b.vol + .01) - f)/.01); b.vol = Math.max(0, b.vol + k*f/(1 - k*slope)); }
+  if (b.vol > b.def.rest*b.burstAt**3) { burst(b); return; }
+  const r = Math.cbrt(b.vol/UNITS_PER_M3*3/(4*Math.PI)); b.inflate = Math.max(0, r/SACK - 1)/1.6;
   if (b.inflate > was + .0005) labSound.stretch(b, b.body.translation().x, b.inflate);
-  if (Math.abs(b.inflate - (b.shapeAt || 0)) > .08) reshapeBalloon(b);
+  if (Math.abs(b.inflate - (b.shapeAt || 0)) > .04) reshapeBalloon(b);
   seat(b, STEP);
+}
+// Stretched past what its rubber can take, the balloon bursts: it tears into shreds, and the gas it
+// held puffs out.
+const SACK = .036;
+function burst(b){
+  const c = toWorld(b.body, 0, b.def.open.y - .055*(1 + b.inflate*1.9), 0, {}), r = SACK*(1 + 1.6*b.inflate);
+  detach(b); b.burst = true; vanish(b);
+  desk.fx.shreds(c.x, c.y, c.z, r, b.refs.skin.color.getHex());
+  for (let i = 0; i < 24; i++) { const a = Math.random()*7, e = Math.random()*2 - 1, s = Math.sqrt(1 - e*e), k = .3 + Math.random()*.5;
+    desk.fx.wisp(c.x + Math.cos(a)*s*r*.6, c.y + e*r*.6, c.z + Math.sin(a)*s*r*.6, Math.cos(a)*s*k, e*k, Math.sin(a)*s*k); }
+  labSound.burst(c.x, r);
 }
 
 // ---------- spilling and pouring ----------
@@ -698,11 +722,12 @@ function shaking(v){
 // ---------- heat ----------
 // A lit burner heats what stands on its gauze, four times or so faster than a real one. Hot air rises
 // off it in a plume, and steam with it from an open container boiling on top. Water boiling to steam
-// swells about 1700 times, which is what presses on a stopper; a tube in the stopper lets it out as a
-// jet. A plume or jet crossing the steam wheel's paddles to one side of its axle turns it, harder the
-// more flows and the squarer it hits; dead centre, both sides push alike and it stays still. The air
-// drags on the paddles harder the faster they go, so no stream spins it faster than it can push.
-const BURNER = 2500, STEAM = 1700, HOT_AIR = 500, NOZZLE = 54, WIND = 2e-4, AIR_DRAG = 3.3e-6;
+// swells about 1700 times, which is what presses on a stopper; a tube in the stopper lets it out
+// through its narrow nozzle as a fast jet. A plume or jet crossing the steam wheel's paddles to one
+// side of its axle turns it, harder the more flows (in mL a second) and the squarer it hits; dead
+// centre, both sides push alike and it stays still. The air drags on the paddles harder the faster
+// they go, so no stream spins it faster than it can push.
+const BURNER = 2500, HOT_AIR = 500, WIND = 2e-4, AIR_DRAG = 3.3e-6;
 function heater(v){
   if (uprightness(v) < .8) return null;
   const t = v.body.translation();
@@ -723,7 +748,7 @@ function streams(){
   }
   for (const c of live()) if (c.plugged && c.def.jet && c.jet > 1) {
     const j = c.def.jet;
-    out.push({kind:'jet', s:toWorld(c.body, j.x, j.y, j.z, {}), d:rot(c.body.rotation(), {...j.dir}), flow:c.jet*.5, steam:c.jet, r0:.006, spread:.12, reach:.3, src:c});
+    out.push({kind:'jet', s:toWorld(c.body, j.x, j.y, j.z, {}), d:rot(c.body.rotation(), {...j.dir}), flow:c.jet*.5, steam:c.jet, u:c.jetU, r0:.006, spread:.12, reach:.3, src:c});
   }
   return out;
 }
@@ -751,7 +776,8 @@ function blow(w){
 function puffs(dt){
   for (const st of flows) {
     if (!(st.steam > 0)) continue;
-    const n = st.steam*dt/(st.kind === 'jet' ? 90 : 140), sp = st.kind === 'jet' ? .7 : .24;
+    // a jet leaves its nozzle at hundreds of metres a second; wisps only show which way, a little faster for a faster jet
+    const n = st.steam*dt/(st.kind === 'jet' ? 90 : 140), sp = st.kind === 'jet' ? Math.min(1, .3 + st.u/500) : .24;
     for (let i = 0; i < Math.floor(n + Math.random()); i++) {
       const j = () => (Math.random() - .5)*.012;
       desk.fx.wisp(st.s.x + j(), st.s.y + j(), st.s.z + j(), st.d.x*sp + j()*4, st.d.y*sp + .03 + Math.abs(j())*4, st.d.z*sp + j()*4);
@@ -763,7 +789,7 @@ function puffs(dt){
 // ---------- chemistry in every container ----------
 function chemStep(v, dt){
   // liquid carries the fizz across a container much faster than it creeps through a dry pile
-  let gas = spread(v, v.c, dt, v.def.ri, chem.liquidVol(v.c) > 5 ? .08 : .03, v.stir); v.stir = Math.max(0, v.stir - dt*3);
+  const made = spread(v, v.c, dt, v.def.ri, chem.liquidVol(v.c) > 5 ? .08 : .03, v.stir); v.stir = Math.max(0, v.stir - dt*3);
   if (desk.endless && v.refill && v !== desk.held && uprightness(v) > .8) {
     // Free Lab supplies top themselves back up with what they started with, keeping anything mixed in
     let short = false;
@@ -778,36 +804,49 @@ function chemStep(v, dt){
     const ixz = kg*(r*r/4 + h*h/12), iy = kg*r*r/2;
     v.body.setAdditionalMassProperties(kg, {x:0, y:v.def.floor + h/2, z:0}, {x:ixz, y:iy, z:ixz}, {x:0, y:0, z:0, w:1}, true);
   }
-  // over a lit burner it heats and boils; its steam rises from an open mouth or is shut in as gas
-  const boiled = chem.warm(v.c, dt, heater(v) ? BURNER : 0), vapor = boiled*STEAM;
-  if (capOn(v)) { v.vapor = (v.vapor || 0) + vapor; v.steam = 0; }
-  else { v.steam = (vapor + (v.vapor || 0))/dt; v.vapor = 0; }
-  if (boiled > 0) { labSound.boil(v, v.body.translation().x, boiled/dt); if (Math.random() < dt*25) desk.fx.bubble(v); }
-  // gas sealed in builds pressure; once the mouth opens, what was held rushes out with what's still coming
-  const made = gas;
-  if (capOn(v)) { v.gas += made*GAS_ROOM; gas = 0; }
-  else if (v.gas > 0) { const out = v.gas > .5 ? v.gas*Math.min(1, dt*12) : v.gas; v.gas -= out; gas += out/GAS_ROOM; }
+  // Over a lit burner it heats, and boils once water's vapour pressure beats the pressure on it: at 100 °C
+  // under an open mouth, never in a sealed bottle, where the steam only builds up the pressure.
+  // Through a narrow way out, the water feels that pressure a moment late, as bubbles take a moment to
+  // start or stop; without the lag a small space over boiling water swings between flash-boiling and
+  // none, tick by tick.
+  const g = v.gas, cap = capOn(v), V = space(v), x = v.body.translation().x, P = gas.pressure(g, V, chem.temp(v.c));
+  const hole = cap ? (cap.def.jet ? gas.area(cap.def.jet.r) : 0) : gas.area(v.def.open.r);
+  v.pb = hole ? (v.pb || gas.P0) + (P - (v.pb || gas.P0))*Math.min(1, dt/1.5) : P;
+  const boiled = chem.warm(v.c, dt, heater(v) ? BURNER : 0, gas.tsat(v.pb));
+  g.vap += boiled*gas.WATER;
+  if (boiled > 0) { labSound.boil(v, x, boiled/dt); if (Math.random() < dt*25) desk.fx.bubble(v); }
+  const up = gas.trade(g, v.c, V, dt, made, v.stir);
+  // what gets out, and how fast: through the open mouth, a stopper's nozzle, or not at all
+  const t = chem.temp(v.c), out = gas.vent(g, V, t, hole, dt), steam = out.vap*gas.R*(t + gas.K0)/gas.P0/dt;
+  if (!cap) gas.draft(g, V, t, hole, dt);
+  if (cap && cap.def.jet) { cap.jet = (cap.jet || 0)*.85 + .15*steam; cap.jetU = out.u; }
+  v.steam = cap ? 0 : steam;
+  // gas let out fast, as when a cork comes out, cools as it spreads and shows as a puff of mist
+  if (out.u > 15 && out.co2 > .05) { const m = toWorld(v.body, 0, v.def.open.y, 0, _w);
+    for (let i = 0; i < Math.min(12, out.co2*4); i++) desk.fx.wisp(m.x, m.y, m.z, (Math.random() - .5)*.3, .3 + Math.random()*.4, (Math.random() - .5)*.3); }
   if (made > 0) {
-    v.stats.gas += made; labSound.fizz(v, v.body.translation().x, made/dt, dt);
-    if (Math.random() < Math.min(1, made/dt*.02)) for (let i = 0; i < Math.min(6, 1 + made/dt*.08); i++) desk.fx.bubble(v, v.front);
+    v.stats.gas += made; labSound.fizz(v, x, made/dt, dt);
+    if (Math.random() < Math.min(1, made/dt*.012)) for (let i = 0; i < Math.min(6, 1 + made/dt*.05); i++) desk.fx.bubble(v, v.front);
   }
-  if (!(gas > 0)) { v.head = Math.max(0, v.head - dt*.006); return; }
-  const rate = gas/dt, lk = chem.look(v.c);
+  // Bubbles of gas come up out of the liquid; out of an open mouth they carry froth with them, as fast
+  // as the gas leaving pushes it (Q/A, so the narrower the mouth, the faster)
+  if (up > .02 && !made && Math.random() < up/dt*.05) desk.fx.bubble(v);
+  if (!(up > 0) || cap) { v.head = Math.max(0, v.head - dt*.006); return; }
+  const rate = up/dt, lk = chem.look(v.c);
   if (!(chem.oilVol(v.c) > 5)) {
     // oil on top lets the gas through as bubbles instead of froth
-    const soapy = (v.c.l.soap || 0) > .5, o = v.def.open, up = rot(v.body.rotation(), {x:0, y:1, z:0});
-    v.head = Math.min(.025, v.head + gas*.0012*(soapy ? 2 : 1));
-    v.foam += gas*(soapy ? 4.5 : 1.6)*(v.type === 'volcano' ? 1.5 : 1);
+    const soapy = (v.c.l.soap || 0) > .5, o = v.def.open, upward = rot(v.body.rotation(), {x:0, y:1, z:0});
+    v.head = Math.min(.025, v.head + up*.0007*(soapy ? 2 : 1));
+    v.foam += up*(soapy ? 2.7 : .96)*(v.type === 'volcano' ? 1.5 : 1);
     const fc = chem.lerpCol(0xffffff, lk ? lk.col : 0xffffff, soapy ? .55 : .3);
-    const squeeze = Math.min(3, Math.max(1, (v.def.ri/o.r)**2));
     // a wide-open top foams where the fizz is; a narrow mouth is the only way out, wherever it is
     const at = v.front && o.r > v.def.ri*.8 ? v.front : {x:0, z:0, r:o.r};
-    v.foam = desk.fluid.gush(v.foam, rate, fc, v.body.linvel(), up, () => { const a = Math.random()*7, r = Math.random()*Math.min(at.r, o.r)*.8;
-      return toWorld(v.body, at.x + Math.cos(a)*r, o.y + .004, at.z + Math.sin(a)*r, _w); }, squeeze);
+    v.foam = desk.fluid.gush(v.foam, out.u, fc, v.body.linvel(), upward, () => { const a = Math.random()*7, r = Math.random()*Math.min(at.r, o.r)*.8;
+      return toWorld(v.body, at.x + Math.cos(a)*r, o.y + .004, at.z + Math.sin(a)*r, _w); }, v.stats);
     // a big rush of gas kicks the container about
-    if (rate > 40 && v !== desk.held) { const k = Math.min(1, (rate - 40)/120)*.0006*dt*60; v.body.applyImpulse({x:(Math.random() - .5)*k, y:k*.6, z:(Math.random() - .5)*k}, true); }
+    if (rate > 65 && v !== desk.held) { const k = Math.min(1, (rate - 65)/200)*.0006*dt*60; v.body.applyImpulse({x:(Math.random() - .5)*k, y:k*.6, z:(Math.random() - .5)*k}, true); }
   }
-  if (chem.oilVol(v.c) > 5 && lk) { v.blobAcc = (v.blobAcc || 0) + gas*.9; while (v.blobAcc >= 1) { v.blobAcc -= 1; desk.fx.blob(v, lk.col); v.stats.blobs++; labSound.bloop(v, v.body.translation().x); } }
+  if (chem.oilVol(v.c) > 5 && lk) { v.blobAcc = (v.blobAcc || 0) + up*.6; while (v.blobAcc >= 1) { v.blobAcc -= 1; desk.fx.blob(v, lk.col); v.stats.blobs++; labSound.bloop(v, x); } }
 }
 
 // ---------- drawing ----------
@@ -905,6 +944,8 @@ export function updateDesk(dt){
 }
 
 // ---------- what experiments can ask ----------
+// how far over the room's pressure (kPa) the gas in a container is, or the one a cork or balloon closes
+export function gauge(id){ const it = find(id), v = it && (isVessel(it) && !it.def.balloon ? it : it.plugged || it.attached); return v ? pressure(v) : null; }
 export const totalGas = () => vessels().reduce((s, v) => s + v.stats.gas, 0) + desk.fluid.gas();
 // the tray or container a thing is sitting in, by id
 export function restingIn(id){

@@ -183,13 +183,14 @@ export const ITEMS = {
       const hd = add(new THREE.TorusGeometry(.046, .003, 4, 16, Math.PI), T(C.ink), 0, .075, 0, b, false); hd.rotation.y = Math.PI/2; }},
   salt:   {name:'Salt', kind:'vessel', r:.026, h:.09, ri:.02, floor:.005, hi:.06, flow:'shake', mouth:.01, build: shaker(0xc9ced6)},
   pepper: {name:'Pepper', kind:'vessel', r:.026, h:.09, ri:.02, floor:.005, hi:.06, flow:'shake', mouth:.01, build: shaker(0x3a2e26)},
-  balloon: {name:'Balloon', kind:'vessel', r:.045, h:.11, ri:.03, floor:.01, hi:.08, flow:'liquid', rate:30, mouth:.016, balloon:true,
+  // rest: the gas (mL) it holds before its rubber starts to stretch
+  balloon: {name:'Balloon', kind:'vessel', r:.045, h:.11, ri:.03, floor:.01, hi:.08, flow:'liquid', rate:30, mouth:.016, balloon:true, rest:4.5,
     build: b => {
       // the blob is built mouth-down at its origin so it can hang off a bottle neck; standing free it's flipped over
       const blob = new THREE.Group(); b.add(blob);
       const skin = T(0xe0423a), sk = outline(sph(.042, skin, 0, .06, 0, blob, 16), 1.05); sk.scale.set(.85, 1.15, .85);
       cyl(.012, .016, .03, skin, 0, .012, 0, blob, 10); const lip = add(new THREE.TorusGeometry(.012, .004, 5, 12), skin, 0, 0, 0, blob); lip.rotation.x = Math.PI/2;
-      blob.rotation.z = Math.PI; blob.position.y = .11; return {blob}; }},
+      blob.rotation.z = Math.PI; blob.position.y = .11; return {blob, skin}; }},
   // ---------- things that sink or float ----------
   egg:    {name:'Egg', kind:'solid', r:.028, h:.07, density:1.03, build: b => { const e = outline(sph(.028, T(0xf4e8d2), 0, .035, 0, b, 16), 1.06); e.scale.y = 1.25; }},
   apple:  {name:'Apple', kind:'solid', r:.043, h:.09, density:.8, build: b => { const a = outline(sph(.043, T(0xd23a2e), 0, .042, 0, b, 16), 1.05); a.scale.y = .92;
@@ -218,7 +219,7 @@ export const ITEMS = {
       const w = cyl(.0085, .0085, .03, T(0xf4f0e6), -.005, .008, 0, b, 8); w.rotation.z = Math.PI/2; }},
   button: {name:'Button', kind:'solid', r:.02, h:.007, density:1.2,
     build: b => { outline(cyl(.02, .02, .007, T(0xd36a8f), 0, .0035, 0, b, 16), 1.08); for (const [x, z] of [[-.005, -.005], [.005, -.005], [-.005, .005], [.005, .005]]) cyl(.0025, .0025, .008, T(0x8a3a5a), x, .004, z, b, 6, false); }},
-  tablet: {name:'Fizzy tablet', kind:'solid', r:.02, h:.008, density:2, fizz:8, build: b => outline(cyl(.02, .02, .008, T(0xf6f6f0), 0, .004, 0, b, 16), 1.08)},
+  tablet: {name:'Fizzy tablet', kind:'solid', r:.02, h:.008, density:2, fizz:3.2, build: b => outline(cyl(.02, .02, .008, T(0xf6f6f0), 0, .004, 0, b, 16), 1.08)},
   chart:  {name:'pH chart', kind:'solid', r:.18, h:.004, density:.9, build: chart},
   // ---------- prediction trays: put each thing in the tray that matches your guess ----------
   tray:   {name:'Tray', kind:'tray', r:.15, h:.035, w:.28, d:.17,
@@ -255,7 +256,7 @@ export const ITEMS = {
   wheel:  {name:'Steam wheel', kind:'solid', r:.05, h:.25, density:.6, build: wheel}
 };
 // where the steam tube's nozzle is, and which way it points, in its own frame
-ITEMS.steamtube.jet = {x:.095, y:.01, z:0, dir:{x:1, y:0, z:0}};
+ITEMS.steamtube.jet = {x:.095, y:.01, z:0, r:.0035, dir:{x:1, y:0, z:0}};
 // the wheel's rotor: light paddles on an axle, which a stream of air or steam turns by pushing the paddles on one side
 ITEMS.wheel.beam = {y:.2, density:.04, damping:.4, friction:1e-5, blades:.05, shape:[['ball', .05, 0]]};
 // a balance's beam: swung on the top of its post, in its own frame centred on the hinge, with a pan

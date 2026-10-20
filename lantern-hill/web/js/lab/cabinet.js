@@ -103,7 +103,8 @@ function model(slot){
   g.traverse(m => {
     if (!m.isMesh) return;
     if (m.material === outlineMat) { m.userData.outline = true; return; }
-    m.material = m.material.clone(); m.userData.em = m.material.emissive.clone(); m.userData.ei = m.material.emissiveIntensity;
+    // only lit materials can glow gold; an unlit one, like a burner's flame, just keeps its colour
+    m.material = m.material.clone(); if (m.material.emissive) { m.userData.em = m.material.emissive.clone(); m.userData.ei = m.material.emissiveIntensity; }
   });
   // a little more than its own size to tap, since some things are very thin
   const hit = add(new THREE.BoxGeometry(Math.max(2*d.r, .05)*1.2, Math.max(d.h, .05)*1.15, Math.max(2*d.r, .05)*1.2), HIT, 0, d.h/2, 0, g, false);
@@ -123,6 +124,8 @@ export function stockCabinet(have){
   if (open && !open.plate.visible) open = null;
 }
 export function closeCabinet(){ const was = !!open; open = null; return was; }
+// how the menu looks right now: which shelf is open, whether its veil and plank show, and how far out its things are
+export const menu = () => ({open: open && open.def.label, veil: veil.visible, plank: plank.visible, out: Math.max(0, ...shelves.flatMap(sh => sh.slots.map(s => s.out))), ajar: Math.max(0, ...shelves.map(sh => sh.ajar))});
 
 // an opened shelf's things line up over the mat, each as big as it can be in its share of the row
 function lineUp(sh){
