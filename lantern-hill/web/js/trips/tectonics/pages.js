@@ -48,4 +48,16 @@ export const PAGES = [
     // the shake
     c.strokeStyle = '#c0483a'; c.lineWidth = 4; c.lineCap = 'round'; for (const [x, y, a] of [[w/2 - 14, 96, Math.PI], [w/2 + 14, 100, 0]]) for (const k of [0, 1]) { c.beginPath(); c.arc(x, y, 10 + k*9, a - .7, a + .7); c.stroke(); }
   }},
+  {title:'Hotspot!', note:'A plume stays put while the plate slides over it, leaving a row of islands.', draw(c, w, h){
+    // side on: the sea, the plate, and the islands on it, old and green on the left, new and smoking on the right over the plume
+    sky(c, w, h, '#8ab0d8', '#f6cdb4'); c.fillStyle = '#3a78a8'; c.fillRect(0, h*.56, w, h*.2);
+    c.fillStyle = '#6a5a52'; c.strokeStyle = ink; c.lineWidth = 3; c.fillRect(-2, h*.76, w + 4, 14); c.strokeRect(-2, h*.76, w + 4, 14);
+    const pg = c.createLinearGradient(0, h*.76 + 14, 0, h); pg.addColorStop(0, '#e0602a'); pg.addColorStop(1, '#8a2a20'); c.fillStyle = pg; c.fillRect(0, h*.76 + 14, w, h);
+    c.fillStyle = '#ffd36b'; c.beginPath(); c.moveTo(184, h); c.lineTo(194, h*.76 + 14); c.lineTo(206, h*.76 + 14); c.lineTo(216, h); c.fill();
+    c.strokeStyle = '#f2b8a0'; c.lineWidth = 3; c.beginPath(); c.ellipse(40, h*.58, 16, 4, 0, 0, 7); c.stroke();
+    [[86, 22, 10, '#6a9a4a'], [138, 30, 24, '#7a6a4a'], [200, 36, 48, '#2a2430']].forEach(([x, hw, hg, col]) => cone(c, x, h*.76, hw, hg + h*.2, col));
+    c.fillStyle = '#ff8a3a'; c.fillRect(195, h*.56 - 50, 10, 5);
+    c.fillStyle = 'rgba(240,235,230,.9)'; for (const [x, y, r] of [[204, 30, 9], [212, 18, 12], [224, 8, 10]]) { c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); }
+    arrow(c, 150, h*.76 + 7, 96, h*.76 + 7);
+  }},
 ];

@@ -11,9 +11,9 @@ import { Sound } from '../core/sound.js';
 import { game } from '../state.js';
 
 const el = document.createElement('div'); el.id = 'goggles'; el.hidden = true;
-el.innerHTML = '<div class="ring"></div><div class="count"><span class="lbl">Time goggles</span><b>0</b> years</div>';
+el.innerHTML = '<div class="ring"></div><div class="count"><span class="lbl">Time goggles</span><b>0</b> <i>years</i></div>';
 document.body.append(el);
-const countEl = el.querySelector('b');
+const countEl = el.querySelector('b'), unitEl = el.querySelector('i');
 const fmt = y => y >= 1e6 ? (Math.round(y/1e5)/10).toLocaleString() + ' million' : y >= 1000 ? (Math.round(y/1000)*1000).toLocaleString() : Math.round(y).toLocaleString();
 
 export async function goggles(t, {shot, years, dur = 7, step}){
@@ -26,7 +26,7 @@ export async function goggles(t, {shot, years, dur = 7, step}){
   Sound.hiss({dur, vol:.06, type:'bandpass', freq:700, f2:2400, q:.7});
   await t.until(() => {
     const p = clamp01((game.elapsed - t0)/dur), k = ease(p);
-    step(k); countEl.textContent = fmt(years*k);
+    step(k); countEl.textContent = fmt(years*k); unitEl.textContent = countEl.textContent === '1' ? 'year' : 'years';
     if (p*16 > ticks) { ticks++; Sound.tone(1200 + ticks*40, {type:'square', dur:.03, vol:.02, cut:3000}); }
     return p >= 1;
   });

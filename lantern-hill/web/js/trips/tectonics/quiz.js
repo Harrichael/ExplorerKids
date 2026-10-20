@@ -248,10 +248,152 @@ const braced = (c, w, h) => { BG.hills(c, w, h); c.fillStyle = '#f2dcb8'; c.stro
   c.fillStyle = '#5a5a6a'; for (const x of [72, 120, 168]) { c.beginPath(); c.arc(x, 144, 5, 0, 7); c.fill(); } };
 const loop = (col, dir) => (c, w, h) => { flow(dir)(c, w, h); if (col) { blob(c, w/2, h/2, 34, 30, col, 4); c.fillStyle = ink; for (const dx of [-10, 10]) { c.beginPath(); c.arc(w/2 + dx, h/2 - 4, 4, 0, 7); c.fill(); } } };
 
+// ---------- the hotspot island ----------
+const sea = (c, w, h, y = .58) => { coast(c, w, h); c.fillStyle = '#3a78a8'; c.fillRect(0, h*y, w, h); c.strokeStyle = '#e8f6ff'; c.lineWidth = 3;
+  for (const x of [30, 120, 200]) { c.beginPath(); c.moveTo(x, h*y + 14); c.quadraticCurveTo(x + 10, h*y + 8, x + 20, h*y + 14); c.stroke(); } };
+const smoke = (c, x, y) => { for (const [dx, dy, r] of [[0, 0, 9], [8, -12, 12], [20, -22, 10]]) blob(c, x + dx, y + dy, r, r*.8, '#f0ebe6', 2); };
+// a cross-section: sea over a plate over the mantle, and whatever is underneath
+function underSea(c, w, h){ sky(c, w, h, '#8ab0d8', '#f6cdb4'); c.fillStyle = '#3a78a8'; c.fillRect(0, 50, w, 40);
+  c.fillStyle = '#6a5a52'; c.strokeStyle = ink; c.lineWidth = 3; c.fillRect(-3, 90, w + 6, 18); c.strokeRect(-3, 90, w + 6, 18);
+  const g = c.createLinearGradient(0, 108, 0, h); g.addColorStop(0, '#e0602a'); g.addColorStop(1, '#8a2a20'); c.fillStyle = g; c.fillRect(0, 108, w, h); }
+const plumeUp = (c, w, h) => { underSea(c, w, h); cone(c, 150, 92, 40, 60, '#2a2430'); smoke(c, 152, 26);
+  const g = c.createLinearGradient(130, 0, 170, 0); g.addColorStop(0, 'rgba(255,200,90,0)'); g.addColorStop(.5, '#fff0a0'); g.addColorStop(1, 'rgba(255,200,90,0)'); c.fillStyle = g; c.fillRect(132, 108, 36, h);
+  blob(c, 150, 112, 28, 9, '#ffd36b', 2); };
+const campfire = (c, w, h) => { sea(c, w, h); cone(c, w/2, h*.6, 70, 50, '#6a5a52');
+  c.strokeStyle = '#6b4430'; c.lineWidth = 9; c.lineCap = 'round'; c.beginPath(); c.moveTo(w/2 - 24, 70); c.lineTo(w/2 + 24, 58); c.moveTo(w/2 + 24, 70); c.lineTo(w/2 - 24, 58); c.stroke();
+  for (const [dx, hh, col] of [[0, 44, '#f2963a'], [-10, 30, '#ffd36b'], [10, 32, '#ffd36b']]) { c.fillStyle = col; c.strokeStyle = ink; c.lineWidth = 2.5; c.beginPath(); c.moveTo(w/2 + dx - 10, 62); c.quadraticCurveTo(w/2 + dx - 8, 62 - hh*.6, w/2 + dx, 62 - hh); c.quadraticCurveTo(w/2 + dx + 8, 62 - hh*.6, w/2 + dx + 10, 62); c.closePath(); c.fill(); c.stroke(); } };
+// the row of islands, old and green on the left, new and smoking on the right, one ringed
+const chainOf = which => (c, w, h) => { sea(c, w, h);
+  const isles = which === 'same' ? [[46, 30, 40, '#7a7480'], [120, 30, 40, '#7a7480'], [194, 30, 40, '#7a7480']] : [[40, 26, 14, '#6a9a4a'], [118, 32, 30, '#7a6a4a'], [194, 38, 56, '#2a2430']];
+  isles.forEach(([x, hw, hg, col]) => cone(c, x, h*.6, hw, hg, col)); if (which !== 'same') smoke(c, 196, h*.6 - 64);
+  if (which === 'old') dashed(c, () => c.ellipse(40, h*.6 - 6, 38, 26, 0, 0, Math.PI*2)); else if (which === 'new') dashed(c, () => c.ellipse(194, h*.6 - 26, 46, 46, 0, 0, Math.PI*2));
+  else { c.fillStyle = '#ffd36b'; c.strokeStyle = ink; c.lineWidth = 4; c.font = '900 30px Nunito, sans-serif'; c.textAlign = 'center'; for (const x of [83, 157]) { c.strokeText('=', x, h*.6 - 18); c.fillText('=', x, h*.6 - 18); } } };
+// paper sliding over a candle: a row of scorch marks, newest over the flame
+const candle = (c, w, h) => { sky(c, w, h, '#fff1d8', '#f6d8b8');
+  c.fillStyle = '#f6efe0'; c.strokeStyle = ink; c.lineWidth = 3; c.beginPath(); c.moveTo(10, 60); c.lineTo(230, 50); c.lineTo(230, 74); c.lineTo(10, 84); c.closePath(); c.fill(); c.stroke();
+  for (const [x, r] of [[60, 5], [110, 7], [160, 9]]) blob(c, x, 70 - x*.045, r*1.4, r*.7, '#8a5a3a', 0);
+  c.fillStyle = '#e8e0c8'; c.fillRect(170, 112, 26, 50); c.strokeRect(170, 112, 26, 50);
+  c.fillStyle = '#ffd36b'; c.beginPath(); c.moveTo(176, 110); c.quadraticCurveTo(183, 84, 190, 110); c.closePath(); c.fill(); c.stroke();
+  arrow(c, 120, 30, 50, 34, '#ffd36b'); };
+const wiggly = (c, w, h) => { underSea(c, w, h); c.strokeStyle = '#ffd36b'; c.lineWidth = 12; c.beginPath(); for (let y = h; y > 108; y -= 6) c.lineTo(w/2 + 30*Math.sin(y/10), y); c.stroke();
+  arrow(c, w/2 - 30, 130, w/2 - 80, 130, '#ffd36b'); arrow(c, w/2 + 30, 130, w/2 + 80, 130, '#ffd36b'); };
+const swimmer = (c, w, h) => { sea(c, w, h); cone(c, 130, h*.6, 46, 50, '#5a8a4a'); c.strokeStyle = '#e8f6ff'; c.lineWidth = 4;
+  for (const x of [70, 82]) { c.beginPath(); c.arc(x, h*.6 + 4, 8, Math.PI, Math.PI*2); c.stroke(); } arrow(c, 120, 40, 60, 40, '#ffd36b');
+  for (const sx of [-1, 1]) blob(c, 130 + sx*30, h*.6 + 14, 12, 6, '#5a8a4a', 3); };
+// under the volcano: magma swelling, the ground bulging, the rock cracking
+const swelling = (c, w, h) => { sky(c, w, h, '#8ab0d8', '#f6cdb4'); c.fillStyle = '#5a4a52'; c.strokeStyle = ink; c.lineWidth = 3;
+  c.beginPath(); c.moveTo(-3, 80); c.quadraticCurveTo(w/2, 26, w + 3, 80); c.lineTo(w + 3, h + 3); c.lineTo(-3, h + 3); c.closePath(); c.fill(); c.stroke();
+  glowBlob(c, w/2, 122, 42, '#ffe08a', '#e0602a'); c.strokeStyle = ink; c.lineWidth = 4;
+  for (const [x0, y0, x1, y1] of [[w/2 - 20, 92, w/2 - 30, 64], [w/2 + 18, 90, w/2 + 34, 60]]) { c.beginPath(); c.moveTo(x0, y0); c.lineTo((x0 + x1)/2 + 6, (y0 + y1)/2); c.lineTo(x1, y1); c.stroke(); }
+  arrow(c, w/2, 40, w/2, 12, '#ffd36b'); };
+const whale = (c, w, h) => { sea(c, w, h); cone(c, 170, h*.6, 46, 50, '#5a8a4a');
+  c.fillStyle = '#4a6a8a'; c.strokeStyle = ink; c.lineWidth = 3; c.beginPath(); c.ellipse(80, h*.6 + 20, 56, 20, -.1, 0, Math.PI*2); c.fill(); c.stroke();
+  c.beginPath(); c.moveTo(26, h*.6 + 18); c.lineTo(8, h*.6 + 2); c.lineTo(14, h*.6 + 28); c.closePath(); c.fill(); c.stroke(); c.fillStyle = ink; c.beginPath(); c.arc(118, h*.6 + 16, 3, 0, 7); c.fill(); };
+// the volcano breathing: puffed up (dashed) and sunk back, with the GPS on top
+const breathing = (c, w, h) => { sky(c, w, h, '#8ab0d8', '#f6cdb4'); c.fillStyle = '#4a4048'; c.strokeStyle = ink; c.lineWidth = 3;
+  c.beginPath(); c.moveTo(-3, 120); c.quadraticCurveTo(w/2, 60, w + 3, 120); c.lineTo(w + 3, h + 3); c.lineTo(-3, h + 3); c.closePath(); c.fill(); c.stroke();
+  dashed(c, () => { c.moveTo(-3, 116); c.quadraticCurveTo(w/2, 36, w + 3, 116); });
+  c.strokeStyle = ink; c.lineWidth = 3; c.beginPath(); c.moveTo(w/2 - 8, 92); c.lineTo(w/2, 72); c.lineTo(w/2 + 8, 92); c.stroke(); blob(c, w/2, 68, 9, 6, '#f2ece0', 2.5);
+  arrow(c, 40, 70, 40, 34, '#ffd36b'); arrow(c, 200, 40, 200, 76, '#7aa0e0'); };
+const talking = (c, w, h) => { sea(c, w, h); cone(c, 90, h*.6, 60, 70, '#4a4048');
+  c.fillStyle = '#fff8e8'; c.strokeStyle = ink; c.lineWidth = 3; c.beginPath(); c.ellipse(184, 40, 44, 26, 0, 0, Math.PI*2); c.fill(); c.stroke();
+  c.beginPath(); c.moveTo(150, 54); c.lineTo(126, 74); c.lineTo(162, 60); c.fill(); c.fillStyle = ink; for (const x of [168, 184, 200]) { c.beginPath(); c.arc(x, 40, 4, 0, 7); c.fill(); } };
+const snoring = (c, w, h) => { sea(c, w, h); cone(c, 100, h*.6, 60, 70, '#4a4048'); c.fillStyle = '#efe0bf'; c.strokeStyle = ink; c.lineWidth = 4; c.font = '900 26px Nunito, sans-serif'; c.textAlign = 'center';
+  for (const [x, y] of [[160, 60], [184, 40], [208, 20]]) { c.strokeText('z', x, y); c.fillText('z', x, y); } };
+// a volcano's heavy side slipping toward the sea
+const slump = (c, w, h) => { sky(c, w, h, '#8ab0d8', '#f6cdb4'); c.fillStyle = '#3a78a8'; c.fillRect(0, 96, w, h);
+  c.fillStyle = '#5a4a52'; c.strokeStyle = ink; c.lineWidth = 3; c.beginPath(); c.moveTo(-3, h + 3); c.lineTo(-3, 90); c.lineTo(60, 40); c.lineTo(110, 60); c.lineTo(130, h + 3); c.closePath(); c.fill(); c.stroke();
+  c.fillStyle = '#6a5a5e'; c.beginPath(); c.moveTo(118, 64); c.lineTo(150, 72); c.lineTo(214, 120); c.lineTo(214, h + 3); c.lineTo(144, h + 3); c.closePath(); c.fill(); c.stroke();
+  arrow(c, 150, 92, 200, 124, '#ffd36b'); };
+// lava pouring into the sea and making land; or boiling the sea away; or floating off
+const newLand = (c, w, h) => { sea(c, w, h, .62); c.fillStyle = '#2a2430'; c.strokeStyle = ink; c.lineWidth = 3;
+  c.beginPath(); c.moveTo(-3, 40); c.lineTo(80, 70); c.lineTo(150, 112); c.lineTo(150, h + 3); c.lineTo(-3, h + 3); c.closePath(); c.fill(); c.stroke();
+  c.fillStyle = '#ff8a3a'; c.beginPath(); c.moveTo(-3, 48); c.lineTo(80, 76); c.lineTo(146, 112); c.lineTo(136, 116); c.lineTo(76, 84); c.lineTo(-3, 60); c.closePath(); c.fill();
+  smoke(c, 150, 92); arrow(c, 160, 130, 214, 130, '#ffd36b'); };
+const boiling = (c, w, h) => { sea(c, w, h, .4); c.strokeStyle = '#e8f6ff'; c.lineWidth = 3; for (let i = 0; i < 12; i++) { c.beginPath(); c.arc(20 + (i*53) % 200, 90 + (i*37) % 70, 5 + i % 4*2, 0, 7); c.stroke(); }
+  for (const x of [60, 130, 190]) smoke(c, x, 50); };
+const floating = (c, w, h) => { sea(c, w, h, .5); for (const [x, y, r] of [[60, 90, 16], [130, 96, 20], [196, 88, 14]]) glowBlob(c, x, y, r, '#ffe08a', '#e0602a'); arrow(c, 90, 130, 180, 130, '#ffd36b'); };
+// black sand: lava meeting the sea and shattering; pepper; toast crumbs
+const blackSand = (c, w, h) => { sea(c, w, h, .5); c.fillStyle = '#26232a'; c.beginPath(); c.moveTo(-3, h + 3); c.lineTo(-3, 110); c.quadraticCurveTo(w/2, 96, w + 3, 120); c.lineTo(w + 3, h + 3); c.closePath(); c.fill();
+  c.fillStyle = '#8a9ab8'; for (let i = 0; i < 40; i++) c.fillRect((i*47) % w, 116 + (i*29) % 50, 3, 3);
+  c.fillStyle = '#ff8a3a'; c.strokeStyle = ink; c.lineWidth = 3; c.beginPath(); c.moveTo(150, 10); c.lineTo(172, 10); c.lineTo(170, 80); c.lineTo(152, 80); c.closePath(); c.fill(); c.stroke();
+  c.strokeStyle = '#f6f2f0'; c.lineWidth = 3; for (let k = 0; k < 6; k++) { const a = Math.PI + k*.6; c.beginPath(); c.moveTo(161 + Math.cos(a)*12, 86 + Math.sin(a)*6); c.lineTo(161 + Math.cos(a)*24, 86 + Math.sin(a)*14); c.stroke(); } };
+const pepper = (c, w, h) => { sky(c, w, h, '#fff1d8', '#f6d8b8'); c.fillStyle = '#e8d8b0'; c.fillRect(0, 130, w, h);
+  c.fillStyle = '#c8c0d0'; c.strokeStyle = ink; c.lineWidth = 3; c.save(); c.translate(130, 70); c.rotate(.6); c.fillRect(-18, -34, 36, 64); c.strokeRect(-18, -34, 36, 64);
+  c.fillStyle = '#9a8aa8'; c.beginPath(); c.ellipse(0, -34, 18, 8, 0, 0, Math.PI*2); c.fill(); c.stroke(); c.restore();
+  c.fillStyle = ink; for (let i = 0; i < 26; i++) c.fillRect(60 + (i*37) % 70, 100 + (i*23) % 50, 3, 3); };
+const toast = (c, w, h) => { sky(c, w, h, '#fff1d8', '#f6d8b8'); c.fillStyle = '#a8703a'; c.strokeStyle = ink; c.lineWidth = 4;
+  c.beginPath(); c.moveTo(70, 140); c.lineTo(70, 66); c.quadraticCurveTo(70, 34, 100, 34); c.quadraticCurveTo(120, 22, 140, 34); c.quadraticCurveTo(170, 34, 170, 66); c.lineTo(170, 140); c.closePath(); c.fill(); c.stroke();
+  c.fillStyle = '#5a3420'; c.fillRect(84, 60, 72, 66); for (let i = 0; i < 9; i++) blob(c, 186 + (i % 3)*12, 130 + Math.floor(i/3)*10, 4, 3, '#8a5a30', 1.5); };
+// an open question: deep under the plume, where nobody has been
+const unknown = (c, w, h) => { const x = w/2, y = h + 10; sky(c, w, h, '#fff1d8', '#f6d8b8');
+  for (const [r, col] of [[150, '#7a5a42'], [138, '#e0602a'], [52, '#ffd36b']]) blob(c, x, y, r, r, col, 3);
+  c.fillStyle = 'rgba(255,240,170,.85)'; c.fillRect(x - 8, y - 136, 16, 82);
+  c.font = '64px Caprasimo, Georgia, serif'; c.fillStyle = '#ffd36b'; c.strokeStyle = ink; c.lineWidth = 5; c.textAlign = 'center'; c.strokeText('?', x + 60, 70); c.fillText('?', x + 60, 70); };
+const shovel = (c, w, h) => { sky(c, w, h, '#8ab0d8', '#f6cdb4'); c.fillStyle = '#26232a'; c.fillRect(0, 110, w, h);
+  c.strokeStyle = '#8a5a3a'; c.lineWidth = 8; c.beginPath(); c.moveTo(150, 20); c.lineTo(120, 100); c.stroke();
+  c.fillStyle = '#9aa0b0'; c.strokeStyle = ink; c.lineWidth = 3; c.beginPath(); c.moveTo(106, 96); c.lineTo(134, 104); c.lineTo(120, 136); c.closePath(); c.fill(); c.stroke(); };
+const highSky = (c, w, h) => { sky(c, w, h, '#6a9ae0', '#cfe2f6'); for (const [x, y, r] of [[60, 60, 26], [86, 52, 30], [116, 62, 24], [170, 110, 22], [192, 104, 26]]) blob(c, x, y, r, r*.7, '#fff8f0', 2.5); };
+// what makes green sand green
+const greenSand = (c, w, h) => { sky(c, w, h, '#8ab0d8', '#f6cdb4'); c.fillStyle = '#8a9440'; c.fillRect(0, 100, w, h);
+  for (let i = 0; i < 9; i++) { const x = 30 + (i*61) % 190, y = 112 + (i*29) % 46; c.fillStyle = '#7ab84a'; c.strokeStyle = ink; c.lineWidth = 2; c.beginPath(); c.moveTo(x, y - 9); c.lineTo(x + 8, y); c.lineTo(x, y + 9); c.lineTo(x - 8, y); c.closePath(); c.fill(); c.stroke(); }
+  cone(c, 60, 100, 60, 56, '#8a4634'); };
+const seaweed = (c, w, h) => { sea(c, w, h, .3); c.strokeStyle = '#3a8a3a'; c.lineWidth = 7; c.lineCap = 'round';
+  for (const x of [50, 90, 130, 170, 200]) { c.beginPath(); c.moveTo(x, h); c.quadraticCurveTo(x - 16, h - 40, x + 4, h - 70); c.quadraticCurveTo(x + 18, h - 96, x - 2, h - 110); c.stroke(); } };
+const paint = (c, w, h) => { sky(c, w, h, '#fff1d8', '#f6d8b8'); c.fillStyle = '#9aa0b0'; c.strokeStyle = ink; c.lineWidth = 3; c.fillRect(80, 70, 70, 70); c.strokeRect(80, 70, 70, 70);
+  c.fillStyle = '#4aa84a'; c.beginPath(); c.ellipse(115, 70, 35, 10, 0, 0, Math.PI*2); c.fill(); c.stroke(); c.fillRect(140, 70, 12, 40); c.strokeRect(140, 70, 12, 40);
+  c.strokeStyle = '#8a5a3a'; c.lineWidth = 6; c.beginPath(); c.moveTo(80, 40); c.lineTo(110, 70); c.stroke(); };
+// two kinds of lava: smooth ropes, rough rubble; and a bowl of noodles
+const ropes = (c, w, h) => { sky(c, w, h, '#3a3440', '#26222c'); c.strokeStyle = '#8a8aa8'; c.lineWidth = 5; c.lineCap = 'round';
+  for (let k = 0; k < 6; k++) { c.beginPath(); c.arc(w/2, 190, 40 + k*20, Math.PI*1.15, Math.PI*1.85); c.stroke(); } };
+const rubble = (c, w, h) => { sky(c, w, h, '#8ab0d8', '#f6cdb4');
+  for (let i = 0; i < 16; i++) { const x = 20 + (i*53) % 210, y = 90 + (i*31) % 70, r = 12 + (i % 4)*5; c.fillStyle = ['#2a2228', '#4a3430', '#3a2e34'][i % 3]; c.strokeStyle = ink; c.lineWidth = 2.5;
+    c.beginPath(); for (let k = 0; k < 6; k++) { const a = k/6*Math.PI*2 + i; c.lineTo(x + Math.cos(a)*r*(.8 + (k % 2)*.4), y + Math.sin(a)*r*.8); } c.closePath(); c.fill(); c.stroke(); } };
+const noodles = (c, w, h) => { sky(c, w, h, '#fff1d8', '#f6d8b8'); c.fillStyle = '#c0483a'; c.strokeStyle = ink; c.lineWidth = 4;
+  c.beginPath(); c.moveTo(40, 80); c.quadraticCurveTo(w/2, 190, 200, 80); c.closePath(); c.fill(); c.stroke();
+  c.strokeStyle = '#f6d890'; c.lineWidth = 4; for (let k = 0; k < 7; k++) { c.beginPath(); c.moveTo(60 + k*20, 80); c.quadraticCurveTo(70 + k*20, 50, 56 + k*20, 30 + (k % 3)*6); c.stroke(); } };
+// a lava tube: a tunnel under a crust, drained; a worm; a railway tunnel
+const tube = (c, w, h) => { sky(c, w, h, '#8ab0d8', '#f6cdb4'); c.fillStyle = '#3a3440'; c.strokeStyle = ink; c.lineWidth = 3; c.fillRect(-3, 60, w + 6, h); c.strokeRect(-3, 60, w + 6, h);
+  c.fillStyle = '#140e18'; c.beginPath(); c.ellipse(w/2, 118, 90, 30, 0, 0, Math.PI*2); c.fill(); c.stroke();
+  c.fillStyle = '#ff8a3a'; c.beginPath(); c.ellipse(w/2 + 40, 140, 36, 6, 0, 0, Math.PI*2); c.fill(); arrow(c, 70, 118, 150, 118, '#ffd36b'); };
+const worm = (c, w, h) => { sky(c, w, h, '#8a6a4a', '#5a4030'); c.strokeStyle = '#f0a0a8'; c.lineWidth = 26; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(30, 120); c.quadraticCurveTo(80, 60, 120, 110); c.quadraticCurveTo(160, 150, 200, 80); c.stroke(); c.fillStyle = ink; c.beginPath(); c.arc(204, 76, 4, 0, 7); c.fill(); };
+const railway = (c, w, h) => { sky(c, w, h, '#8ab0d8', '#f6cdb4'); c.fillStyle = '#7a6a5e'; c.strokeStyle = ink; c.lineWidth = 3; c.beginPath(); c.moveTo(-3, h); c.lineTo(-3, 40); c.quadraticCurveTo(w/2, 0, w + 3, 40); c.lineTo(w + 3, h); c.closePath(); c.fill(); c.stroke();
+  c.fillStyle = '#1a1320'; c.beginPath(); c.moveTo(80, h); c.lineTo(80, 100); c.arc(w/2, 100, 40, Math.PI, 0); c.lineTo(160, h); c.closePath(); c.fill();
+  c.strokeStyle = '#c8c0b0'; c.lineWidth = 4; c.beginPath(); c.moveTo(100, h); c.lineTo(112, 120); c.moveTo(140, h); c.lineTo(128, 120); c.stroke(); };
+// how life reaches an island: wind, wings and waves; or planted; or from space
+const arrivals = (c, w, h) => { sea(c, w, h, .7); cone(c, 170, h*.7, 50, 40, '#5e9a4a');
+  c.strokeStyle = '#f6f2f0'; c.lineWidth = 4; for (const y of [30, 46]) { c.beginPath(); c.moveTo(10, y); c.quadraticCurveTo(60, y - 14, 110, y); c.stroke(); }
+  c.strokeStyle = '#d8303a'; c.lineWidth = 5; c.beginPath(); c.moveTo(70, 80); c.quadraticCurveTo(80, 70, 90, 80); c.quadraticCurveTo(100, 70, 110, 80); c.stroke();
+  blob(c, 60, h*.7 + 8, 8, 6, '#8a6a4a', 2); arrow(c, 74, h*.7 + 8, 116, h*.7 + 8, '#ffd36b'); };
+const planted = (c, w, h) => { sky(c, w, h, '#fff1d8', '#f6d8b8'); c.fillStyle = '#b5552f'; c.strokeStyle = ink; c.lineWidth = 3;
+  c.beginPath(); c.moveTo(90, 100); c.lineTo(150, 100); c.lineTo(140, 150); c.lineTo(100, 150); c.closePath(); c.fill(); c.stroke();
+  c.strokeStyle = '#3a8a3a'; c.lineWidth = 5; c.beginPath(); c.moveTo(120, 100); c.lineTo(120, 50); c.stroke(); blob(c, 108, 62, 12, 6, '#5e9a4a', 2); blob(c, 132, 54, 12, 6, '#5e9a4a', 2); };
+const space = (c, w, h) => { sky(c, w, h, '#14102a', '#2a2050'); c.fillStyle = '#fff8e0'; for (let i = 0; i < 30; i++) c.fillRect((i*67) % w, (i*41) % h, 2, 2);
+  blob(c, 170, 60, 30, 30, '#c8a0e0', 3); c.strokeStyle = '#ffd36b'; c.lineWidth = 3; c.beginPath(); c.ellipse(170, 60, 46, 10, -.3, 0, Math.PI*2); c.stroke(); };
+// a hidden volcano under the waves; a whirlpool; a sea monster
+const seamount = (c, w, h) => { sea(c, w, h, .4); c.fillStyle = '#2a4a6a'; c.strokeStyle = ink; c.lineWidth = 3; c.beginPath(); c.moveTo(20, h + 3); c.lineTo(110, 80); c.lineTo(140, 80); c.lineTo(230, h + 3); c.closePath(); c.fill(); c.stroke();
+  c.strokeStyle = '#ffffff'; c.lineWidth = 5; c.beginPath(); c.moveTo(96, 64); c.quadraticCurveTo(120, 50, 150, 66); c.stroke(); c.fillStyle = '#ff8a3a'; c.fillRect(118, 80, 14, 6); };
+const whirlpool = (c, w, h) => { sea(c, w, h, .3); c.strokeStyle = '#e8f6ff'; c.lineWidth = 4; c.beginPath(); for (let a = 0; a < 18; a += .2) c.lineTo(w/2 + Math.cos(a)*a*4, 110 + Math.sin(a)*a*1.6); c.stroke(); };
+const monster = (c, w, h) => { sea(c, w, h, .55); for (const [x, r] of [[60, 18], [110, 24], [160, 18]]) { c.fillStyle = '#5a9a6a'; c.strokeStyle = ink; c.lineWidth = 3; c.beginPath(); c.arc(x, h*.55, r, Math.PI, 0); c.fill(); c.stroke(); }
+  blob(c, 196, h*.55 - 26, 16, 14, '#5a9a6a', 3); c.fillStyle = ink; c.beginPath(); c.arc(202, h*.55 - 30, 3, 0, 7); c.fill(); };
+// the atoll: a reef ring round a lagoon, the sunk volcano a shadow underneath; pirates; rain
+const atoll = (c, w, h) => { sky(c, w, h, '#3a78a8', '#2a5a8a');
+  c.fillStyle = 'rgba(20,40,70,.5)'; c.beginPath(); c.ellipse(w/2, h/2 + 6, 70, 40, 0, 0, Math.PI*2); c.fill();
+  c.lineWidth = 18; c.strokeStyle = '#f2e6c4'; c.beginPath(); c.ellipse(w/2, h/2, 84, 50, 0, 0, Math.PI*2); c.stroke();
+  c.fillStyle = '#6ad8c8'; c.beginPath(); c.ellipse(w/2, h/2, 74, 40, 0, 0, Math.PI*2); c.fill(); c.strokeStyle = ink; c.lineWidth = 3; c.beginPath(); c.ellipse(w/2, h/2, 93, 59, 0, 0, Math.PI*2); c.stroke();
+  for (const a of [.4, 1.6, 2.9, 4.4, 5.5]) blob(c, w/2 + Math.cos(a)*84, h/2 + Math.sin(a)*50, 7, 7, '#4e8a3e', 2); };
+const pirates = (c, w, h) => { sea(c, w, h, .62); c.fillStyle = '#8a5a3a'; c.strokeStyle = ink; c.lineWidth = 3; c.beginPath(); c.moveTo(60, 100); c.lineTo(180, 100); c.lineTo(160, 124); c.lineTo(80, 124); c.closePath(); c.fill(); c.stroke();
+  c.strokeRect(118, 30, 4, 70); c.fillStyle = '#f6efe0'; c.beginPath(); c.moveTo(122, 34); c.lineTo(170, 60); c.lineTo(122, 86); c.closePath(); c.fill(); c.stroke(); };
+const jumping = (c, w, h) => { sea(c, w, h, .7); cone(c, w/2, h*.7, 100, 50, '#5e9a4a'); for (const [x, y] of [[80, 74], [120, 62], [160, 74]]) kid(c, x, y, .8, 'stand');
+  c.strokeStyle = '#ffd36b'; c.lineWidth = 3; for (const x of [80, 120, 160]) { c.beginPath(); c.moveTo(x - 8, (x === 120 ? 62 : 74) + 14); c.lineTo(x + 8, (x === 120 ? 62 : 74) + 14); c.stroke(); } };
+const rainy = (c, w, h) => { sea(c, w, h); cone(c, w/2, h*.6, 60, 50, '#7a6a5e'); blob(c, w/2, 30, 50, 18, '#c8c8d8', 3);
+  c.strokeStyle = '#4a86c0'; c.lineWidth = 3; for (let i = 0; i < 8; i++) { c.beginPath(); c.moveTo(80 + i*12, 50); c.lineTo(74 + i*12, 64); c.stroke(); } };
+
 // ---------- the bank ----------
 // A key question is eligible once its place was visited; an idea shared by key questions is asked once
 // a check. A minor question waits until the explorer did one of its `need`s.
-const key = (at, o) => ({...o, at, key:true});
+const key = (at, o) => ({...o, at:[].concat(at), key:true});
 const minor = (need, o) => ({...o, need:[].concat(need)});
 const BANK = [
   // ---- the volcano rim, and the answer to its mystery on the way home ----
@@ -440,9 +582,9 @@ const BANK = [
     answers:[["Stuck plates bent, then snapped", plates('slide')], ["A giant stomped on it", pic('hills', ['🦶'])], ["The bus landed too hard", pic('hills', ['🚌'])]],
     hint: has => has('slide:quake') ? "Remember the fence that bent and bent, then broke?" : "Think of the crack across the road.",
     yay:"Stuck plates bend and bend, then SNAP! That's an earthquake."}),
-  key('slide', {who:'basil', q:"Stuck plates snap, and the ground starts to shake! What do you do?",
+  key(['slide', 'hotspot'], {who:'basil', q:"The ground starts to shake! What do you do?",
     answers:[["Drop, cover, hold on!", duck], ["Run outside", runOut], ["Stand by a window", byWindow]],
-    hint: has => has('slide:quake') ? "What did the class do at the fault, when the ground shook?" : "Get low, get under something strong, and hold on.",
+    hint: has => has('slide:quake') ? "What did the class do at the fault, when the ground shook?" : has('hotspot:swell') ? "What did the class do on the island, when the ground shook?" : "Get low, get under something strong, and hold on.",
     yay:"Drop, cover, hold on! Now I know just what to do."}),
   minor('slide:creek', {who:'juniper', q:"Why did the creek take a detour, right at the crack?",
     answers:[["The ground slid and dragged it", creek], ["A fish dug a shortcut", pic('hills', ['🐟'])], ["It got lost", pic('hills', ['❓'])]],
@@ -477,12 +619,61 @@ const BANK = [
   minor('slide:trees', {who:'pip', q:"What can a red-tailed hawk spot from way up in the sky?",
     answers:[["A mouse in the grass", pic('hills', ['🐭', 120, 120, 60])], ["Mo's missing snack", pic('hills', ['🥨'])], ["Nothing, it's asleep", pic('hills', ['😴'])]],
     hint:"Its eyes are super sharp.", yay:"A tiny mouse, from way up high!"}),
+
+  // ---- the hotspot island ----
+  key('hotspot', {who:'pip', q:"The island volcano was far from any plate edge. What made it?",
+    answers:[["A hot plume rising from deep down", plumeUp], ["Two plates crashing", plates('crash')], ["A giant campfire", campfire]],
+    hint:"Remember the skinny glowing tower we saw in the mantle?", yay:"A plume! Hot rock rising from deep, deep down, right in the middle of a plate."}),
+  key('hotspot', {idea:'chain', who:'juniper', q:"In the row of islands, which one is the oldest?",
+    answers:[["The far one, green and worn down", chainOf('old')], ["The new black one, smoking", chainOf('new')], ["They're all the same age", chainOf('same')]],
+    hint:"New islands are black and smoking. What happens to them as they ride away?", yay:"The far one! It's had the longest time to cool, wear down and sink."}),
+  key('hotspot', {idea:'chain', who:'sparks', q:"The plume stays put. So what moves, to make a row of islands?",
+    answers:[["The plate slides over the plume", candle], ["The plume wiggles around", wiggly], ["The islands swim away", swimmer]],
+    hint:"Remember the paper sliding over a candle?", yay:"The plate slides over it, like paper over a candle, and carries each volcano away!"}),
+  key('hotspot', {who:'basil', q:"There was no plate edge at the island. So why did the ground shake?",
+    answers:[["Magma squeezed in and cracked the rock", swelling], ["Two plates bumped", plates('crash')], ["A whale bumped the island", whale]],
+    hint: has => has('hotspot:swell') ? "Remember the goggles, under the volcano? It swelled up like a balloon…" : "Under a volcano, magma pushes and pushes…",
+    yay:"Magma squeezed in, the ground swelled up, and the rock cracked. That crack is the shake!"}),
+  minor('hotspot:swell', {who:'sparks', q:"How can scientists tell that magma is moving under a volcano?",
+    answers:[["The ground puffs up and sinks back", breathing], ["The volcano tells them", talking], ["They hear it snore", snoring]],
+    hint:"Remember the GPS station, and the tiltmeter in the lava?", yay:"The ground puffs up and sinks back, like breathing. The GPS and the tiltmeter feel it!"}),
+  minor('talk:flank', {who:'basil', q:"What else can make a volcano island shake?",
+    answers:[["Its heavy side slipping toward the sea", slump], ["A whale bumping it", whale], ["Everybody jumping at once", jumping]],
+    hint:"A big volcano is very, very heavy…", yay:"Its heavy side can slip toward the sea, all at once. That happened on Kīlauea!"}),
+  minor('hotspot:land', {who:'juniper', q:"What happens when lava pours into the sea?",
+    answers:[["It makes brand-new land", newLand], ["The sea boils away", boiling], ["The lava floats away", floating]],
+    hint:"Remember the edge of the island, out where the steam was?", yay:"Brand-new land! The island grows, right where the lava cools in the sea."}),
+  minor('hotspot:sand', {who:'mo', q:"How did the island's beach get its black sand?",
+    answers:[["Hot lava hit the cold sea and shattered", blackSand], ["Somebody spilled pepper", pepper], ["It's burnt toast crumbs", toast]],
+    hint:"Every grain was a tiny bit of shiny black glass…", yay:"The lava cooled so fast it shattered, and the waves ground it into sand. Volcano glitter!"}),
+  minor('talk:plumeDeep', {who:'sparks', q:"How deep down do plumes start?",
+    answers:[["Scientists are still finding out!", unknown], ["Just under the beach", shovel], ["Up in the sky", highSky]],
+    hint:"Remember the mystery scientists are still arguing about?", yay:"Nobody knows for sure yet! Maybe as deep as the core. Maybe you'll find out."}),
+  minor('hotspot:Green sand', {who:'juniper', q:"What makes a green sand beach green?",
+    answers:[["Tiny olivine crystals", greenSand], ["Seaweed", seaweed], ["Green paint", paint]],
+    hint:"The same green crystals the mantle is mostly made of…", yay:"Olivine! Heavy green crystals, left behind when the waves wash the light bits away."}),
+  minor('hotspot:Ropy lava', {who:'basil', q:"Smooth, ropy lava has a Hawaiian name. What is it?",
+    answers:[["Pāhoehoe", ropes], ["ʻAʻā", rubble], ["Noodle rock", noodles]],
+    hint:"The rough, crunchy kind is ʻaʻā. The smooth kind is…", yay:"Pāhoehoe! And the rough, crunchy kind is ʻaʻā."}),
+  minor('hotspot:Lava tube', {who:'pip', q:"How was the long cave in the lava made?",
+    answers:[["Lava ran out from under a crust", tube], ["A giant worm dug it", worm], ["People built it for trains", railway]],
+    hint:"The top cooled hard, and the hot lava kept running underneath…", yay:"A lava tube! The lava drained out, and left the tunnel behind."}),
+  minor('hotspot:Red flowers', {who:'mo', q:"How did plants get to a brand-new island, far out in the sea?",
+    answers:[["Seeds rode on wind, wings and waves", arrivals], ["Somebody planted them", planted], ["They fell from space", space]],
+    hint:"Seeds that fly, ride and swim. Like a field trip!", yay:"By wind, wings and waves! Tiny seeds blow, stick to birds, and float."}),
+  minor('hotspot:Waves breaking', {who:'pip', q:"Waves broke out at sea, where there was no island. What was under there?",
+    answers:[["A new volcano, growing up", seamount], ["A whirlpool", whirlpool], ["A sea monster", monster]],
+    hint:"It sits on the plume too, and it's still growing…", yay:"A volcano under the sea: the next island in the row, still being born!"}),
+  minor('hotspot:Ring in the sea', {who:'juniper', q:"The oldest island is just a ring of reef now. What happened to its volcano?",
+    answers:[["It sank, and coral kept growing up", atoll], ["Pirates took it", pirates], ["The rain melted it", rainy]],
+    hint:"Coral grows in warm, sunny water, near the top of the sea…", yay:"It sank, and the coral kept building up toward the sunshine, and left a ring!"}),
 ];
 
 // the trip's places in notebook order, as tectonics/index.js keeps them in shared.places
-const PLACES = ['rim', 'mantle', 'ridge', 'crash', 'slide'];
+const PLACES = ['rim', 'mantle', 'ridge', 'crash', 'slide', 'hotspot'];
 // a "Tell me more!" is known by what was asked
-const TALKS = {iceland:"Want to hear something amazing about this crack?", grow:"Want to know which one is winning here?", sanAndreas:"Want to know where in the world a place like this is?"};
+const TALKS = {iceland:"Want to hear something amazing about this crack?", grow:"Want to know which one is winning here?", sanAndreas:"Want to know where in the world a place like this is?",
+  plumeDeep:"Want to hear a mystery scientists are still arguing about?", flank:"Want to know another way a volcano island can shake?"};
 // a key question is three times as likely as a minor one, and a check asks three minor ones at most
 const RUN = 8, KEY_WEIGHT = 3, MINORS = 3;
 
@@ -497,7 +688,7 @@ export const quiz = {key:'tectonicsQuiz', pool:'tectonicsFound', bank:BANK,
   // a check's questions, drawn from what was found; one played before anything was kept counts every place as visited
   questions(found, rnd = Math.random){
     const has = (s => k => s.has(k))(new Set(found && found.length ? found : PLACES));
-    const pool = BANK.filter(q => q.key ? has(q.at) : q.need.some(has)), picked = [], ideas = new Set();
+    const pool = BANK.filter(q => q.key ? q.at.some(has) : q.need.some(has)), picked = [], ideas = new Set();
     while (picked.length < RUN && pool.length) {
       let r = rnd()*pool.reduce((n, q) => n + (q.key ? KEY_WEIGHT : 1), 0), i = 0;
       while ((r -= pool[i].key ? KEY_WEIGHT : 1) > 0 && i < pool.length - 1) i++;

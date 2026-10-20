@@ -1,15 +1,16 @@
 // The plate tectonics field trip: why the ground shakes and how mountains grow, told as one ride.
 // The class lands on a volcano and wonders why it stands in a row with others; drills down through
 // the crust into the mantle, too hot and soft to drill, and watches it turn over; rides it up to a ridge on the sea floor where
-// plates pull apart; flies the map to where plates meet, and picks which to see first: where they
-// crash, or where they slide past each other, then goes on to the other; and on the way home, sees
-// the volcano again and knows why it is there.
+// plates pull apart; flies the map to where plates crash and crumple up mountains; then picks one more
+// adventure: where plates slide past each other, or a volcano island far from any plate edge, over a
+// plume; and on the way home, sees the volcano again and knows why it is there. The place not picked
+// waits in Juniper's notebook for next time.
 //
 // This file is the storyboard: the rides, with what is said and shown, and the order of the places.
 // What happens at each place lives with the place.
 
 import { Sound } from '../../core/sound.js';
-import { load } from '../../save.js';
+import { load, save } from '../../save.js';
 import { game } from '../../state.js';
 import { cabin } from '../cabin.js';
 import { notebook } from '../notebook.js';
@@ -21,6 +22,7 @@ import { quiz } from './quiz.js';
 import { buildRidge } from './ridge.js';
 import { buildRim } from './rim.js';
 import { buildFault } from './fault.js';
+import { buildHotspot } from './hotspot.js';
 import { buildValley } from './valley.js';
 import { wonders } from './wonders.js';
 
@@ -35,20 +37,26 @@ async function check(t, who, q, answers, right, hint, yay){
   }
 }
 
-// every page of Juniper's notebook filled with every find
-const full = s => !!s && PAGES.every((pg, i) => { const n = s.places[i] && s.places[i].tally(); return n && n.seen === n.of; });
+// The fork after the crash: one more adventure, and the other waits for another trip.
+const PICK = {slide:{page:4, build:buildFault, name:'where plates slide'}, hotspot:{page:5, build:buildHotspot, name:'the hotspot island'}};
+const skipped = s => s.pick && PICK[s.pick === 'slide' ? 'hotspot' : 'slide'].page;
+// every page this trip visited, filled with every find
+const full = s => !!s && PAGES.every((pg, i) => { if (i === skipped(s)) return true; const n = s.places[i] && s.places[i].tally(); return n && n.seen === n.of; });
 
-// The two places where plates meet. The explorer picks which comes first, and each still fills its own
-// page, so the notebook reads the same either way.
-const MEET = {
-  crash: {page:3, build:buildValley, teaser:"next stop: where plates crash together! What happens when they push and push?"},
-  slide: {page:4, build:buildFault, teaser:"next stop: where plates slide past each other! Hold on to your hats!"},
-};
-async function meet(t, {route, places}, i){
-  const {page, build} = MEET[route[i]], place = build(t), after = route[i + 1];
+// Juniper's notebook keeps what was found at each place from trip to trip, so the page skipped this
+// time shows what was found there before, or waits for next time.
+const KEPT = 'tectonicsNotebook';
+async function stick(s, page){
+  const kept = (load('trips') || {})[KEPT] || {}, now = s.places[page].tally();
+  const best = (a, b) => !a ? b : {seen:Math.max(a.seen, b.seen), of:b.of, curios:{seen:Math.max(a.curios ? a.curios.seen : 0, b.curios.seen), of:b.curios.of}};
+  save('trips', {[KEPT]: {...kept, [page]: best(kept[page], now)}});
+  const later = skipped(s);
+  await notebook(PAGES, page, PAGES.map((pg, i) => s.places[i] ? s.places[i].tally() : i === later ? kept[i] || 'later' : undefined));
+}
+async function visit(t, s, page, place, next){
   await place.arrive();
-  await place.explore(after ? MEET[after].teaser : "time to fly home! We'll pass an old friend on the way.");
-  places[page] = place.cls; await notebook(PAGES, page, places.map(c => c.tally()));
+  await place.explore(next);
+  s.places[page] = place.cls; await stick(s, page);
   await place.depart();
 }
 
@@ -57,9 +65,9 @@ export const tectonics = {
   intro: [['sparks', "All aboard the Wonder Bus, {name}! Basil and Mo are coming too."],
           ['pip', "Window seat!"]],
   // what every chapter shares: the bus's inside, the diagram, the volcano, seen again at the end, each
-  // place's class in notebook order, remembering what the explorer saw there, and the order the two
-  // places where plates meet are visited in, chosen on the map flight
-  setup: t => ({cab:cabin(), dg:diagram(), rim:buildRim(t), seat:{seated:true}, places:[], route:['crash', 'slide']}),
+  // place's class in notebook order, remembering what the explorer saw there, and the adventure picked
+  // after the crash
+  setup: t => ({cab:cabin(), dg:diagram(), rim:buildRim(t), seat:{seated:true}, places:[], pick:null}),
   chapters: [
     ['over the sea', async (t, {cab, dg, rim, seat}) => {
       cab.view('sea'); t.watch(cab.world, cab.shot('class'), seat);
@@ -74,10 +82,11 @@ export const tectonics = {
       wonders();
       await t.say([['sparks', "Wonderful questions, Basil! Let's see how many this trip can answer."], ['basil', "Answers I can handle. It's the surprises I'm not sure about."]]);
     }],
-    ['the volcano rim', async (t, {cab, dg, rim, seat, places}) => {
+    ['the volcano rim', async (t, s) => {
+      const {rim, places} = s;
       await rim.arrive();
       await rim.explore();
-      places[0] = rim.cls; await notebook(PAGES, 0, places.map(c => c.tally()));
+      places[0] = rim.cls; await stick(s, 0);
       await rim.depart();
     }],
     ['the drill dive', async (t, {cab, dg, rim, seat}) => {
@@ -125,11 +134,12 @@ export const tectonics = {
       S.gear = null; cab.gear(null); Sound.tone(1046, {type:'triangle', dur:.2, vol:.07}); Sound.tone(523, {type:'triangle', t:.15, dur:.3, vol:.07});
       await t.say([['sparks', "Drill in! Heat bubble, on!"]]);
     }],
-    ['the mantle', async (t, {cab, dg, rim, seat, places}) => {
+    ['the mantle', async (t, s) => {
+      const {places} = s;
       const mantle = buildMantle(t);
       await mantle.arrive();
       await mantle.explore();
-      places[1] = mantle.cls; await notebook(PAGES, 1, places.map(c => c.tally()));
+      places[1] = mantle.cls; await stick(s, 1);
       await mantle.depart();
     }],
     ['up the current to the sea floor', async (t, {cab, dg, rim, seat}) => {
@@ -147,11 +157,12 @@ export const tectonics = {
       t.cut(cab.shot('teacher'));
       await t.say([['sparks', "Hold on tight, class! We're about to burst out through the sea floor!"]]);
     }],
-    ['the ridge', async (t, {cab, dg, rim, seat, places}) => {
+    ['the ridge', async (t, s) => {
+      const {places} = s;
       const ridge = buildRidge(t);
       await ridge.arrive();
       await ridge.explore();
-      places[2] = ridge.cls; await notebook(PAGES, 2, places.map(c => c.tally()));
+      places[2] = ridge.cls; await stick(s, 2);
       await ridge.depart();
     }],
     ['the map flight', async (t, s) => {
@@ -175,30 +186,49 @@ export const tectonics = {
       await over;
       t.watch(cab.world, cab.shot('teacher'), seat);
       await t.say([['sparks', "If plates pull apart here, they must meet somewhere else."],
-                   ['sparks', "In some places, they crash head on. In others, they slide past each other."]]);
-      const slide = await t.ask('sparks', "Where shall we go first, {name}?", ["Where plates CRASH together!", "Where plates SLIDE past each other!"]);
-      s.route = slide ? ['slide', 'crash'] : ['crash', 'slide'];
-      await t.say(slide ? [['pip', "Sliding! Like a playground!"], ['sparks', "Smoothly, too. Most of the time…"], ['basil', "Most of the time?!"]]
-                        : [['pip', "Crashing! Like bumper cars!"], ['basil', "Can we pick the one with less crashing?"], ['sparks', "Very, very slow crashing, Basil. You'll see!"]]);
-    }],
-    ['the first place plates meet', async (t, s) => { await meet(t, s, 0); }],
-    ['between the two places', async (t, s) => {
-      const {cab, seat} = s, slide = s.route[1] === 'slide';
-      cab.view('sky'); t.watch(cab.world, cab.shot('class'), seat);
-      await t.say(slide ? [['pip', "Crumpled-up mountains! What could beat that?"], ['basil', "Nothing. Let's have nothing beat it. Let's go home."]]
-                        : [['basil', "My knees are STILL wobbly."], ['mo', "And I still can't find my snack."]]);
-      cab.view(slide ? 'hills' : 'peaks'); t.cut(cab.shot('window'));
-      await t.say([slide ? ['juniper', "Look, the hills down there are all gold. And there's a long crack running across them!"]
-                         : ['pip', "Snowy mountains, way out there! Is that where we're going?"]]);
+                   ['sparks', "In some places, they crash head on. In others, they slide past each other."],
+                   ['sparks', "First stop: where they crash!"],
+                   ['pip', "Crashing! Like bumper cars!"], ['basil', "Can we pick the one with less crashing?"], ['sparks', "Very, very slow crashing, Basil. You'll see!"]]);
+      cab.view('peaks'); t.cut(cab.shot('window'));
+      await t.say([['pip', "Snowy mountains, way out there! Is that where we're going?"]]);
       t.cut(cab.shot('teacher'));
-      await t.say(slide ? [['sparks', "That's where we're going! That crack is where two plates slide past each other."], ['sparks', "Watch for things that don't line up."]]
-                        : [['sparks', "It is! Plates slide past each other back there. Over there, they crash head on."], ['mo', "Slow, slow bumper cars."]]);
+      await t.say([['sparks', "It is! Over there, two plates crash head on."], ['mo', "Slow, slow bumper cars."]]);
     }],
-    ['the second place plates meet', async (t, s) => { await meet(t, s, 1); }],
-    ['home, past the volcano', async (t, {cab, dg, rim, seat, places}) => {
-      const S = dg.S, saw = name => !!places[3] && places[3].saw(name), slid = name => !!places[4] && places[4].saw(name);
+    ['where plates crash', async (t, s) => { await visit(t, s, 3, buildValley(t), "next stop: you get to choose! I have two adventures up my sleeve."); }],
+    // The fork: one more adventure, and the one not picked is still there for another trip.
+    ['the fork', async (t, s) => {
+      const {cab, seat} = s;
+      cab.view('sky'); t.watch(cab.world, cab.shot('class'), seat);
+      await t.say([['pip', "Crumpled-up mountains! What could beat that?"], ['basil', "Nothing. Let's have nothing beat it. Let's go home."]]);
+      t.cut(cab.shot('teacher'));
+      await t.say([['sparks', "Not yet, Basil! I have two adventures up my sleeve, and just enough time today for one of them."],
+                   ['sparks', "One: golden hills with a long crack across them, where two plates slide past each other. Smoothly, too. Most of the time…"],
+                   ['basil', "Most of the time?!"],
+                   ['sparks', "Two: a volcano island, smoking away in the middle of the ocean, thousands of kilometers from where any plates meet."],
+                   ['juniper', "But volcanoes are where plates meet. We've seen it all day!"],
+                   ['sparks', "Exactly. It's a mystery!"]]);
+      const island = await t.ask('sparks', "Which adventure shall we go on, {name}?", ["Where plates SLIDE past each other!", "To the volcano ISLAND out at sea!"]);
+      s.pick = island ? 'hotspot' : 'slide';
+      t.cut(cab.shot('class'));
+      await t.say(island ? [['pip', "A mystery island! Like a treasure map!"], ['mo', "Do mystery islands have snacks?"]] : [['pip', "Sliding! Like a playground!"], ['mo', "Do sliding hills have snacks?"]]);
+      await t.say([['sparks', "And the other adventure will wait for us. We can go another day!"]]);
+      cab.view(island ? 'sea' : 'hills'); t.cut(cab.shot('window'));
+      await t.say([island ? ['juniper', "Look, islands! A whole row of them, way out in the sea. And the end one is smoking!"]
+                          : ['juniper', "Look, the hills down there are all gold. And there's a long crack running across them!"]]);
+      t.cut(cab.shot('teacher'));
+      await t.say(island ? [['sparks', "That's where we're going! Hold on tight. We'll fly in right along the row."]]
+                         : [['sparks', "That's where we're going! That crack is where two plates slide past each other."], ['sparks', "Watch for things that don't line up."]]);
+    }],
+    ['the adventure picked', async (t, s) => { s.pick = s.pick || 'slide'; const {page, build} = PICK[s.pick]; await visit(t, s, page, build(t), "time to fly home! We'll pass an old friend on the way."); }],
+    ['home, past the volcano', async (t, s) => {
+      const {cab, dg, rim, seat, places} = s;
+      const S = dg.S, saw = name => !!places[3] && places[3].saw(name), slid = name => !!places[4] && places[4].saw(name), isle = s.pick === 'hotspot';
       cab.view('sunset'); t.watch(cab.world, cab.shot('class'), seat);
-      await check(t, 'basil', "Can I ask one first? Why did the ground shake at the fault?", ["Stuck plates bent, then snapped", "A giant stomped on it", "The bus landed too hard"], 0,
+      if (!isle) await t.say([['basil', "My knees are STILL wobbly."], ['mo', "And I still can't find my snack."]]);
+      if (isle) await check(t, 'basil', "Can I ask one first? Why did the ground shake on the island?", ["Magma squeezed in and cracked the rock", "Two plates bumped", "A whale bumped the island"], 0,
+        "There was no plate edge there. Remember what the goggles showed under the volcano?",
+        "Magma squeezed in, the ground swelled up like a balloon, and the rock cracked! And I know what to do.");
+      else await check(t, 'basil', "Can I ask one first? Why did the ground shake at the fault?", ["Stuck plates bent, then snapped", "A giant stomped on it", "The bus landed too hard"], 0,
         slid('quake') ? "Remember the fence you pushed and pushed?" : "Think of the crack across the road.",
         "Stuck plates bend and bend, then SNAP! That's an earthquake. And I know what to do.");
       // the hint is whatever the explorer saw crumple where the plates crash
@@ -219,6 +249,8 @@ export const tectonics = {
       await t.say([['basil', pick === 0 ? "Yes! They line up where one plate dives under the other!" :
                             "I know this one! They line up where one plate dives under the other!"],
                    ['juniper', "That answers our very first question!"]]);
+      if (isle) await t.say([['pip', "But the islands at the hotspot were in a row too, and no plate was diving there!"],
+                             ['sparks', "Right! Those lined up because the plate slid over the plume, like paper over a candle. Two different ways to make a row of volcanoes!"]]);
       S.melt = false;
       t.watch(cab.world, cab.shot('teacher'), seat);
       await t.say([['sparks', "Splendid exploring, class. Wonder Bus, take us home!"]]);
@@ -228,8 +260,10 @@ export const tectonics = {
           ['sparks', "And they're always moving, very, very slowly."],
           ['basil', "Can we go on another field trip tomorrow?"]],
   badge: {title:'Plate Tectonics Explorer', draw: (c, s) => drawBadge(c, full(s), aced()),
-    text: (name, s) => `You stood on a volcano, rode the mantle up to the sea floor, and made mountains rise and a fault snap. Splendid work, ${name}!` +
-      (full(s) ? " And you found every single thing in Juniper's notebook!" : "") + (aced() ? " And you aced Dr. Sparks's Explorer Check!" : "")},
+    text: (name, s) => `You stood on a volcano, rode the mantle up to the sea floor, and made mountains rise` +
+      (s && s.pick === 'hotspot' ? ", and watched a new island grow over a plume" : " and a fault snap") + `. Splendid work, ${name}!` +
+      (full(s) ? " And you found every single thing in Juniper's notebook!" : "") + (aced() ? " And you aced Dr. Sparks's Explorer Check!" : "") +
+      (s && s.pick && !((load('trips') || {})[KEPT] || {})[skipped(s)] ? ` Next time: ${PICK[s.pick === 'slide' ? 'hotspot' : 'slide'].name}!` : "")},
   quiz,
 };
 // every star in Dr. Sparks's Explorer Check, on some try
