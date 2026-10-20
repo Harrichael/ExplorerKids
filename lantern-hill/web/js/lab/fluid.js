@@ -288,6 +288,8 @@ export function makeFluid(root, hooks){
     return f.y > -1 && f.s > .0015;
   }
   function stick(f, x, y, z, h){
+    // once it has landed it is no longer flying: foam carried up on something (a tub held overhead) and dropped off must not count as rise
+    f.src = null;
     const body = h.body === P.desk ? null : h.body, lift = f.s*.55 + Math.random()*.004;
     const px = x + h.nx*lift, py = y + h.ny*lift, pz = z + h.nz*lift;
     f.body = body; f.lp = body ? toLocal(body, px, py, pz) : {x:px, y:py, z:pz};
