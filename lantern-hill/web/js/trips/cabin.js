@@ -30,7 +30,7 @@ const VIEWS = {
   mantle: {flow:[0, -.5], light:0xff8a5a, draw: (c, w, h) => strata(c, w, h, ['#7a2c1e', '#8a3624', '#6a2418', '#943c26'], 'rgba(255,150,90,.35)')},
   // rising through magma, it streams down past the glass
   magmaUp:{flow:[0, 1.1], light:0xff7a3a, draw: (c, w, h) => { grad(c, w, h, ['#ffa040', '#e8582a', '#ffc060', '#e8582a', '#ffa040']); blobs(c, w, h, 'rgba(190,50,20,.3)', 14);
-            c.fillStyle = 'rgba(255,240,170,.6)'; for (let i = 0; i < 70; i++) { const x = rnd(w), y = rnd(h), rx = 3 + rnd(6), ry = 18 + rnd(50); for (const dy of [-h, 0, h]) { c.beginPath(); c.ellipse(x, y + dy, rx, ry, 0, 0, 7); c.fill(); } } blobs(c, w, h, 'rgba(255,236,150,.55)', 18); }},
+            c.fillStyle = 'rgba(255,240,170,.6)'; for (let i = 0; i < 70; i++) { const x = rnd(w), y = rnd(h), rx = 3 + rnd(6), ry = 18 + rnd(50); tiled(w, h, (dx, dy) => { c.beginPath(); c.ellipse(x + dx, y + dy, rx, ry, 0, 0, 7); c.fill(); }); } blobs(c, w, h, 'rgba(255,236,150,.55)', 18); }},
   rising: {flow:[0, .9], light:0xff8a5a, draw: (c, w, h) => strata(c, w, h, ['#7a2c1e', '#8a3624', '#6a2418', '#943c26'], 'rgba(255,150,90,.35)')},
   bubbles:{flow:[0, .8], light:0x8ad0ff, draw: (c, w, h) => { grad(c, w, h, ['#1e5a8a', '#123a6a', '#1e5a8a']); rings(c, w, h, 60); }},
   deep:   {flow:[.05, 0], light:0x6aa0e0, draw: (c, w, h) => { grad(c, w, h, ['#0e2a4a', '#081a32']); c.fillStyle = 'rgba(200,230,255,.5)'; for (let i = 0; i < 90; i++) c.fillRect(rnd(w), rnd(h), 2, 2); }},
@@ -41,9 +41,11 @@ function grad(c, w, h, stops){ const g = c.createLinearGradient(0, 0, 0, h); sto
 function clouds(c, w, h, n, col){ c.fillStyle = col; for (let i = 0; i < 9; i++) { const x = rnd(w), y = rnd(h*.8) + h*.1, r = 18 + rnd(30)*n*3;
   for (let k = 0; k < 4; k++) for (const dx of [-w, 0, w]) { c.beginPath(); c.arc(x + dx + k*r*.8, y - Math.sin(k)*r*.4, r*(1 - k*.12), 0, 7); c.fill(); } } }
 function strata(c, w, h, cols, fleck){ for (let y = 0, i = 0; y < h; i++) { const bh = 14 + rnd(30); c.fillStyle = cols[i % cols.length]; c.fillRect(0, y, w, bh); y += bh; }
-  c.fillStyle = fleck; for (let i = 0; i < 160; i++) { const x = rnd(w), y = rnd(h); c.beginPath(); c.arc(x, y, 2 + rnd(5), 0, 7); c.fill(); } }
-function blobs(c, w, h, col, n){ c.fillStyle = col; for (let i = 0; i < n; i++) { const x = rnd(w), y = rnd(h), r = 8 + rnd(26); c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); } }
-function rings(c, w, h, n){ c.strokeStyle = 'rgba(210,240,255,.8)'; c.lineWidth = 3; for (let i = 0; i < n; i++) { const x = rnd(w), y = rnd(h), r = 4 + rnd(14); c.beginPath(); c.arc(x, y, r, 0, 7); c.stroke(); } }
+  c.fillStyle = fleck; for (let i = 0; i < 160; i++) { const x = rnd(w), y = rnd(h), r = 2 + rnd(5); tiled(w, h, (dx, dy) => { c.beginPath(); c.arc(x + dx, y + dy, r, 0, 7); c.fill(); }); } }
+function blobs(c, w, h, col, n){ c.fillStyle = col; for (let i = 0; i < n; i++) { const x = rnd(w), y = rnd(h), r = 8 + rnd(26); tiled(w, h, (dx, dy) => { c.beginPath(); c.arc(x + dx, y + dy, r, 0, 7); c.fill(); }); } }
+function rings(c, w, h, n){ c.strokeStyle = 'rgba(210,240,255,.8)'; c.lineWidth = 3; for (let i = 0; i < n; i++) { const x = rnd(w), y = rnd(h), r = 4 + rnd(14); tiled(w, h, (dx, dy) => { c.beginPath(); c.arc(x + dx, y + dy, r, 0, 7); c.stroke(); }); } }
+// a spot cut off at one edge carries on at the other, so the painting streams past with no seam
+function tiled(w, h, f){ for (const dx of [-w, 0, w]) for (const dy of [-h, 0, h]) f(dx, dy); }
 
 export function cabin(){
   const w = tripWorld({title:'The Wonder Bus', bg:0x1a1320, sky:0xfff0e0, groundCol:0x5a3a50, hemi:.9, sunCol:0xffe0c0, sunI:.35, fogNear:30, fogFar:60});

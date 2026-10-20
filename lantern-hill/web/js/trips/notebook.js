@@ -3,8 +3,8 @@
 // page shows a star per find at that place, filled for the ones the explorer saw, so a page with
 // stars left over is a reason to go again; a page with every star goes gold.
 //
-//   await notebook(PAGES, 1, [{seen:2, of:4}, {seen:1, of:4}]);   // PAGES = [{title, note, draw(ctx, w, h)}, ...]
-//   // shows pages 0..1 and sticks in 1
+//   await notebook(PAGES, 2, [{seen:2, of:4}, , {seen:1, of:4}]);   // PAGES = [{title, note, draw(ctx, w, h)}, ...]
+//   // shows pages 0 and 2, sticking in 2; page 1, with no tally, is still to come
 
 import { Sound } from '../core/sound.js';
 import { game } from '../state.js';
@@ -14,14 +14,14 @@ el.innerHTML = '<div class="page"><div class="ch">Juniper’s field notebook</di
 document.body.append(el);
 const slotsEl = el.querySelector('.slots'), okEl = el.querySelector('button');
 
-export function notebook(pages, upto, tallies = []){
+export function notebook(pages, now, tallies = []){
   slotsEl.replaceChildren(...pages.map((pg, i) => {
-    const n = i <= upto && tallies[i], full = n && n.seen === n.of;
-    const s = document.createElement('div'); s.className = 'slot' + (i > upto ? ' empty' : '') + (i === upto ? ' new' : '') + (full ? ' full' : '');
+    const n = tallies[i], full = n && n.seen === n.of;
+    const s = document.createElement('div'); s.className = 'slot' + (n ? '' : ' empty') + (i === now ? ' new' : '') + (full ? ' full' : '');
     const c = document.createElement('canvas'); c.width = 240; c.height = 170;
-    if (i <= upto) pg.draw(c.getContext('2d'), c.width, c.height);
+    if (n) pg.draw(c.getContext('2d'), c.width, c.height);
     const stars = n ? `<span class="stars" aria-label="${n.seen} of ${n.of} finds">${'★'.repeat(n.seen)}<i>${'★'.repeat(n.of - n.seen)}</i></span>` : '';
-    const cap = document.createElement('div'); cap.className = 'cap'; cap.innerHTML = i <= upto ? `<b>${pg.title}</b>${pg.note}${stars}` : '<b>?</b>';
+    const cap = document.createElement('div'); cap.className = 'cap'; cap.innerHTML = n ? `<b>${pg.title}</b>${pg.note}${stars}` : '<b>?</b>';
     s.append(c, cap); return s;
   }));
   el.hidden = false; game.cutscene = true;

@@ -20,7 +20,8 @@ export function enterWorld(w, spawn){
   player.y = w.ground(player.x, player.z); player.vy = 0; player.walk = 0;
   hero.root.position.set(player.x, player.y, player.z); hero.root.rotation.y = player.angle;
   const co = w.cam || {}, portrait = innerWidth < innerHeight;
-  camPos.set(player.x, player.y + (portrait ? (co.oyP || 7.4) : (co.oy || 5.6)), player.z + (portrait ? (co.ozP || 8.2) : (co.oz || 7)));
+  camOff.set(0, portrait ? (co.oyP || 7.4) : (co.oy || 5.6), portrait ? (co.ozP || 8.2) : (co.oz || 7));
+  camPos.set(player.x, player.y, player.z).add(camOff);
   camLook.set(player.x, player.y + 1.1 + (co.lookY || 0), player.z - .4);
   game.nearest = lastNearest = null; game.reach.length = 0; game.cutCam = null;
 }
@@ -42,7 +43,7 @@ function posed(n, m, t = n.t){
 }
 
 export const clock = new THREE.Clock();
-const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), dir = new THREE.Vector3();
+const camPos = new THREE.Vector3(), camOff = new THREE.Vector3(), camLook = new THREE.Vector3(), tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), dir = new THREE.Vector3();
 const ray = new THREE.Raycaster();
 const SUN_FROM = new THREE.Vector3(-9, 16, 7);
 const areaEl = $('area'); let areaName = '';
@@ -200,7 +201,11 @@ function update(dt){
   } else {
     const co = game.world.cam || {};
     const oy = portrait ? (co.oyP || 7.4) : (co.oy || 5.6), oz = portrait ? (co.ozP || 8.2) : (co.oz || 7.0);
-    tmpV.set(player.x, player.y + oy, player.z + oz);
+    // a place may frame some spots its own way, [ox, oy, oz] (low and side-on in a canyon, say); the
+    // offset eases there slowly, so the view swings round instead of cutting
+    const at = game.world.camAt && game.world.camAt(player.x, player.z, oy, oz);
+    camOff.lerp(tmpV.set(at ? at[0] : 0, at ? at[1] : oy, at ? at[2] : oz), Math.min(1, dt * 1.2));
+    tmpV.set(player.x, player.y, player.z).add(camOff);
     camPos.lerp(tmpV, Math.min(1, dt * 3.5));
     tmpV2.set(player.x, player.y + 1.1 + (co.lookY || 0), player.z - .4);
   }

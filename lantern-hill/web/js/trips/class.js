@@ -119,7 +119,8 @@ export function classmates(w, t, door){
     for (const id of CLASS) {
       const k = n[id], f = finds.find(f => f.who === k && ready(f));
       if (k.in) { k.onTalk = null; k.calling = false; k.range = 0; continue; }
-      if (bus && !f && !k.goal && !k.atBus && id !== 'sparks') { const i = CLASS.indexOf(id); k.atBus = true; k.pose = null; k.goal = {...clear(bus[0] + (i - 2.5)*.8, bus[1] + (i % 2)*.6), angle:bus[2] || 0}; }
+      // one who has just run to a new find stays by it, even in the beat before they spot it
+      if (bus && !f && !k.goal && !k.atBus && id !== 'sparks' && !finds.some(g => g.who === k && !found.has(g) && (!g.when || g.when()))) { const i = CLASS.indexOf(id); k.atBus = true; k.pose = null; k.goal = {...clear(bus[0] + (i - 2.5)*.8, bus[1] + (i % 2)*.6), angle:bus[2] || 0}; }
       // with the bus here, those waiting file in one by one, and Dr. Sparks waits by the door for the explorer
       if (aboard && k.atBus && !k.goal && id !== 'sparks' && tt > nextIn) { nextIn = tt + .6; goIn(k, false); continue; }
       if (aboard && id === 'sparks' && !k.atBus && !f) { const a = aboard.root.rotation.y, [x, z] = aboard.door(.8);
