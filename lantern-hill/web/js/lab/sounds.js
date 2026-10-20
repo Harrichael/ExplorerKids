@@ -65,14 +65,15 @@ export const labSound = {
     if (Math.random() < .35) bubble(rnd(.002, .005), .02, p, rnd(0, .06));
   },
   shake(x){ const p = pan(x); for (let i = 0; i < 6; i++) Sound.tone(rnd(4000, 7000), {t:rnd(0, .07), type:'triangle', dur:.012, vol:.018, pan:p}); Sound.hiss({dur:.07, vol:.025, type:'highpass', freq:5000, pan:p}); },
-  // a fizz is many tiny bubbles bursting: crackles that come thicker as it goes faster, over a soft bed
+  // A fizz is many tiny bubbles bursting: crackles that come thicker as it goes faster, over a soft bed.
+  // rate is the CO₂ made, in mmol a second.
   fizz(key, x, rate, dt){
     // crackles share a budget across the desk, so a big eruption can't flood a phone with sounds
     const now = Sound.now(); if (now - crackle.at > .016) { crackle.at = now; crackle.left = 3; }
-    const p = pan(x), n = Math.min(crackle.left, Math.floor(rate*dt*1.5 + Math.random())); crackle.left -= n;
-    for (let i = 0; i < n; i++) Sound.hiss({t:rnd(0, dt), dur:rnd(.004, .012), vol:rnd(.01, .028)*(1 + Math.min(1, rate/80)), type:'highpass', freq:rnd(4000, 8000), pan:p});
-    if (rate > 12 && every(key, .1)) Sound.hiss({dur:.22, vol:Math.min(.06, .012 + rate*.0004), type:'bandpass', freq:rnd(2500, 3500), q:.6, attack:.05, pan:p});
-    if (rate > 60 && every('roar', .25)) Sound.hiss({dur:.4, vol:Math.min(.1, .02 + rate*.0004), type:'lowpass', freq:rnd(500, 700), attack:.06, pan:p});
+    const p = pan(x), n = Math.min(crackle.left, Math.floor(rate*dt*.9 + Math.random())); crackle.left -= n;
+    for (let i = 0; i < n; i++) Sound.hiss({t:rnd(0, dt), dur:rnd(.004, .012), vol:rnd(.01, .028)*(1 + Math.min(1, rate/130)), type:'highpass', freq:rnd(4000, 8000), pan:p});
+    if (rate > 20 && every(key, .1)) Sound.hiss({dur:.22, vol:Math.min(.06, .012 + rate*.00024), type:'bandpass', freq:rnd(2500, 3500), q:.6, attack:.05, pan:p});
+    if (rate > 100 && every('roar', .25)) Sound.hiss({dur:.4, vol:Math.min(.1, .02 + rate*.00024), type:'lowpass', freq:rnd(500, 700), attack:.06, pan:p});
   },
   bloop(key, x){ if (every(key, .2)) bubble(rnd(.003, .006), .02, pan(x)); },
   stir(v, x, speed){
@@ -131,6 +132,16 @@ export const labSound = {
   },
   // rubber stretching as gas fills a balloon, higher the fuller it gets
   stretch(key, x, inflate){ if (every(key, .35)) Sound.tone(260 + inflate*420, {type:'triangle', dur:.18, vol:.035, f2:300 + inflate*480, vib:[16, 14], cut:1600, pan:pan(x)}); },
+  // A balloon bursting, kept round and soft: a low hollow bwop, lower for a bigger balloon, a muffled puff
+  // of air, the shreds fluttering, and a little chime as they settle.
+  burst(x, r){
+    const p = pan(x), f = Math.max(110, Math.min(260, 18/r));
+    Sound.tone(f*2.4, {dur:.11, vol:.11, f2:f*.7, attack:.003, pan:p});
+    Sound.tone(f, {type:'triangle', dur:.18, vol:.06, f2:f*.6, attack:.004, cut:900, pan:p});
+    Sound.hiss({dur:.3, vol:.06, type:'lowpass', freq:1400, f2:300, attack:.004, pan:p});
+    for (let i = 0; i < 4; i++) Sound.hiss({t:.08 + i*rnd(.04, .07), dur:.03, vol:.012, type:'bandpass', freq:rnd(900, 1500), q:3, pan:p});
+    Sound.bell(note(9), {t:.22, dur:1, vol:.022, pan:p}); Sound.bell(note(7), {t:.32, dur:1.1, vol:.018, pan:p}); Sound.sparkle(3, {t:.25, span:.4, vol:.01});
+  },
   deflate(x){ const p = pan(x); Sound.hiss({dur:.8, vol:.08, type:'bandpass', freq:900, q:2, pan:p}); Sound.tone(500, {type:'sawtooth', dur:.7, vol:.03, f2:200, cut:1200, pan:p}); },
 
   // ---------- the cabinet: a menu you can hear, rising like a xylophone as you go along a shelf ----------

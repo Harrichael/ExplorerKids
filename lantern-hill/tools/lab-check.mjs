@@ -59,7 +59,15 @@ const HARNESS = `(async () => {
     await until(() => D.desk.items.length ? D.desk.items.every(it => it.pop >= 1) : !document.getElementById('labHud').hidden);
     dlg.endConvo(true);
   };
-  const choose = async i => { await until(() => !document.getElementById('lhChoose').hidden); document.querySelectorAll('#lhChoose .lc-card')[i].click(); await sleep(300); dlg.endConvo(true); };
+  // every time there are cards to answer, they must leave the question and the sound button showing
+  const covers = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom, rect = e => e.getBoundingClientRect();
+  const choose = async i => {
+    await until(() => !document.getElementById('lhChoose').hidden); await sleep(100);
+    const q = rect(document.getElementById('lhCard')), snd = rect(document.getElementById('sound'));
+    if (covers(q, snd)) throw new Error('the question card covers the sound button');
+    for (const c of document.querySelectorAll('#lhChoose .lc-card')) if (covers(rect(c), q) || covers(rect(c), snd)) throw new Error('the answer card "' + c.textContent + '" covers the question or the sound button');
+    document.querySelectorAll('#lhChoose .lc-card')[i].click(); await sleep(300); dlg.endConvo(true);
+  };
   const status = () => document.getElementById('lhStatus').textContent;
   // read through whatever Dr. Sparks is saying, as a player tapping along would
   const listen = async () => { for (let i = 0; i < 200 && dlg.convo; i++) { dlg.talk(); await sleep(40); } };
@@ -79,7 +87,7 @@ const STORIES = [
     await open('volcano'); await choose(0);
     const before = D.totalGas();
     await carry('vinegar', 'soda', tip(1800));
-    if (!await until(() => D.totalGas() - before > 5)) return 'no gas after vinegar met the baking soda';
+    if (!await until(() => D.totalGas() - before > 8)) return 'no gas after vinegar met the baking soda';
     const dlg = await import('/js/ui/dialogue.js');
     for (let i = 0; i < 300; i++) { if (document.body.innerText.includes('Wonder Bus')) return ''; if (dlg.convo) dlg.talk(); await sleep(60); }
     return 'finishing the volcano never mentioned the Wonder Bus';
@@ -172,18 +180,64 @@ const STORIES = [
     await open('cork'); await choose(1);
     await carry('t1', 'bottle');
     await carry('cork', 'bottle');
-    const b = D.find('bottle'), at = () => JSON.stringify(b.c) + ' tablet at ' + ['x','y','z'].map(k => lab.pos('t1')[k].toFixed(3)) + ' bottle at ' + ['x','y','z'].map(k => lab.pos('bottle')[k].toFixed(3)) + ' gas ' + b.gas.toFixed(1) + ' made ' + b.stats.gas.toFixed(1);
+    const b = D.find('bottle'), at = () => JSON.stringify(b.c) + ' tablet at ' + ['x','y','z'].map(k => lab.pos('t1')[k].toFixed(3)) + ' bottle at ' + ['x','y','z'].map(k => lab.pos('bottle')[k].toFixed(3)) + ' at ' + D.gauge('bottle').toFixed(0) + ' kPa, made ' + b.stats.gas.toFixed(1) + ' mmol';
     if (!D.find('cork').plugged && !D.find('cork').popped) return 'the cork did not go in the neck: ' + at();
     return await until(() => D.find('cork').popped, 10000) ? '' : 'the cork held: ' + at();
   })()`],
+  // a third of a bottle of vinegar, as Dr. Sparks hints; a full one makes more gas than the balloon can hold
   ['gas from inside blows the balloon up', `(async () => { const {open, choose, carry, tip, until, sleep, D, listen} = lab;
     await open('balloon'); await listen();
     if (!document.getElementById('lhChoose').hidden) await choose(1);
-    await carry('vinegar', 'bottle', tip(1500));
+    await carry('vinegar', 'bottle', async h => { await tip(800)(); await lab.move(h, {x:.55, y:0, z:-.3}); });
     await carry('soda', 'balloon', async h => { await tip(1200)(); await lab.move(h, {x:-.55, y:0, z:-.3}); });
     await carry('balloon', 'bottle');
     await carry('balloon', 'bottle', () => sleep(2000));
     return await until(() => D.find('balloon').inflate >= .5, 10000) ? '' : 'the balloon only reached ' + D.find('balloon').inflate.toFixed(2);
+  })()`],
+  ['a balloon on a bottle of vinegar overfilled with baking soda bursts, and its gas gets out', `(async () => { const {open, choose, carry, tip, until, sleep, D, listen} = lab;
+    // with this seed the rubber tears at 6 times its size round; a full bottle of vinegar's gas would stretch it 7.5
+    D.reseed(7); await open('balloon'); await listen();
+    if (!document.getElementById('lhChoose').hidden) await choose(1);
+    await carry('vinegar', 'bottle', tip(1500));
+    await carry('soda', 'balloon', async h => { await tip(1200)(); await lab.move(h, {x:-.55, y:0, z:-.3}); });
+    const b = D.find('balloon'), at = () => 'stretched ' + Math.cbrt(b.vol/b.def.rest).toFixed(2) + ' of ' + b.burstAt.toFixed(2) + ', ' + D.gauge('bottle').toFixed(1) + ' kPa';
+    await carry('balloon', 'bottle'); await carry('balloon', 'bottle', () => sleep(2000));
+    if (!await until(() => b.burst, 10000)) return 'the balloon held: ' + at();
+    return await until(() => Math.abs(D.gauge('bottle')) < 1, 5000) ? '' : 'the gas stayed in the bottle at ' + D.gauge('bottle').toFixed(1) + ' kPa';
+  })()`],
+  ['the same fizz jets froth higher out of a narrow bottle neck than out of a wide cup', `(async () => { const {open, carry, tip, until, D} = lab;
+    await open('free');
+    const b = D.bring('bottle', {fill:{vinegar:40}}, {x:-.3, z:.1}), c = D.bring('cup', {fill:{vinegar:40}}, {x:.3, z:.1}), s = D.bring('soda', {}, {x:0, z:-.3});
+    await until(() => [b, c, s].every(it => it.pop >= 1));
+    // plenty of baking soda in each, so the 40 mL of vinegar is what runs out: the same gas from both
+    await carry(s.id, b.id, tip(1200)); await carry(s.id, c.id, tip(1200));
+    const t0 = D.desk.t; await until(() => D.desk.t - t0 > 6, 30000);
+    const how = 'bottle ' + b.stats.gas.toFixed(1) + ' mmol, ' + (b.stats.rise*100).toFixed(0) + ' cm high; cup ' + c.stats.gas.toFixed(1) + ' mmol, ' + (c.stats.rise*100).toFixed(0) + ' cm high';
+    if (Math.abs(b.stats.gas - c.stats.gas) > .2*c.stats.gas) return 'they made different amounts of gas: ' + how;
+    return b.stats.rise > 2*c.stats.rise && b.stats.rise > .2 ? '' : how;
+  })()`],
+  ['a sealed flask taken off the heat loses pressure as its steam turns back to water', `(async () => { const {open, choose, carry, click, screen, until, sleep, D, chem, pos} = lab;
+    await open('heat'); await choose(0);
+    const k = D.bring('cork', {}, {x:-.25, z:-.2}), b = pos('burner'), f = D.find('flask');
+    await click(screen(b.x, .012, b.z + .05));
+    if (!await until(() => chem.temp(f.c) >= 100, 30000)) return 'the water never boiled: ' + chem.temp(f.c).toFixed(0) + ' C';
+    await sleep(1500);
+    await carry('flask', {x:-.3, y:0, z:-.05}); await carry(k.id, 'flask');
+    if (!k.plugged) return 'the cork did not go into the flask';
+    const t0 = D.desk.t; let most = -Infinity;
+    await until(() => { most = Math.max(most, D.gauge('flask')); return D.desk.t - t0 > 12; }, 40000);
+    const now = D.gauge('flask'), how = 'from ' + most.toFixed(1) + ' to ' + now.toFixed(1) + ' kPa at ' + chem.temp(f.c).toFixed(0) + ' C';
+    return k.popped ? 'the cork popped: ' + how : now < most - 15 && now < 0 ? '' : how;
+  })()`],
+  ['more gas stays dissolved in a cold, corked bottle of fizzy water than in a warm, open one', `(async () => { const {open, carry, until, D} = lab;
+    await open('free');
+    const fizzy = {water:60, co2:3}, cold = D.bring('bottle', {fill:fizzy, t:5}, {x:-.3, z:.1}), warm = D.bring('bottle', {fill:fizzy, t:45}, {x:.3, z:.1}), k = D.bring('cork', {}, {x:0, z:-.3});
+    await until(() => [cold, warm, k].every(it => it.pop >= 1));
+    await carry(k.id, cold.id);
+    if (!k.plugged) return 'the cork did not go into the cold bottle';
+    const t0 = D.desk.t; await until(() => D.desk.t - t0 > 10, 40000);
+    const a = cold.c.l.co2 || 0, b = warm.c.l.co2 || 0;
+    return a > 3*b && !k.popped ? '' : 'cold and corked ' + a.toFixed(2) + ' mmol, warm and open ' + b.toFixed(2) + (k.popped ? ', and the cork popped' : '');
   })()`],
   ['vinegar and salt shine a dull penny fastest; salt water alone does not', `(async () => { const {open, choose, carry, stir, until, sleep, right, listen, D} = lab;
     await open('pennies'); await choose(2);
@@ -270,7 +324,11 @@ const STORIES = [
     return await until(right, 4000) ? '' : 'through the glass: ' + lab.status() + ' clip at ' + JSON.stringify(pos('clip'));
   })()`],
   ['rising steam spins the wheel above a boiling flask and not beside it, and the jet from a stoppered flask spins it sideways', `(async () => { const {open, choose, carry, move, click, screen, sleep, until, right, listen, D, chem, pos} = lab;
-    await open('heat'); await choose(0);
+    await open('heat');
+    const badge = document.querySelector('#lbGrid [data-id="heat"] .trip');
+    if (!badge || badge.getAttribute('aria-label') !== 'Found on the Plate Tectonics field trip') return 'the book card has no Plate Tectonics trip badge';
+    if (document.querySelector('#lbGrid [data-id="sinkfloat"] .trip')) return 'a lab experiment shows a trip badge';
+    await choose(0);
     const b = pos('burner'), f = D.find('flask'), w = D.find('wheel');
     await click(screen(b.x, .012, b.z + .05));
     if (!D.find('burner').lit) return 'tapping the burner did not light it';
@@ -284,6 +342,27 @@ const STORIES = [
     if (!D.find('tube').plugged) return 'the stopper did not go into the flask';
     await carry('wheel', {x:fl.x + .17, y:0, z:fl.z});
     return await until(right, 10000) ? '' : 'the jet: ' + lab.status() + ' spin ' + w.spin.toFixed(1) + ' blown ' + JSON.stringify(w.blown) + ' jet ' + (D.find('tube').jet || 0).toFixed(0);
+  })()`],
+  ['water poured sideways from a tipped cup runs out long on the mat, and water dripped straight down spreads round', `(async () => { const {open, carry, tip, until, D, pos} = lab;
+    await open('free');
+    const cup = D.bring('cup', {fill:{water:40}}, {x:-.35, z:.15}), dropper = D.bring('red', {fill:{water:5}}, {x:.35, z:.15});
+    await until(() => [cup, dropper].every(it => it.pop >= 1));
+    // a puddle's length along a way, and across it
+    const span = (o, ux, uz) => { const a = o.pts.map(p => p.x*ux + p.z*uz), b = o.pts.map(p => p.z*ux - p.x*uz); return [Math.max(...a) - Math.min(...a), Math.max(...b) - Math.min(...b)]; };
+    const near = (x, z) => D.desk.fluid.outlines().sort((a, b) => Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z))[0];
+    let from;
+    await carry(cup.id, {x:-.15, y:0, z:.05}, async () => { from = {...pos(cup.id)}; await tip(1300)(); });
+    await carry(cup.id, {x:-.45, y:0, z:-.3});
+    await carry(dropper.id, {x:.3, y:0, z:.05}, tip(3500));
+    await carry(dropper.id, {x:.5, y:0, z:-.3});
+    const t0 = D.desk.t; await until(() => D.desk.t - t0 > 1.5, 15000);
+    const pour = near(-.15, .05), drip = near(.3, .05);
+    if (!pour || Math.hypot(drip.x - .3, drip.z - .05) > .08) return 'no puddles: ' + JSON.stringify(D.desk.fluid.outlines().map(o => [o.x.toFixed(2), o.z.toFixed(2)]));
+    const ux = pour.x - from.x, uz = pour.z - from.z, ul = Math.hypot(ux, uz), [along, across] = span(pour, ux/ul, uz/ul);
+    // the dripped one is measured along whichever way it is longest
+    let most = 0, least = Infinity; for (let a = 0; a < Math.PI; a += .1) { const [l] = span(drip, Math.cos(a), Math.sin(a)); most = Math.max(most, l); least = Math.min(least, l); }
+    const how = 'poured ' + (along*100).toFixed(1) + ' cm along by ' + (across*100).toFixed(1) + ' across; dripped ' + (most*100).toFixed(1) + ' by ' + (least*100).toFixed(1);
+    return along > 1.5*across && most < 1.25*least ? '' : how;
   })()`],
   ['the Free Lab cabinet hands out a tub, then the water, then the same cup three times running', `(async () => { const {open, click, screen, sleep, until, D, C} = lab;
     await open('free');
@@ -301,6 +380,30 @@ const STORIES = [
     await tap(shelf('Containers')); await sleep(1200);
     for (let i = 1; i <= 3; i++) { await tap(slot('cup')); if (!await until(() => count('cup') === i, 3000)) return 'cup ' + i + ' never came: ' + mat(); }
     return '';
+  })()`],
+  ['leaving the Free Lab by any route puts the cabinet away and the camera back on the desk', `(async () => { const {open, click, screen, sleep, until, C} = lab;
+    const [R, {game}, THREE, dlg] = await Promise.all(['/js/core/render.js', '/js/state.js', 'three', '/js/ui/dialogue.js'].map(m => import(m)));
+    const saved = localStorage.getItem('lantern-hill-lab'), rec = JSON.parse(saved);
+    // with Heat Rises done its burner, whose flame is unlit, is on the shelves too
+    localStorage.setItem('lantern-hill-lab', JSON.stringify({...rec, done:[...rec.done, 'heat']}));
+    const settle = async () => { const cam = R.camera.position; for (let i = 0, was = cam.clone(); i < 60; i++) { await sleep(150); if (was.distanceTo(cam) < 1e-4) break; was.copy(cam); } };
+    const shelf = label => { const s = C.shelves.find(s => s.def.label === label); return screen(s.x, s.y + s.h/2, -.64); };
+    const away = () => { const p = new THREE.Vector3(), l = new THREE.Vector3(); game.cutCam(p, l); return p.distanceTo(R.camera.position); };
+    const home = () => C.shelves.every(sh => sh.slots.every(s => !s.model || s.model.position.distanceTo(s.home) < .002));
+    try {
+      for (const route of ['book', 'escape', 'step away']) {
+        await open('free'); await settle(); await click(shelf('Tools')); await sleep(1500);
+        if (!C.menu().veil || !C.menu().open) return route + ': the Tools shelf never opened';
+        if (route === 'book') document.getElementById('lhBook').click();
+        if (route === 'escape') for (let i = 0; i < 2; i++) { dispatchEvent(new KeyboardEvent('keydown', {key:'Escape'})); await sleep(300); }
+        if (route === 'step away') { document.getElementById('lhLeave').click(); await sleep(600); }
+        await open('sinkfloat'); dlg.endConvo(true); await settle(); await sleep(1500);
+        const m = C.menu(), bad = [m.open && 'shelf ' + m.open + ' open', m.veil && 'veil up', m.plank && 'plank up', m.out > .01 && 'things out', m.ajar > .01 && 'a door ajar',
+          !home() && 'things not home', away() > .01 && 'camera ' + away().toFixed(3) + ' off the desk view', document.getElementById('lhCard').hidden && 'question card hidden'].filter(Boolean);
+        if (bad.length) return route + ': ' + bad.join(', ');
+      }
+      return '';
+    } finally { localStorage.setItem('lantern-hill-lab', saved); }
   })()`],
   ['the Free Lab cabinet holds only what finished experiments used, and hands it out', `(async () => { const {open, click, screen, until, sleep, D, C} = lab;
     await open('free');

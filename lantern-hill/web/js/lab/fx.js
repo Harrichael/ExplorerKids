@@ -1,7 +1,8 @@
 // What happens inside a container's liquid: bubbles, lava-lamp blobs, food coloring sinking through
 // oil, oil drops stirred loose, and the skin on top where food coloring swirls and pepper scatters.
 // These ride along in the container's own frame; anything that leaves a container is fluid.js's,
-// except steam, which drifts off in soft wisps in the desk's frame.
+// except steam, which drifts off in soft wisps in the desk's frame, and the shreds of a burst balloon,
+// which flutter down onto the mat.
 
 import * as THREE from 'three';
 import { grad } from '../core/kit.js';
@@ -25,6 +26,10 @@ export function makeFx(world){
   const WISPS = 260, WISP_LIFE = 1.6, wisps = [];
   const wispMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:.3, depthWrite:false}), WISPS);
   wispMesh.frustumCulled = false; wispMesh.count = 0; wispMesh.renderOrder = 5; wispMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  const SHREDS = 90, shreds = [];
+  const shredMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, .6), new THREE.MeshToonMaterial({gradientMap:grad, color:0xffffff, side:THREE.DoubleSide}), SHREDS);
+  shredMesh.setColorAt(0, new THREE.Color()); shredMesh.frustumCulled = false; shredMesh.count = 0; shredMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  const e3 = new THREE.Euler();
 
   function step(p, dt){
     p.t += dt;
@@ -121,16 +126,34 @@ export function makeFx(world){
       const u = w.t/WISP_LIFE; sc.setScalar((.006 + .03*u)*(1 - u*u)); pos.set(w.x, w.y, w.z); m4.compose(pos, q, sc); wispMesh.setMatrixAt(nw++, m4);
     }
     wispMesh.count = nw; wispMesh.instanceMatrix.needsUpdate = true;
+    // rubber is light for its size, so the air soon slows a shred to a flutter; on the mat it lies flat and shrinks away
+    let nr = 0;
+    for (let i = shreds.length - 1; i >= 0; i--) {
+      const r = shreds[i]; r.t += dt; if (r.t > 7) { shreds.splice(i, 1); continue; }
+      if (r.y > .002) { const k = Math.exp(-4*dt); r.vx *= k; r.vz *= k; r.vy = (r.vy - 9.81*dt)*k; r.x += r.vx*dt; r.y += r.vy*dt; r.z += r.vz*dt; r.a += r.w*dt; }
+      else { r.y = .002; r.a = 0; }
+      const fade = Math.min(1, (7 - r.t)/1.5);
+      e3.set(r.y > .002 ? r.a : -Math.PI/2, r.a*.7, r.y > .002 ? r.a*.4 : 0); q.setFromEuler(e3); pos.set(r.x, r.y, r.z); sc.setScalar(r.s*fade);
+      m4.compose(pos, q, sc); shredMesh.setMatrixAt(nr, m4); shredMesh.setColorAt(nr++, col.setHex(r.col));
+    }
+    q.identity(); shredMesh.count = nr; shredMesh.instanceMatrix.needsUpdate = true; if (shredMesh.instanceColor) shredMesh.instanceColor.needsUpdate = true;
     for (const f of films.values()) filmStep(f, dt);
   }
   function clear(){
-    ps.length = 0; solid.count = fizz.count = 0; wisps.length = 0; wispMesh.count = 0;
+    ps.length = 0; solid.count = fizz.count = 0; wisps.length = 0; wispMesh.count = 0; shreds.length = 0; shredMesh.count = 0;
     for (const f of films.values()) { if (f.mesh.parent) f.mesh.parent.remove(f.mesh); f.mesh.material.dispose(); f.texture.dispose(); } films.clear();
   }
   const rnd = (a, b) => a + Math.random()*(b - a);
   return {
-    attach(root){ parent = root; root.add(solid, fizz, wispMesh); },
+    attach(root){ parent = root; root.add(solid, fizz, wispMesh, shredMesh); },
     wisp(x, y, z, vx, vy, vz){ if (wisps.length < WISPS) wisps.push({x, y, z, vx, vy, vz, t:0}); },
+    // a balloon of radius r centred at (x, y, z) torn to pieces, flung out from where its skin was
+    shreds(x, y, z, r, c){
+      for (let i = 0; i < 36 && shreds.length < SHREDS; i++) {
+        const a = Math.random()*7, e = Math.random()*2 - 1, s = Math.sqrt(1 - e*e), k = .6 + Math.random()*1.2;
+        shreds.push({x:x + Math.cos(a)*s*r, y:y + e*r, z:z + Math.sin(a)*s*r, vx:Math.cos(a)*s*k, vy:e*k + .4, vz:Math.sin(a)*s*k, a:Math.random()*7, w:rnd(-14, 14), s:rnd(.018, .036), col:c, t:0});
+      }
+    },
     update, clear, film, hasFilm: v => films.has(v), dropFilm(v){ const f = films.get(v); if (f) f.clear(); },
     // from anywhere on the bottom, or from the patch `at` {x, z, r} where the fizzing is
     bubble(v, at){ const a = Math.random()*7, R = v.def.ri*.8, r = Math.random()*(at ? Math.min(at.r, R) : R), cx = at ? at.x : 0, cz = at ? at.z : 0;

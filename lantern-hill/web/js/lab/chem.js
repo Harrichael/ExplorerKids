@@ -3,13 +3,18 @@
 // combination for free.
 //
 // A container's contents are {l, p}: `l` is the liquid, with whatever has dissolved into it, and
-// `p` is the undissolved pile of powder at the bottom. Amounts are in game millilitres (or grams).
-// `t` is how hot it is in °C, room temperature when it isn't there.
+// `p` is the undissolved pile of powder at the bottom. Amounts are in game millilitres (or grams), and
+// dissolved gas in millimoles. `t` is how hot it is in °C, room temperature when it isn't there.
+//
+// Acids and bases count in millimoles a millilitre (or gram) of what they can give: vinegar is 5%
+// acetic acid, 0.83 mmol/mL; lemon juice about 5% citric acid, three protons each, 0.9; baking soda is
+// 84 g/mol, 11.9 mmol/g. Each mmol that reacts makes one of CO₂, 24 mL of it at room conditions, so a
+// gram of baking soda makes about 285 mL, once there's 14 mL of vinegar to use it up.
 
 export const SUB = {
   water:   {liquid:true, d:1,    col:0x6fb8e0, tint:.7, cloud:.25},
-  vinegar: {liquid:true, d:1.01, col:0xf2ead0, tint:.5, acid:.25, ph:2.5},
-  lemon:   {liquid:true, d:1.03, col:0xf5df5a, tint:.9, acid:.4, ph:2, cloud:.4},
+  vinegar: {liquid:true, d:1.01, col:0xf2ead0, tint:.5, acid:.83, ph:2.5},
+  lemon:   {liquid:true, d:1.03, col:0xf5df5a, tint:.9, acid:.9, ph:2, cloud:.4},
   milk:    {liquid:true, d:1.03, col:0xfbf7ee, tint:0, ph:6.5, cloud:2.5, fatty:true},
   cabbage: {liquid:true, d:1.0,  col:0x6e45a8, tint:1.2, cloud:.3, indicator:true},
   soap:    {liquid:true, d:1.03, col:0x7fd08a, tint:.8, ph:10, soap:true, cloud:.3},
@@ -18,13 +23,15 @@ export const SUB = {
   yellow:  {liquid:true, d:1, col:0xf7d23a, tint:22, dye:true},
   blue:    {liquid:true, d:1, col:0x2f6fe0, tint:22, dye:true},
   // baking soda is a buffer: past a pinch per cup it holds the water near its own pH however much goes in
-  soda:    {powder:true, col:0xf6f4ee, ph:9, buffer:.01, dissolve:.8, sol:.09, mass:.6},
+  soda:    {powder:true, col:0xf6f4ee, ph:9, buffer:.01, dissolve:.8, sol:.09, mass:.6, base:11.9},
   salt:    {powder:true, col:0xffffff, dissolve:.04, sol:.36, mass:.7},
   sugar:   {powder:true, col:0xfbf3e0, dissolve:.03, sol:2, mass:.6},
   sand:    {powder:true, col:0xd9b67a},
   pepper:  {powder:true, col:0x3a2e26, floats:true},
-  // a fizzy tablet's acid and base, let into the water as the tablet melts away
-  tablet:  {solute:true, col:0xffffff}
+  // A fizzy tablet's acid and base, let into the water as the tablet melts away: a 3.2 g one has 1.9 g of
+  // baking soda and 1 g of citric acid, and the acid runs out first, at about 17 mmol of CO₂.
+  tablet:  {solute:true, col:0xffffff, co2:5.4},
+  co2:     {solute:true, col:0xffffff}
 };
 
 export const empty = () => ({l:{}, p:{}});
@@ -63,7 +70,7 @@ export function take(c, n){
 }
 
 // One tick of chemistry. `stir` is how fast a spoon is moving through it; `contact` is how much of
-// the acid and baking soda have reached each other yet (0 to 1). Returns the gas made.
+// the acid and baking soda have reached each other yet (0 to 1). Returns the CO₂ made, in mmol.
 export function step(c, dt, stir=0, contact=1){
   const wv = waterVol(c);
   if (wv > 0) for (const k in c.p) {
@@ -75,31 +82,34 @@ export function step(c, dt, stir=0, contact=1){
   }
   let gas = 0;
   // acid + baking soda: carbon dioxide. Spent acid stays behind as watery liquid.
-  const soda = (c.l.soda || 0) + (wv > 0 ? c.p.soda || 0 : 0);
+  const base = ((c.l.soda || 0) + (wv > 0 ? c.p.soda || 0 : 0))*SUB.soda.base;
   let acid = 0; for (const k in c.l) acid += c.l[k]*(SUB[k].acid || 0);
-  if (acid > .01 && soda > .01) {
-    const r = Math.min(acid, soda, (Math.min(acid, soda)*(1 - Math.exp(-4*dt)) + .5*dt)*contact);
+  if (acid > .01 && base > .01) {
+    const r = Math.min(acid, base, (Math.min(acid, base)*(1 - Math.exp(-4*dt)) + 1.7*dt)*contact), g = r/SUB.soda.base;
     for (const k in c.l) if (SUB[k].acid) { const used = c.l[k]*r/acid; c.l[k] -= used; c.l.water = (c.l.water || 0) + used; }
-    const fromL = Math.min(c.l.soda || 0, r); if (fromL) c.l.soda -= fromL; if (r > fromL) c.p.soda -= r - fromL;
-    gas += r*2;
+    const fromL = Math.min(c.l.soda || 0, g); if (fromL) c.l.soda -= fromL; if (g > fromL) c.p.soda -= g - fromL;
+    gas += r;
   }
-  if (c.l.tablet) { const r = Math.min(c.l.tablet, c.l.tablet*(1 - Math.exp(-1.4*dt)) + .2*dt); c.l.tablet -= r; gas += r*2; }
+  if (c.l.tablet) { const r = Math.min(c.l.tablet, c.l.tablet*(1 - Math.exp(-1.4*dt)) + .08*dt); c.l.tablet -= r; gas += r*SUB.tablet.co2; }
   tidy(c); return gas;
 }
 
-// Heat in watts goes into the watery layer (4.2 J per °C per millilitre). At 100 °C the rest boils
-// water away as steam, 2260 J a millilitre; only plain water boils off here, and what was dissolved in
-// it stays behind. Anything hotter than the room cools back toward it. Returns the water boiled.
+// Heat in watts goes into the watery layer (4.2 J per °C per millilitre). At its boiling point, 100 °C
+// unless the gas over it presses harder or softer than the room's, the rest boils water away as steam,
+// 2260 J a millilitre; only plain water boils off here, and what was dissolved in it stays behind.
+// Anything hotter or colder than the room comes back toward it. Returns the water boiled.
 export const ROOM = 20, BOIL = 100;
 const COOL = .012;
 export const temp = c => c.t === undefined ? ROOM : c.t;
-export function warm(c, dt, watts){
+export function warm(c, dt, watts, boil = BOIL){
   const wv = waterVol(c); if (!wv) { delete c.t; return 0; }
   let t = temp(c) + watts*dt/(4.2*wv) - (temp(c) - ROOM)*COOL*dt, boiled = 0;
-  if (t > BOIL) { boiled = Math.min(c.l.water || 0, (t - BOIL)*4.2*wv/2260); c.l.water = (c.l.water || 0) - boiled; t = BOIL; }
+  if (t > boil) { boiled = Math.min(c.l.water || 0, (t - boil)*4.2*wv/2260); c.l.water = (c.l.water || 0) - boiled; t = boil; }
   if (Math.abs(t - ROOM) < .05) delete c.t; else c.t = t;
   tidy(c); return boiled;
 }
+
+export function heat(c, joules){ const wv = waterVol(c); if (wv) c.t = temp(c) + joules/(4.2*wv); }
 
 // how heavy the watery layer is for its size; floating things compare themselves to this
 export function density(c){

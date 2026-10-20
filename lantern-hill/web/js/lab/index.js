@@ -27,8 +27,9 @@ const FREE_AFTER = 1, HINT_AFTER = 35;
 const css = document.createElement('style');
 css.textContent = `
 .labbing .hud .plate,.labbing .hud .keys,.labbing #stick,.labbing #talk,.labbing .use,.labbing #prompt{display:none!important}
+.labbing .hud{justify-content:flex-end}
 #labHud{position:fixed;inset:0;pointer-events:none}
-#labHud .lab-card{position:absolute;top:calc(12px + env(safe-area-inset-top,0px));left:max(16px,env(safe-area-inset-left,0px));max-width:min(360px,calc(100vw - 32px));background:rgba(26,19,32,.88);border:2px solid var(--gold);border-radius:14px;padding:8px 14px 10px;box-shadow:0 0 0 3px var(--ink),0 6px 18px rgba(0,0,0,.35)}
+#labHud .lab-card{position:absolute;top:calc(12px + env(safe-area-inset-top,0px));left:max(16px,env(safe-area-inset-left,0px));max-width:min(360px,calc(100vw - 214px));background:rgba(26,19,32,.88);border:2px solid var(--gold);border-radius:14px;padding:8px 14px 10px;box-shadow:0 0 0 3px var(--ink),0 6px 18px rgba(0,0,0,.35)}
 #labHud .sub{font-weight:900;font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--gold)}
 #labHud h3{margin:0 0 4px;font-family:var(--display);font-weight:400;font-size:clamp(18px,4.4vw,23px);line-height:1.1;color:var(--parch)}
 #labHud .q{font-weight:900;font-size:15px;line-height:1.35;color:var(--parch)}
@@ -43,7 +44,13 @@ css.textContent = `
 .lab-pill:disabled{opacity:.45;cursor:default}
 .lab-pill:focus-visible,.lb-card:focus-visible,#labTip:focus-visible,.lc-card:focus-visible{outline:3px solid var(--parch);outline-offset:3px}
 #labHud .after{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
-#lhChoose{position:absolute;left:50%;bottom:calc(200px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);display:flex;gap:10px;pointer-events:auto;max-width:calc(100vw - 32px);flex-wrap:wrap;justify-content:center}
+#lhChoose{position:absolute;display:flex;gap:10px;pointer-events:auto;flex-wrap:wrap;justify-content:center;align-content:flex-start}
+#lhChoose.tight{gap:6px}
+#lhChoose.tight .lc-card{padding:5px 9px 5px;min-width:92px;max-width:140px}
+#lhChoose.tight .lc-card .ic{font-size:22px}
+#lhChoose.tight .lc-card .sw{width:24px;height:24px}
+#lhChoose.tight .lc-card b{font-size:12px;margin-top:1px}
+#lhChoose.wait{visibility:hidden}
 .lc-card{font-family:var(--body);background:#fbf4e2;color:var(--ink);border:3px solid var(--ink);border-radius:16px;padding:10px 14px 9px;min-width:118px;max-width:170px;box-shadow:0 4px 0 var(--ink),0 0 0 3px rgba(217,164,65,.6);cursor:pointer;text-align:center;animation:popin .25s ease-out}
 .lc-card:hover{transform:translateY(-2px)}
 .lc-card .ic{display:block;font-size:34px;line-height:1.1}
@@ -66,7 +73,7 @@ css.textContent = `
 #labBook header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:12px}
 #labBook .sub{font-weight:900;font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:var(--rust)}
 #labBook h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(24px,6vw,34px);line-height:1.05;color:var(--plum)}
-#labBook .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(186px,1fr));gap:10px;padding:2px 2px 6px}
+#labBook .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(186px,1fr));gap:16px 10px;padding:10px 2px 6px}
 #lbFree{margin-top:12px}
 .lb-card{position:relative;text-align:left;font-family:var(--body);color:var(--ink);background:#fbf4e2;border:2.5px solid var(--ink);border-radius:14px;padding:7px 10px 7px 42px;cursor:pointer;box-shadow:0 3px 0 var(--ink)}
 .lb-card:hover{transform:translateY(-1px)}
@@ -77,6 +84,9 @@ css.textContent = `
 .lv{display:inline-block;letter-spacing:2px;line-height:1}
 .lb-card .lv{margin-top:4px;font-size:13px;color:var(--rust)}
 #labHud .sub .lv{font-size:12px;letter-spacing:2px}
+.trip{display:inline-block;font-weight:900;text-transform:uppercase;white-space:nowrap;border-radius:999px;background:#2b6f8a;color:#f3f8fa}
+.lb-card .trip{position:absolute;top:-10px;right:8px;font-size:10px;letter-spacing:.6px;padding:2px 8px;border:2px solid var(--ink)}
+#labHud .sub .trip{margin-left:6px;font-size:10px;letter-spacing:.6px;padding:0 6px;vertical-align:1px}
 .lb-card .nb{display:block;margin-top:4px;font-weight:800;font-size:12px;color:#5a4a4a}
 .lb-card.done .num{background:var(--teal)}
 .lb-card.done .st{background:#cfe8d4;color:#22543a}
@@ -158,6 +168,8 @@ hqAnims.push(dt => { if (lab) step(dt); });
 // ---------- the experiment book ----------
 // Every experiment opened so far, easiest first. "New!" marks what the last one finished opened up.
 const dots = n => `<span class="lv" role="img" aria-label="Difficulty ${n} of 5">${'●'.repeat(n)}${'○'.repeat(5 - n)}</span>`;
+// where an experiment found outside the lab came from, always shown, beside Done or New
+const trip = (f, short) => f ? `<span class="trip" role="img" aria-label="Found on the ${f.name} field trip">${f.icon} ${short ? f.short : f.name} trip</span>` : '';
 function openBook(){
   if (convo) endConvo(false);
   lab.phase = 'book'; lab.run = null; clearDesk(); handsOff(); closeCabinet(); hud.hidden = true;
@@ -170,7 +182,7 @@ function openBook(){
   for (const e of EXPERIMENTS.filter(e => opened(e, done)).sort((a, b) => a.level - b.level)) {
     const fin = done.has(e.id), isNew = !fin && fresh.has(e.id), n = notes[e.id], b = document.createElement('button');
     b.className = 'lb-card' + (fin ? ' done' : isNew ? ' new' : ''); b.dataset.id = e.id;
-    b.innerHTML = `<span class="num">${fin ? '✓' : '?'}</span><b>${e.title}</b><span class="bl">${e.blurb}</span>
+    b.innerHTML = `${trip(e.from)}<span class="num">${fin ? '✓' : '?'}</span><b>${e.title}</b><span class="bl">${e.blurb}</span>
       ${fin || isNew ? `<span class="st">${fin ? 'Done' : 'New!'}</span>` : ''}${dots(e.level)}${n ? `<span class="nb">Predictions right: ${n.right} of ${n.total}</span>` : ''}`;
     b.addEventListener('click', () => startRun(e));
     if (isNew && !firstNew) firstNew = b;
@@ -201,7 +213,7 @@ async function startRun(exp, quiet){
   lab.phase = 'run'; lab.run = {exp, r:-1, notes:[]};
   labSound.setup(exp.setup.length);
   $('lhReset').textContent = exp.free ? 'Clean up' : 'Start over';
-  $('lhSub').innerHTML = exp.free ? 'Free Lab' : `Experiment · ${dots(exp.level)}`;
+  $('lhSub').innerHTML = exp.free ? 'Free Lab' : `Experiment · ${dots(exp.level)}${trip(exp.from, true)}`;
   $('lhTitle').textContent = exp.title; $('lhAfter').hidden = true;
   lab.hintAt = lab.hintAt || 0;
   // the Free Lab has no question to pin up, and the cabinet needs the room
@@ -254,6 +266,18 @@ function lockSort(){
   predict(g);
 }
 const labelOf = (rd, id) => rd.choose ? (rd.choose.find(o => o.id === id) || {label:id}).label : rd.sort.bins[id];
+// The answer cards go in the clear space under the question card, left of the buttons when they'd
+// reach them, and above whatever is at the bottom: Dr. Sparks talking, or the hint. Smaller if they
+// must; if even that would cover her words, they wait until she's done.
+function placeChoices(){
+  if (chooseEl.hidden) return;
+  const card = $('lhCard').getBoundingClientRect(), btns = hud.querySelector('.btns').getBoundingClientRect(), say = document.getElementById('dialog');
+  const talking = say && !say.hidden, floor = talking ? say.getBoundingClientRect().top - 8 : innerHeight - 60, top = card.bottom + 12, left = Math.max(16, card.left);
+  const right = top < btns.bottom ? btns.left - 12 : innerWidth - 16;
+  Object.assign(chooseEl.style, {left:left + 'px', top:top + 'px', width:Math.max(0, right - left) + 'px'});
+  for (const tight of [false, true]) { chooseEl.classList.toggle('tight', tight); if (top + chooseEl.offsetHeight <= floor) break; }
+  chooseEl.classList.toggle('wait', talking && top + chooseEl.offsetHeight > floor);
+}
 function runStep(dt){
   tipUi(dt);
   const run = lab.run; if (!run || run.exp.free || !run.rd) return;
@@ -329,6 +353,7 @@ function finish(){
 
 function drawHud(){
   const run = lab && lab.run; if (!run || run.exp.free) return;
+  placeChoices();
   const exp = run.exp, rd = run.rd;
   let q = '', st = '';
   if (run.phase === 'done') {
