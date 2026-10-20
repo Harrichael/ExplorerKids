@@ -15,6 +15,7 @@ import { dress, dressing } from './ui/wardrobe.js';
 
 export function enterWorld(w, spawn){
   game.world = w; w.scene.add(hero.root); w.scene.add(blob);
+  plateEl.textContent = w.title || 'Lantern Hill HQ';
   // most worlds are small enough to cull at 120; one with a far horizon asks for more
   camera.far = w.far || 120; camera.updateProjectionMatrix();
   player.x = spawn[0]; player.z = spawn[1]; player.angle = spawn[2] === undefined ? Math.PI : spawn[2];
@@ -47,7 +48,7 @@ export const clock = new THREE.Clock();
 const camPos = new THREE.Vector3(), camOff = new THREE.Vector3(), camLook = new THREE.Vector3(), tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), dir = new THREE.Vector3();
 const ray = new THREE.Raycaster();
 const SUN_FROM = new THREE.Vector3(-9, 16, 7);
-const areaEl = $('area'); let areaName = '';
+const areaEl = $('area'), plateEl = document.querySelector('.plate h1'); let areaName = '';
 let lastNearest = null;
 // the water's surface where someone stands in it; a bridge or a rock over the water stays dry
 const wetAt = (x, z, y) => { const wy = game.world.water ? game.world.water(x, z) : null; return wy !== null && y < wy + .05 ? wy : null; };

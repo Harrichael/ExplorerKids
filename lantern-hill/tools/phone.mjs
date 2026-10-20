@@ -44,7 +44,7 @@ export async function phone(url, {device = 'iphone-15', landscape = false, dpr} 
   if (!d) throw new Error(`unknown device ${device}; try ${Object.keys(DEVICES).join(', ')}`);
   const [w, h] = landscape ? [d.h, d.w] : [d.w, d.h], inset = landscape ? d.insetLand : d.inset;
   const profile = await mkdtemp(join(tmpdir(), 'phone-'));
-  const chrome = spawn(CHROME, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--no-first-run',
+  const chrome = spawn(CHROME, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--no-first-run', '--mute-audio',
     `--window-size=${w},${h}`, 'about:blank'], {stdio: 'ignore'});
   // a script that throws or is interrupted never reaches close(); don't leave Chrome running behind it
   const orphan = () => { chrome.kill('SIGKILL'); try { rmSync(profile, {recursive: true, force: true}); } catch {} };

@@ -86,7 +86,7 @@ export const tectonics = {
       const dive = dg.travel([[dg.VOLCANO, 60], [dg.VOLCANO, 120], [dg.VOLCANO, dg.surfaceY(dg.VOLCANO) + 18], [dg.VOLCANO + 6, 330]], 6);
       await t.say([['sparks', "Here's us, class, drilling down through the volcano, nose first!"]]);
       await dive;
-      cab.view('rock'); t.watch(cab.world, cab.shot('window'), seat);
+      cab.view('rock'); cab.gear('drill'); t.watch(cab.world, cab.shot('window'), seat);
       await t.say([['mo', "Rocks! Rocks everywhere!"]]);
       t.cut(cab.shot('teacher'));
       await t.say([['sparks', "This is the crust, Earth's rocky skin. It's thin, like the skin of a peach."]]);
@@ -122,7 +122,7 @@ export const tectonics = {
                      ['juniper', "And that was still only the crust? Nobody has ever drilled all the way to the mantle?"], ['sparks', "Nobody but us!"]]);
       await t.say([['sparks', "We're not stuck, Basil. If we can't dig, we'll ride!"],
                    ['sparks', "Some of this hot rock is slowly rising. We'll float up with it, like a raft on a river."]]);
-      S.gear = null; Sound.tone(1046, {type:'triangle', dur:.2, vol:.07}); Sound.tone(523, {type:'triangle', t:.15, dur:.3, vol:.07});
+      S.gear = null; cab.gear(null); Sound.tone(1046, {type:'triangle', dur:.2, vol:.07}); Sound.tone(523, {type:'triangle', t:.15, dur:.3, vol:.07});
       await t.say([['sparks', "Drill in! Heat bubble, on!"]]);
     }],
     ['the mantle', async (t, {cab, dg, rim, seat, places}) => {

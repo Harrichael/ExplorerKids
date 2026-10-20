@@ -17,7 +17,7 @@ import { bFlush } from '../core/kit.js';
 import { addUsable } from '../core/world.js';
 import { load } from '../save.js';
 import { game } from '../state.js';
-import { ask, story } from '../ui/dialogue.js';
+import { ask } from '../ui/dialogue.js';
 import { openWardrobe } from '../ui/wardrobe.js';
 import { ARMCHAIRS, LAB_DESK, WINDOW_SEAT } from './cottage.js';
 import { BED } from '../garden/bed.js';
@@ -84,12 +84,7 @@ async function lookThroughTelescope(){
   const { openTelescope } = await import('../sky/telescope.js');
   openTelescope();
 }
-// the trip lands on a real volcano, so it waits until the explorer has fizzed one at the science desk
 async function boardWonderBus(){
-  if (!(load('lab')?.done || []).includes('volcano')) {
-    story([['sparks', "The Wonder Bus is itching to visit a real volcano, {name}! But first, try the Fizzy Volcano at my science desk."]]);
-    return;
-  }
   const [{ startCheck, startTrip }, { tectonics }] = await Promise.all([import('../trips/field-trip.js'), import('../trips/tectonics/index.js')]);
   if (!load('trips')?.tectonics) { startTrip(tectonics); return; }
   ask('sparks', "Where to, {name}?", ["The volcano trip!", "Your Explorer Check, on a cloud!", "Not right now"],
@@ -110,7 +105,9 @@ for (const c of ARMCHAIRS) addUsable(HQ, {name:'Armchair', x:c.x + Math.sin(c.ry
   glow:[c.x, 1.2, c.z], action: () => sitInChair(c)});
 addUsable(HQ, {name:'Toy crane', x:PLAY.x, z:PLAY.z + 1.2, range:1.4, verb:'Build a block tower', short:'Build', glow:[PLAY.x, 1.0, PLAY.z], action:openTower});
 addUsable(HQ, {name:'Experiment desk', x:LAB_DESK.x, z:LAB_DESK.z + 1.05, range:1.2, verb:'Do an experiment', short:'Lab', glow:[LAB_DESK.x, 1.35, LAB_DESK.z + .1], action:openLab});
-addUsable(HQ, {name:'Wonder Bus', x:15.9, z:3.6, range:1.9, verb:'Board the Wonder Bus', short:'Board', glow:[15.6, 2.9, 5.5], action:boardWonderBus});
+// the bus is just a parked bus until the first Fizzy Volcano; the trip is a surprise that eruption reveals (lab/index.js)
+addUsable(HQ, {name:'Wonder Bus', x:15.9, z:3.6, range:1.9, verb:'Board the Wonder Bus', short:'Board', glow:[15.6, 2.9, 5.5], action:boardWonderBus,
+  when: () => (load('lab')?.done || []).includes('volcano')});
 addUsable(HQ, {name:'Pip’s telescope', x:23.7, z:-1.05, y:PLAT, range:1.3, verb:'Look through Pip’s telescope', short:'Look', glow:[24.4, PLAT + 1.5, -.6], action:lookThroughTelescope});
 addUsable(HQ, {name:'Pond bench', x:BENCH.x, z:BENCH.z - .78, range:1.25, verb:'Sit on the bench', short:'Sit', glow:[BENCH.x, .9, BENCH.z], action:sitOnBench});
 addUsable(HQ, {name:'Vegetable garden', x:BED.x, z:BED.front + .55, range:1.9, verb:'Tend the garden', short:'Garden', glow:[BED.x, .8, BED.z + .3], action:openGarden});

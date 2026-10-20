@@ -54,6 +54,11 @@ if the child gets to do things. Never cut content to make a trip shorter. Make i
   the rest behind choices: one key find per place, `t.more()` for "Tell me more!", side
   finds the child may skip. Dropping a stop that adds nothing is fine if its lesson moves
   somewhere else ("Can that be streamlined? Keep the educational info").
+- **Room to roam, with shape.** The rim and the mantle felt "a bit cramped, while the under sea
+  scene is a perfect size" (about 30 × 40 m of floor). A bigger place must not be flatter: "make
+  sure there is dynamic ground that its not just flat ... a part where you can walk down to a
+  ledge or something". Give it slopes, steps and humps you can walk, and frame those spots with
+  their own camera angles, as the canyon does with `w.camAt`.
 - **Choice and forks.** He likes the child steering the trip by what they choose to talk
   about, and wants real forks: "I'm actually A-okay with a fork ... If we add enough
   curiosity and we make this fun enough and beautiful enough, it'll be really fun to replay
@@ -99,6 +104,10 @@ if the child gets to do things. Never cut content to make a trip shorter. Make i
 - **Predict first.** For the lab and the globe he asked for a "predict first model" instead
   of "click mazey". *(pattern)* In trips: guess, then watch, then Sparks ties the guess to
   what happened (`t.ask`, then `goggles()`, then `t.say`).
+- **Unlocks are surprises.** "We want to lead with surprise." A trip that waits on the lab is
+  not announced beforehand: no one says "do the experiment and I'll take you on a field trip"
+  ("it's too contrived"), and the bus is just a parked bus with nothing to press. The reveal
+  comes the moment the experiment is done.
 - **Tie into the lab.** He wants trips and science-desk experiments to unlock each other.
   The tectonics trip waits until the Fizzy Volcano is done (`hq/index.js`) and saves
   `save('trips', {heatRises:true})` to open the heat-rises experiment. In the lab, "locked
@@ -151,6 +160,11 @@ Read the header comment of each file before using it. Reuse; don't rebuild.
 - Check syntax: `node --check --input-type=module < file.js`.
 - For a long list of fixes: "triage the list first and categorize it into batches", and use
   subagents so you don't run out of context partway.
+- **Pass down his words, not your plan.** "You are making executive decisions instead of
+  passing down my guidance and encouraging a creative iterative process to the subagent." Give a
+  subagent his words verbatim, and mark any idea of your own as a guess it may beat. Whoever
+  builds should storyboard first, weigh two or three options, try and look, and report the
+  options weighed so he can steer.
 - **Shipping** only when he says "ship it" or "commit merge and push to origin main":
   commit on the branch, merge `origin/main` keeping both sides' intent, check syntax, then
   `git push origin HEAD:main`. Ship in pieces that never leave the game broken. A trivial

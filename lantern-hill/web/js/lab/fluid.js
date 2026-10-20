@@ -4,7 +4,7 @@
 // upright container belongs to that container (desk.js); this is everything that has left one.
 
 import * as THREE from 'three';
-import { grad } from '../core/kit.js';
+import { grad, outline } from '../core/kit.js';
 import * as chem from './chem.js';
 import { area, speed } from './gas.js';
 import { P, cast, rot, toLocal, toWorld } from './physics.js';
@@ -24,15 +24,26 @@ const lookCol = c => chem.liquidVol(c) ? (c.l.oil && chem.waterVol(c) < .01 ? ch
 // The fizz starts where acid and baking soda first meet and spreads out from there, so only the part
 // it has reached reacts and foams. `s` carries {hit, front, quiet}: hit is where something last landed,
 // front {x, z, r} the spreading patch, both in whatever flat frame the caller keeps them; R is as far
-// as it can spread, speed how fast it creeps (a stirred or bubbling one spreads faster).
-export function spread(s, c, dt, R, speed, stir = 0){
+// as it can spread, speed how fast it creeps (a stirred or bubbling one spreads faster). Powder lying
+// in liquid is wet all over at once, so the patch is never smaller than `wet`, the pile's own reach.
+export function spread(s, c, dt, R, speed, stir = 0, wet = 0){
   const f = s.front || {x: s.hit ? s.hit.x : 0, z: s.hit ? s.hit.z : 0, r: .004};
+  if (wet > f.r) f.r = Math.min(R, wet);
   const gas = chem.step(c, dt, stir, Math.max(.02, Math.min(1, (f.r/Math.max(R, .006))**2)));
   if (gas > 1e-5) { s.front = f; s.quiet = 0; f.r = Math.min(R, f.r + dt*(speed + stir*.1 + gas/dt*.0005)); }
   else if (s.front && (s.quiet = (s.quiet || 0) + dt) > .6) s.front = null;
   return gas;
 }
 
+// a lumpy dome of bubbles, 1 across and 1 high, flat side down
+function froth(){
+  const g = new THREE.SphereGeometry(1, 22, 9, 0, 2*Math.PI, 0, Math.PI/2), a = g.attributes.position;
+  for (let i = 0; i < a.count; i++) {
+    const x = a.getX(i), y = a.getY(i), z = a.getZ(i), k = 1 + .09*Math.sin(x*23 + z*7)*Math.cos(z*19 - x*5)*Math.min(1, y*4);
+    a.setXYZ(i, x*k, y*k, z*k);
+  }
+  g.computeVertexNormals(); return g;
+}
 // a flat frame on a surface facing n: e1 is x laid on it, e2 = e1 × n (z, on a level surface)
 function basis(n){
   const ax = 1 - n.x*n.x, ay = -n.x*n.y, az = -n.x*n.z, l = Math.hypot(ax, ay, az), e1 = {x:ax/l, y:ay/l, z:az/l};
@@ -55,7 +66,7 @@ export function makeFluid(root, hooks){
   const dropMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshToonMaterial({gradientMap:grad, color:0xffffff}), MAX_DROPS);
   const foamMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshToonMaterial({gradientMap:grad, color:0xffffff}), MAX_FOAM);
   for (const m of [dropMesh, foamMesh]) { m.setColorAt(0, new THREE.Color()); m.instanceColor.setUsage(THREE.DynamicDrawUsage); m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.count = 0; m.frustumCulled = false; m.castShadow = true; root.add(m); }
-  const MOUND = new THREE.ConeGeometry(1, 1, 18, 1, true);
+  const MOUND = new THREE.ConeGeometry(1, 1, 18, 1, true), HEAD = froth();
   const _a = {}, _b = {}, _c = {}, _d = {}, _s = new Float32Array(N), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), pos = new THREE.Vector3(), col = new THREE.Color(), UP = new THREE.Vector3(0, 1, 0), dir = new THREE.Vector3();
   let gasTotal = 0;
 
@@ -132,11 +143,11 @@ export function makeFluid(root, hooks){
     const disc = new THREE.Mesh(puddleGeo(ln), new THREE.MeshToonMaterial({gradientMap:grad, transparent:true, depthWrite:false}));
     const mound = new THREE.Mesh(MOUND, new THREE.MeshToonMaterial({gradientMap:grad}));
     disc.renderOrder = 1; mound.castShadow = true; root.add(disc, mound);
-    p = {body, lp, ln, e1, e2, R:new Float32Array(N), A:0, c:chem.fill({}), r:0, rp:0, fl:0, disc, mound, wx:x, wy:y, wz:z, n:{x:nx, y:ny, z:nz}, edgeT:Math.random()*.2, turn:0, foamAcc:0, gas:0};
+    p = {body, lp, ln, e1, e2, R:new Float32Array(N), A:0, c:chem.fill({}), r:0, rp:0, fl:0, disc, mound, head:null, wx:x, wy:y, wz:z, n:{x:nx, y:ny, z:nz}, edgeT:Math.random()*.2, turn:0, foamAcc:0, gas:0, fz:0, hd:0, hr:0, hx:0, hz:0, cloud:0};
     chem.merge(p.c, c); size(p, lean(p, x, y, z, vx, vz)); pools.push(p);
     return p;
   }
-  function dropPool(p){ root.remove(p.disc, p.mound); p.disc.geometry.dispose(); p.disc.material.dispose(); p.mound.material.dispose(); }
+  function dropPool(p){ root.remove(p.disc, p.mound); p.disc.geometry.dispose(); p.disc.material.dispose(); p.mound.material.dispose(); if (p.head) { root.remove(p.head); p.head.material.dispose(); } }
   // Fits the edge to the liquid. More liquid pushes the edge out, mostly the way `push` leans (its
   // length up to 1 is how much); less pulls the whole edge in toward the centre.
   function size(p, push){
@@ -212,13 +223,21 @@ export function makeFluid(root, hooks){
       }
     }
     // every tick of chemistry happens right here on the surface
-    const gas = spread(p, p.c, dt, p.r, .025);
+    const runny = chem.liquidVol(p.c) > 5, gas = spread(p, p.c, dt, p.r, runny ? .08 : .025, 0, runny ? p.rp : 0);
+    // A head of froth swells over the fizz as fast as the gas comes and sinks back slowly once it stops,
+    // and the bubbles through the liquid turn it milky for a while after
+    const rate = gas/dt, f = p.front || {x:0, z:0, r:p.r};
+    if (p.front) { p.hx = p.front.x; p.hz = p.front.z; }
+    p.fz += (rate - p.fz)*Math.min(1, dt*(rate > p.fz ? 10 : .7));
+    p.hr = Math.max(p.hr*(p.fz > 2 ? 1 : 1 - dt*.3), Math.min(p.r*.75, Math.max(p.rp*1.6, f.r*.6)));
+    p.hd = Math.min(p.hr*.6, .0004*p.fz*((p.c.l.soap || 0) > .3 ? 2 : 1));
+    p.cloud = Math.max(p.cloud*Math.exp(-dt/7), Math.min(1, p.fz/50));
     if (gas > 0) {
       gasTotal += gas; p.gas += gas; hooks.fizz(p, gas, gas/dt);
       p.foamAcc += gas*((p.c.l.soap || 0) > .3 ? 4 : 1.2);
       const fc = chem.lerpCol(0xffffff, (chem.look(p.c) || {col:0xffffff}).col, .4);
-      const f = p.front || {x:0, z:0, r:p.r};
-      p.foamAcc = gush(p.foamAcc, speed(gas/dt, chem.temp(p.c), area(Math.max(.01, Math.min(f.r, p.r)))), fc, null, p.n, () => { const a = Math.random()*7, rr = Math.random()*Math.min(f.r, p.r)*.8; _b.x = p.wx + f.x + Math.cos(a)*rr; _b.y = p.wy + .004; _b.z = p.wz + f.z + Math.sin(a)*rr; return keepIn(p, _b); });
+      // bubbles burst out of the head's surface, not from under it
+      p.foamAcc = gush(p.foamAcc, speed(gas/dt, chem.temp(p.c), area(Math.max(.01, Math.min(f.r, p.r)))), fc, null, p.n, () => { const a = Math.random()*7, rr = Math.random()*Math.min(f.r, p.r, p.hr)*.8; _b.x = p.wx + f.x + Math.cos(a)*rr; _b.y = p.wy + .004 + p.hd*Math.sqrt(Math.max(0, 1 - (rr/Math.max(p.hr, .001))**2)); _b.z = p.wz + f.z + Math.sin(a)*rr; return keepIn(p, _b); });
     }
     size(p);
     return !chem.isEmpty(p.c);
@@ -323,10 +342,18 @@ export function makeFluid(root, hooks){
         if (p.dirty || Math.abs(p.rp*1.15 - p.fl) > .0005) shape(p);
         p.disc.position.set(p.wx + p.n.x*.0012, p.wy + p.n.y*.0012, p.wz + p.n.z*.0012);
         if (p.body) { const r = p.body.rotation(); p.disc.quaternion.set(r.x, r.y, r.z, r.w); }
-        p.disc.material.color.setHex(lookCol(p.c)); p.disc.material.opacity = lk ? Math.max(.55, lk.op) : .8; }
+        p.disc.material.color.setHex(chem.lerpCol(lookCol(p.c), 0xe9eef0, p.cloud*.45)); p.disc.material.opacity = Math.max(lk ? Math.max(.55, lk.op) : .8, .55 + p.cloud*.25); }
       p.mound.visible = p.rp > .004;
-      if (p.mound.visible) { const h = p.rp*.6; p.mound.quaternion.copy(q); p.mound.position.set(p.wx + p.n.x*h/2, p.wy + p.n.y*h/2, p.wz + p.n.z*h/2); p.mound.scale.set(p.rp, h, p.rp);
-        p.mound.material.color.setHex(chem.pileColor(p.c)); }
+      // powder sitting in a puddle soaks and slumps into a slush, not a dry cone beside the wet
+      const soaked = chem.liquidVol(p.c) > 5;
+      if (p.mound.visible) { const h = p.rp*(soaked ? .25 : .6); p.mound.quaternion.copy(q); p.mound.position.set(p.wx + p.n.x*h/2, p.wy + p.n.y*h/2, p.wz + p.n.z*h/2); p.mound.scale.set(p.rp, h, p.rp);
+        p.mound.material.color.setHex(soaked ? chem.lerpCol(chem.pileColor(p.c), lookCol(p.c), .35) : chem.pileColor(p.c)); }
+      if (p.hd > .0015 && !p.head) { p.head = outline(new THREE.Mesh(HEAD, new THREE.MeshToonMaterial({gradientMap:grad, transparent:true})), 1.04); p.head.castShadow = true; root.add(p.head); }
+      if (p.head) {
+        p.head.visible = p.hd > .0015;
+        p.head.quaternion.copy(q); p.head.position.set(p.wx + p.hx, p.wy + .001, p.wz + p.hz); p.head.scale.set(p.hr, p.hd, p.hr);
+        p.head.material.opacity = Math.min(1, p.hd/.006); p.head.children[0].visible = p.hd > .006; p.head.material.color.setHex(chem.lerpCol(0xffffff, lookCol(p.c), .15));
+      }
     }
   }
   // the edge, lightly smoothed and drawn twice as finely, so it reads as liquid rather than a star;

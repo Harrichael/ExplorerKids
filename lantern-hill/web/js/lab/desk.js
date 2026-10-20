@@ -18,7 +18,8 @@ import { ITEMS, UNITS_PER_M3, capacity } from './stuff.js';
 const BOUNDS = {x:.8, z:.52};
 const MAX_TIP = 2.5, SPOONFUL = 5;
 
-export const desk = {root:null, fx:null, fluid:null, items:[], held:null, ray:null, tip:false, endless:false, t:0};
+// tip: which way the hand is tipping what it holds, 1 to the left, -1 to the right, 0 not at all
+export const desk = {root:null, fx:null, fluid:null, items:[], held:null, ray:null, tip:0, endless:false, t:0};
 // chance that has to come out the same in a test (how far each balloon stretches before it bursts)
 let seed = Math.random()*2**32 >>> 0;
 export const reseed = s => { seed = s >>> 0; };
@@ -143,14 +144,15 @@ function showAim(){
   const t = heldTarget();
   ring.visible = !!t;
   if (!t) return;
-  ring.position.set(t.m.x, t.m.y + .004, t.m.z); ring.scale.setScalar(t.r*1.12);
+  ring.position.set(t.m.x, t.m.y + .004, t.m.z); ring.scale.setScalar(Math.max(t.r*1.12, .055));
   ring.material.opacity = .45 + .25*Math.sin(performance.now()/160);
 }
 
 export function initDesk(root){
   desk.root = root;
-  ring = new THREE.Mesh(new THREE.RingGeometry(.86, 1, 40), new THREE.MeshBasicMaterial({color:0xfff2a8, transparent:true, depthWrite:false}));
-  ring.geometry.rotateX(-Math.PI/2); ring.renderOrder = 3; ring.visible = false; root.add(ring);
+  // Drawn over everything, and never smaller than a cup's: a narrow mouth's own ring would sit inside its lip, unseen
+  ring = new THREE.Mesh(new THREE.RingGeometry(.86, 1, 40), new THREE.MeshBasicMaterial({color:0xfff2a8, transparent:true, depthWrite:false, depthTest:false}));
+  ring.geometry.rotateX(-Math.PI/2); ring.renderOrder = 40; ring.visible = false; root.add(ring);
   desk.fx = makeFx({frame: v => v.g, inside: v => !v.gone && uprightness(v) > .8, top, waterTop, oilTop,
     deliver: (v, p) => { const t = v.body.translation(); deliver(v, p, t.x, t.z, true); }});
   desk.fx.attach(root);
@@ -299,8 +301,20 @@ export function release(){
   if (desk.endless && it.def.supply) it.refill = true;
 }
 
-// what's inside the held thing doesn't count as something to carry it over
 const insideOf = (v, it) => it !== v && !it.gone && isVessel(v) && within(v, localOf(v, it.body.worldCom()), .02);
+function onTray(t, it, c = it.body.worldCom()){
+  if (it === t || t.def.kind !== 'tray') return false;
+  const l = localOf(t, c);
+  return Math.abs(l.x) < t.def.w/2 && Math.abs(l.z) < t.def.d/2 && l.y > -.01 && l.y < .12;
+}
+// Whatever rides along with the held thing (what's in it, on it, and in those) has to be left out of what
+// it's carried over, or it rises to clear its own load, which rises with it, forever.
+function riders(it){
+  const out = new Set([it]);
+  for (let grew = true; grew;) { grew = false;
+    for (const o of live()) if (!out.has(o) && [...out].some(c => insideOf(c, o) || onTray(c, o))) { out.add(o); grew = true; } }
+  return out;
+}
 // Carry things at one steady height, just over the tallest thing on the desk, so they never bob up
 // and down while the hand moves and always clear a cup's rim instead of shoving its wall. Spoons, swabs
 // and test strips dip into the container they're over; a magnet goes low over what's near it, to reach
@@ -317,9 +331,9 @@ function carryHeight(it, x, z){
     }
   }
   const t = it.body.translation(), low = pulls(it) || it.def.magnetic && live().some(m => m !== it && pulls(m) && Math.hypot(m.body.translation().x - x, m.body.translation().z - z) < it.def.r + m.def.r + .07);
-  let y = 0;
+  let y = 0; const load = riders(it);
   for (const o of live()) {
-    if (o === it || insideOf(it, o)) continue;
+    if (load.has(o)) continue;
     const ot = o.body.translation();
     // things clinging to the magnet travel with it, so they're no obstacle; another magnet is met end to end, down on the mat
     if (low && (o.clingTo === it || it.def.tool === 'magnet' && (o.def.tool === 'magnet' || o.stuck && Math.hypot(ot.x - t.x, ot.y - t.y, ot.z - t.z) < .09))) continue;
@@ -343,7 +357,8 @@ function turnToward(body, target, gain, max){
 }
 function steer(it, dt){
   const b = it.body;
-  it.tilt = desk.tip && isVessel(it) ? Math.min(MAX_TIP, it.tilt + 2.4*dt) : Math.max(0, it.tilt - 4*dt);
+  const lean = desk.tip && isVessel(it) ? desk.tip*MAX_TIP : 0, rate = (lean ? 2.4 : 4)*dt;
+  it.tilt += Math.max(-rate, Math.min(rate, lean - it.tilt));
   if (it.attached) {
     // holding a balloon up on its bottle; pulled well away, it comes off and the gas rushes out
     const p = desk.ray && deskPoint(desk.ray, .2), bt = it.attached.body.translation();
@@ -952,11 +967,7 @@ export function restingIn(id){
   const it = find(id); if (!it) return null;
   const c = it.body.worldCom(), v = holder(it, c, .02);
   if (v) return v.id;
-  for (const o of live()) {
-    if (o === it || o.def.kind !== 'tray') continue;
-    const l = localOf(o, c);
-    if (Math.abs(l.x) < o.def.w/2 && Math.abs(l.z) < o.def.d/2 && l.y > -.01 && l.y < .12) return o.id;
-  }
+  for (const o of live()) if (onTray(o, it, c)) return o.id;
   return null;
 }
 // A balance by id: how far its beam leans (positive when the right pan is lower), how long it has been

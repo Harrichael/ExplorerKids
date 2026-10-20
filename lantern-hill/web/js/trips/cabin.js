@@ -6,6 +6,7 @@
 //   const cab = cabin();
 //   cab.view('rock');                   // what the windows show, which way it streams, and how the bus tilts
 //   game.cutCam = cab.shot('class');    // or 'teacher', 'window'
+//   cab.gear('drill');                  // the drill bit on the nose fills the windshield; null pulls it in
 //
 // The cabin runs along x with the windshield at +x, like the bus outside.
 
@@ -83,7 +84,7 @@ export function cabin(){
   w.area = () => 'On board';
   w.spawn = [MINE[0], MINE[1], FACE];
   const views = {}, panes = [];
-  let isle;
+  let isle, drill;
   const light = new THREE.PointLight(0xffd8b8, .9, 9, 1.5); light.position.set(0, 1.6, 0); w.scene.add(light);
   inWorld(w, () => {
     const gold = T(C.gold), wood = T(C.woodLt);
@@ -149,6 +150,17 @@ export function cabin(){
     outline(add(new THREE.LatheGeometry(cone, 24), T(0x5a3428), 0, .2, 0, isle, false), 1.02);
     add(new THREE.CircleGeometry(.56, 20), T(0xff8a3a, {emissive:0xff6a1a, emissiveIntensity:.9}), 0, 3.03, 0, isle, false).rotation.x = -Math.PI/2;
     isle.scale.setScalar(.55); isle.visible = false;
+    // the back of the drill bit, bolted on just past the glass: it fills the windshield, with rock rushing by round its edge
+    drill = grp(3.75, 1.25, 0); drill.visible = false;
+    const bit = add(new THREE.ConeGeometry(.95, 2.6, 18), gold, 1.3, 0, 0, drill, false); bit.rotation.z = -Math.PI/2; outline(bit, 1.03);
+    // a spiral painted on its back plate, so you can see it turn the way a drill does
+    const swirl = tex(256, 256, (c, cw) => { const m = cw/2, g = c.createRadialGradient(m, m, 10, m, m, m); g.addColorStop(0, '#ffe08a'); g.addColorStop(1, '#c8902e');
+      c.fillStyle = g; c.beginPath(); c.arc(m, m, m, 0, 7); c.fill(); c.strokeStyle = '#7a5020'; c.lineWidth = 14; c.lineCap = 'round';
+      for (const a0 of [0, Math.PI]) { c.beginPath(); for (let k = 0; k <= 60; k++) { const r = 18 + k*1.8, a = a0 + k*.09; c.lineTo(m + r*Math.cos(a), m + r*Math.sin(a)); } c.stroke(); }
+      c.strokeStyle = '#1a1320'; c.lineWidth = 6; c.beginPath(); c.arc(m, m, m - 3, 0, 7); c.stroke(); });
+    const back = add(new THREE.CircleGeometry(.95, 28), T(0xffffff, {map:swirl}), 0, 0, 0, drill, false); back.rotation.y = -Math.PI/2;
+    add(new THREE.CylinderGeometry(.18, .18, .3, 12), T(C.woodDk), -.1, 0, 0, drill, false).rotation.z = Math.PI/2;
+    for (let k = 0; k < 4; k++) { const r = .82 - k*.18, ring = add(new THREE.TorusGeometry(r, .06, 6, 18), T(0xa8782a), .3 + k*.5, 0, 0, drill, false); ring.rotation.y = Math.PI/2; ring.rotation.x = k*.4; }
   });
   const smoke = puffs(w, -5.9, 2.1, -15.1, {rate:0, rise:.35, size:.8, color:0xc8bccc, opacity:.85, spread:.6, life:4});
   // the class, sat down and facing the front, and Dr. Sparks standing by the windshield facing them
@@ -156,8 +168,9 @@ export function cabin(){
   for (const [id, [x, z]] of Object.entries(SEATS)) { const n = kids[id] = spawnNPC(w, id, x + .05, z, FACE); n.pose = 'sit'; n.range = 0; n.label.visible = false; }
   // by the door, out of the class shot's frame but facing the class for her own
   const sparks = spawnNPC(w, 'sparks', 3.0, -1.0, -Math.PI/2 - .5); sparks.range = 0; sparks.label.visible = false;
-  let cur = null, scroll = 0, sway = 0, pitch = 0;
+  let cur = null, scroll = 0, sway = 0, pitch = 0, spin = false;
   w.anims.push((dt, t) => {
+    if (spin) drill.rotation.x += dt*12;
     if (cur) { scroll += dt; pitch += ((cur.pitch || 0) - pitch)*Math.min(1, dt*1.5);
       // a side pane's painting is turned against the pitch, so the rock stays level, and streams along the bus;
       // through the windshield and the back window, a dive shows the rock rushing up
@@ -172,7 +185,8 @@ export function cabin(){
     hero.legL.rotation.x = hero.legR.rotation.x = -1.45; hero.body.position.y = -.32; hero.armL.rotation.x = hero.armR.rotation.x = -.35;
   });
   // the shots ride with the bus as it tips, but the camera stays upright, so the cabin is seen tilted
-  const tip = f => (pos, look) => { f(pos, look); for (const p of [pos, look]) { const c = Math.cos(pitch), s = Math.sin(pitch), x = p.x, y = p.y; p.x = x*c - y*s; p.y = x*s + y*c; } };
+  // the class shot stands out past the windshield, where the drill would be, so it leaves the drill out
+  const tip = name => (pos, look) => { SHOTS[name](pos, look); drill.visible = spin && name !== 'class'; for (const p of [pos, look]) { const c = Math.cos(pitch), s = Math.sin(pitch), x = p.x, y = p.y; p.x = x*c - y*s; p.y = x*s + y*c; } };
   const SHOTS = {
     // from just out past the windshield frame: inside the cab the front row is too close to see their faces
     class:   (pos, look) => { pos.set(4.4, 1.6 + sway, .3); look.set(-3, .6, .7); },
@@ -184,6 +198,7 @@ export function cabin(){
   return {world:w, kids, sparks,
     view(name){ cur = views[name]; scroll = 0; for (const {pane} of panes) { pane.material.map = cur.t.clone(); pane.material.map.matrixAutoUpdate = false; pane.material.map.needsUpdate = true; pane.material.needsUpdate = true; } light.color.setHex(cur.light);
       isle.visible = name === 'sea'; smoke.rate = isle.visible ? 1.6 : 0; },
-    shot: name => tip(SHOTS[name]),
+    shot: tip,
+    gear(g){ spin = g === 'drill'; if (!spin) drill.visible = false; },
   };
 }

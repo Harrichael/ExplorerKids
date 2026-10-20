@@ -102,7 +102,7 @@ const hud = document.createElement('div'); hud.id = 'labHud'; hud.hidden = true;
 hud.innerHTML = `<div class="lab-card" id="lhCard"><div class="sub" id="lhSub"></div><h3 id="lhTitle"></h3><div class="q" id="lhQ"></div><div class="status" id="lhStatus"></div><div class="after" id="lhAfter" hidden></div></div>
   <div class="btns"><button class="lab-pill" id="lhHint">Need a hint?</button><button class="lab-pill" id="lhBook">Experiment book</button><button class="lab-pill" id="lhReset">Start over</button><button class="lab-pill" id="lhLeave">Step away</button></div>
   <div id="lhChoose" hidden></div><button class="lab-pill go" id="lhLock" hidden>These are my guesses →</button>
-  <button id="labTip" hidden aria-label="Hold to tip">Tip<small>${coarse ? 'HOLD' : 'HOLD T'}</small></button><div id="labHint" hidden></div>`;
+  <button id="labTip" hidden aria-label="Hold to tip">Tip<small>${coarse ? 'HOLD' : 'HOLD Q'}</small></button><div id="labHint" hidden></div>`;
 const book = document.createElement('div'); book.id = 'labBook'; book.hidden = true; book.setAttribute('role', 'dialog'); book.setAttribute('aria-labelledby', 'lbTitle');
 book.innerHTML = `<div class="page"><header><div><div class="sub">Dr. Vega Sparks' lab</div><h2 id="lbTitle">Experiment Book</h2></div></header>
   <div class="grid" id="lbGrid"></div><div id="lbFree"></div><footer><button class="lab-pill" id="lbLeave">Step away</button></footer></div>`;
@@ -158,7 +158,7 @@ function step(dt){
 function leave(){
   if (!lab) return;
   if (convo) endConvo(true);
-  clearDesk(); handsOff(); closeCabinet(); setTipKey(false); setTipButton(false);
+  clearDesk(); handsOff(); closeCabinet(); tipping.length = 0; setTipKey(0); setTipButton(false);
   hud.hidden = book.hidden = true; document.documentElement.classList.remove('labbing');
   hero.root.visible = true; blob.visible = true; game.cutCam = null; game.cutscene = false; lab = null;
   Sound.close();
@@ -379,7 +379,7 @@ function tipUi(dt){
   const bare = lab.run.exp.free && !desk.items.some(it => !it.gone);
   hint.hidden = !bare && (lab.tipped || lab.hintAt > 40);
   if (!hint.hidden) hint.innerHTML = bare ? `${coarse ? 'Tap' : 'Click'} a <b>shelf</b> in the cabinet, then pick what you want`
-    : coarse ? 'Drag things to carry them · hold <b>Tip</b> to pour' : 'Drag things to carry them · hold <b>T</b>, <b>Space</b> or <b>right-click</b> to tip';
+    : coarse ? 'Drag things to carry them · hold <b>Tip</b> to pour' : 'Drag things to carry them · hold <b>Q</b> or <b>E</b> to tip left or right (or <b>right-click</b>)';
 }
 function pill(text, fn){ const b = document.createElement('button'); b.className = 'lab-pill'; b.textContent = text; b.addEventListener('click', fn); return b; }
 function toast(big, small){
@@ -398,14 +398,18 @@ const tipOff = () => { tipBtn.classList.remove('on'); setTipButton(false); };
 tipBtn.addEventListener('pointerdown', tipOn); tipBtn.addEventListener('pointerup', tipOff); tipBtn.addEventListener('pointercancel', tipOff);
 tipBtn.addEventListener('contextmenu', e => e.preventDefault());
 
-// T tips any time, Space only while the explorer isn't reading (it turns pages); Esc backs out one
-// level: cabinet shelf, experiment, book, desk
-const tipKey = e => e.key === 't' || e.key === 'T' || e.key === ' ';
+// Q tips left and E right: side by side under the hand that's off the mouse, and never a browser
+// shortcut, which is why a Ctrl or Cmd held with them is left alone. Space tips left too, but only while
+// the explorer isn't reading (it turns pages). Esc backs out one level: cabinet shelf, experiment, book, desk
+const TIPS = {q:1, e:-1, ' ':1}, tipping = [];
+const tipDir = e => TIPS[e.key.toLowerCase()] || 0;
+const retip = () => setTipKey(tipping.length ? TIPS[tipping[tipping.length - 1]] : 0);
 addEventListener('keydown', e => {
   if (!lab || lab.phase === 'walk' || lab.phase === 'turn') return;
-  if (tipKey(e) && (e.key !== ' ' || !convo) && lab.phase === 'run') { e.preventDefault(); e.stopPropagation(); if (!e.repeat) setTipKey(true); return; }
+  if (tipDir(e) && !e.ctrlKey && !e.metaKey && (e.key !== ' ' || !convo) && lab.phase === 'run') {
+    e.preventDefault(); e.stopPropagation(); const k = e.key.toLowerCase(); if (!tipping.includes(k)) { tipping.push(k); retip(); } return; }
   if ((e.key === 'm' || e.key === 'M') && !e.repeat && !convo) { setSound(!Sound.isOn()); return; }
   if (e.key === 'Escape' && !convo) { e.stopPropagation(); if (lab.phase === 'run') { if (!closeCabinet()) openBook(); } else if (lab.phase === 'book') leave(); }
 }, true);
-addEventListener('keyup', e => { if (tipKey(e)) setTipKey(false); });
-addEventListener('blur', () => setTipKey(false));
+addEventListener('keyup', e => { const i = tipping.indexOf(e.key.toLowerCase()); if (i >= 0) { tipping.splice(i, 1); retip(); } });
+addEventListener('blur', () => { tipping.length = 0; retip(); });
