@@ -212,6 +212,11 @@ export const Sound = (() => {
       if (surface === 'wood') { tone(150 + Math.random() * 30, {dur:.07, vol:.09, f2:90}); hiss({dur:.03, vol:.05, type:'bandpass', freq:1600, q:2}); }
       else if (surface === 'deck') { tone(210 + Math.random() * 30, {type:'triangle', dur:.08, vol:.06, f2:120}); hiss({dur:.03, vol:.04, type:'bandpass', freq:1200, q:2}); }
       else if (surface === 'stone') { tone(240 + Math.random() * 40, {type:'triangle', dur:.05, vol:.05, f2:150}); hiss({dur:.04, vol:.05, type:'bandpass', freq:2600, q:1.5}); }
+      // a soft slosh, then the bloop of a pocket of air closing, which rises in pitch as it shrinks
+      else if (surface === 'water') { const p = .85 + Math.random() * .3;
+        hiss({dur:.18, vol:.06, type:'bandpass', freq:700 * p, f2:2200 * p, q:.8, attack:.012});
+        tone(330 * p, {t:.03, dur:.1, vol:.04, f2:620 * p, attack:.004});
+        hiss({t:.06, dur:.14, vol:.018, type:'highpass', freq:3400 * p, attack:.02}); }
       else hiss({dur:.09, vol:.07, type:'lowpass', freq:700 + Math.random() * 300});
     },
     crackle(vol){ hiss({dur:.02 + Math.random() * .03, vol:vol, type:'highpass', freq:1800 + Math.random() * 2000}); },

@@ -5,6 +5,7 @@ import { zany } from './characters/zany.js';
 import { rr } from './core/kit.js';
 import { camera, renderer } from './core/render.js';
 import { Sound } from './core/sound.js';
+import { splash, updateSplash, wading } from './core/splash.js';
 import { USE_KEYS, coarse, joy, keys, startEl, useBtns } from './input.js';
 import { blob, blocked, hero, player } from './player.js';
 import { game } from './state.js';
@@ -48,6 +49,8 @@ const ray = new THREE.Raycaster();
 const SUN_FROM = new THREE.Vector3(-9, 16, 7);
 const areaEl = $('area'); let areaName = '';
 let lastNearest = null;
+// the water's surface where someone stands in it; a bridge or a rock over the water stays dry
+const wetAt = (x, z, y) => { const wy = game.world.water ? game.world.water(x, z) : null; return wy !== null && y < wy + .05 ? wy : null; };
 const inReach = u => Math.hypot(player.x - u.x, player.z - u.z) < u.range && Math.abs(player.y - (u.y || 0)) < 1 && (!u.when || u.when());
 
 function update(dt){
@@ -72,7 +75,10 @@ function update(dt){
     player.angle += d * Math.min(1, dt * 12);
     player.walk += dt * (running ? 13 : 9.5) * mag;
     const sgn = Math.sign(Math.sin(player.walk));
-    if (sgn !== player.lastStepSign && sgn !== 0) { player.lastStepSign = sgn; Sound.step(game.world.surface(player.x, player.z, player.y)); }
+    if (sgn !== player.lastStepSign && sgn !== 0) { player.lastStepSign = sgn;
+      const wy = wetAt(player.x, player.z, player.y), fx = Math.sin(player.angle), fz = Math.cos(player.angle);
+      Sound.step(wy === null ? game.world.surface(player.x, player.z, player.y) : 'water');
+      if (wy !== null && hero.root.visible) splash(game.world, player.x + fx*.18 + fz*sgn*.14, player.z + fz*.18 - fx*sgn*.14, wy); }
   } else player.walk *= .82;
   if (dressing && dress.walkTo) {
     const wx = dress.walkTo.x - player.x, wz = dress.walkTo.z - player.z, wd = Math.hypot(wx, wz);
@@ -100,6 +106,7 @@ function update(dt){
   hero.eyes.scale.y = (game.elapsed % 4.2) < .1 ? .1 : 1;
   if (player.pose || player.posedAs) posed(player, hero, game.elapsed);
   blob.position.set(player.x, gnd + .05, player.z);
+  if (mag <= .08 && hero.root.visible) { const wy = wetAt(player.x, player.z, player.y); if (wy !== null) wading(player, game.world, player.x, player.z, wy, dt); }
 
   game.nearest = null; let best = Infinity;
   for (const n of game.world.npcs) {
@@ -132,7 +139,9 @@ function update(dt){
           // a straight line can cross ground nobody walks on (a crater, say), so turn along its edge instead
           let a = Math.atan2(ddx, ddz); const ok = a2 => b(n.x + Math.sin(a2)*st, n.z + Math.cos(a2)*st), b = game.world.bounds;
           if (b && b(n.x, n.z) && b(n.goal.x, n.goal.z) && !ok(a)) for (let k = .25; k < 3; k += .25) { if (ok(a + k)) { a += k; break; } if (ok(a - k)) { a -= k; break; } }
-          n.x += Math.sin(a)*st; n.z += Math.cos(a)*st; lookA = a; n.walk += dt*(n.goal.run ? 13 : 9.5); }
+          n.x += Math.sin(a)*st; n.z += Math.cos(a)*st; lookA = a; n.walk += dt*(n.goal.run ? 13 : 9.5);
+          const sg = Math.sign(Math.sin(n.walk)), wy = sg && sg !== n.lastStepSign && m.root.visible ? wetAt(n.x, n.z, n.gy) : null;
+          if (sg) n.lastStepSign = sg; if (wy !== null) splash(game.world, n.x, n.z, wy); }
         else { const g = n.goal; n.goal = null; if (g.angle !== undefined) n.baseAngle = g.angle; if (g.then) g.then(); }
         n.y = n.gy = game.world.ground(n.x, n.z); m.root.position.set(n.x, n.y, n.z);
       }
@@ -150,6 +159,7 @@ function update(dt){
       if (n.t > n.blinkAt) { m.eyes.scale.y = .1; if (n.t > n.blinkAt + .1) { m.eyes.scale.y = 1; n.blinkAt = n.t + rr(2, 5); } }
       if ((n.pid || (n.persona && n.persona.id)) === 'sparks') zany(n, m, talking, dt);
       if (n.pose || n.posedAs) posed(n, m);
+      if (!n.goal && m.root.visible) { const wy = wetAt(n.x, n.z, n.gy); if (wy !== null) wading(n, game.world, n.x, n.z, wy, dt); }
     }
     n.label.position.set(n.x, n.y + n.labelY + Math.sin(n.t * 2) * .03, n.z);
     const lo = d < 4.5 && dy < 2 ? 1 : 0;
@@ -184,6 +194,7 @@ function update(dt){
   updateTyping(dt);
 
   if (game.world.update) game.world.update(dt, game.elapsed);
+  updateSplash(dt);
   if (game.world.wagon) game.world.wagon.update();
 
   const a = game.world.area(player.x, player.z, player.y);

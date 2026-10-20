@@ -37,6 +37,8 @@ const RUG = [-29.4, -29.2], HILL = [-22, -14], LOOKOUT = [6, -9], ROCK = [-5, 6.
 const CUT = [0, -80, 0];
 // the shell layer, pale limestone that was once sea floor: in the canyon walls, the hilltop and the goggles' slice
 const SHELL = 0xe6dccb;
+// the stream, its pool and the meltwater: a deep storybook teal-blue, so the white ripples on it stand out
+const STREAM_M = T(0x1d6c9c, {emissive:0x0a2c48, emissiveIntensity:.2, side:THREE.DoubleSide});
 
 // the land with no canyon or stream cut into it: rolling meadow, foothills rising north to the mountains,
 // steep slopes east and west, a river along the south
@@ -77,7 +79,7 @@ const streamAt = (x, z) => x > 2 || x < -40 || z < -31 ? null : along(STREAM, x,
 // spots smoothed level for something to sit on: [x, z, radius]
 const FLATS = [[BUS[0], BUS[1], 4.2], [ROCK[0], ROCK[1], 1.6], [LOOKOUT[0], LOOKOUT[1], 1.4], [RUG[0], RUG[1], 2.2]];
 const FLAT_Y = FLATS.map(([x, z]) => land(x, z));
-function H(x, z){
+function unpooled(x, z){
   let h = land(x, z);
   const c = canyonAt(x, z);
   // the walls are pushed back in places, never forward, into gullies between buttresses: a ripple that
@@ -87,6 +89,22 @@ function H(x, z){
   FLATS.forEach(([fx, fz, r], i) => { const y = i === 3 ? floorY(1) : FLAT_Y[i]; h = y + (h - y)*sm(r, r + 2.2, Math.hypot(x - fx, z - fz)); });
   const st = streamAt(x, z); if (st && st.d < 1.2) h -= .36*(1 - sm(.35, 1.15, st.d));
   return h;
+}
+// the pool at the canyon's head lies in a shallow bowl: a flat bed, then a bank rising out of the water
+// all the way round, whatever the canyon floor does there
+const POOL_R = 1.6, POOL_Y = unpooled(...POOL) + .1, POOL_BED = POOL_Y - .3;
+function H(x, z){
+  const h = unpooled(x, z), d = Math.hypot(x - POOL[0], z - POOL[1]);
+  return d > POOL_R + 2 ? h : Math.min(h, POOL_BED + .9*Math.max(0, d - POOL_R + .3));
+}
+// the stream's water, as its strip lies: level across, sloping down its length with the ground beneath
+const streamY = i => Math.max(RIVER_Y + .02, H(...STREAM[i]) + .22 - i*.0004);
+function waterAt(x, z){
+  let y = null;
+  if (Math.hypot(x - POOL[0], z - POOL[1]) < POOL_R + .1) y = POOL_Y;
+  else { const st = streamAt(x, z); if (st && st.d < .5) { const f = st.s*(STREAM.length - 1), i = Math.min(Math.floor(f), STREAM.length - 2); y = streamY(i) + (streamY(i + 1) - streamY(i))*(f - i); } }
+  // where the banks rise above it, it's dry ground
+  return y !== null && y > H(x, z) + .06 ? y : null;
 }
 const slope = (x, z) => Math.hypot(H(x + .25, z) - H(x - .25, z), H(x, z + .25) - H(x, z - .25))/.5;
 // how far into the canyon a spot is: 0 out on the meadow, 1 deep between its walls
@@ -100,6 +118,7 @@ export function buildValley(t){
   // walkable wherever the ground is gentle: the canyon walls, the mountain flanks and the steep slopes east
   // and west are where it stops, with the river along the south
   w.bounds = (x, z) => z < riverZ(x) - 3 && slope(x, z) < 1.1;
+  w.water = waterAt;
   w.surface = (x, z) => inCanyon(x, z) > .5 || slope(x, z) > .5 ? 'stone' : 'grass';
   w.area = (x, z) => inCanyon(x, z) > .5 ? 'The Folded Canyon' : Math.hypot(x - HILL[0], z - HILL[1]) < 9 ? 'Lookout Hill' : 'Crumpled Mountain Valley';
   // in the canyon the camera drops low and swings round to look up it, so its walls stand tall either side
@@ -393,9 +412,17 @@ function buildLand(w){
   // the river, and the stream that feeds it
   const water = T(0x4fa6c8, {emissive:0x1a4a6a, emissiveIntensity:.25});
   const river = add(new THREE.PlaneGeometry(560, 14), water, 0, RIVER_Y, 22, null, false); river.rotation.x = -Math.PI/2; river.castShadow = false;
-  const sw = new THREE.Mesh(waterStrip(STREAM, 1.05, (x, z, i) => Math.max(RIVER_Y + .02, H(x, z) + .22 - i*.0004)), T(0x63b8d6, {emissive:0x1a4a6a, emissiveIntensity:.25, side:THREE.DoubleSide}));
+  const sw = new THREE.Mesh(waterStrip(STREAM, 1.05, (x, z, i) => streamY(i)), STREAM_M);
   sw.receiveShadow = true; w.scene.add(sw);
-  const pool = add(new THREE.CircleGeometry(1.5, 20), T(0x63b8d6, {emissive:0x1a4a6a, emissiveIntensity:.25}), POOL[0], H(...POOL) + .2, POOL[1], null, false); pool.rotation.x = -Math.PI/2;
+  // the disc runs on under the bank, so the shore is wherever the ground comes up through it
+  const pool = add(new THREE.CircleGeometry(POOL_R + .5, 28), STREAM_M, POOL[0], POOL_Y, POOL[1], null, false); pool.rotation.x = -Math.PI/2;
+  // rounded stones along the bank, leaving gaps where the meltwater comes in and the stream runs out;
+  // varied by a hash rather than fr(), so the scatter laid out after them stays where it was
+  const gap = ([x, z]) => Math.atan2(z - POOL[1], x - POOL[0]), gaps = [gap(STREAM[4]), gap(GLACIER.at(-1))];
+  for (let i = 0; i < 22; i++) { const a = i/22*Math.PI*2, k = Math.abs(Math.sin(i*12.9898)*43758.5453 % 1);
+    if (gaps.some(g => Math.abs(Math.atan2(Math.sin(a - g), Math.cos(a - g))) < .42)) continue;
+    const r = .2 + k*.16, x = POOL[0] + Math.cos(a)*(POOL_R + .32), z = POOL[1] + Math.sin(a)*(POOL_R + .32);
+    bAdd([0x9a8676, 0x8a7468, 0xb0a090][i % 3], new THREE.DodecahedronGeometry(r, 1), XF(x, H(x, z) + r*.1, z, 1.3, .6, 1, 0, -a, 0), {ink:.03, shadow:true}); }
   // little white ripples where the water runs over stones
   for (let i = 4; i < STREAM.length - 4; i += 5) { const [x, z] = STREAM[i];
     bAdd(0xf4f8f6, new THREE.TorusGeometry(.16, .025, 4, 10, Math.PI), XF(x + fr(-.25, .25), H(x, z) + .24, z + fr(-.2, .2), 1, 1, 1, -Math.PI/2, fr(0, 6), 0)); }
@@ -625,7 +652,7 @@ function buildFinds(w, t){
   meshOf(mergeGeos(ice), 0xeaf4fa, w.scene, .04);
   meshOf(mergeGeos(blue), 0x8ec4e2, w.scene);
   const melt = GLACIER.at(-1);
-  const trickle = new THREE.Mesh(waterStrip([melt, [(melt[0] + POOL[0])/2, (melt[1] + POOL[1])/2 - .2], POOL], .35, (x, z) => H(x, z) + .14), T(0x63b8d6, {emissive:0x1a4a6a, emissiveIntensity:.25, side:THREE.DoubleSide}));
+  const trickle = new THREE.Mesh(waterStrip([melt, [(melt[0] + POOL[0])/2, (melt[1] + POOL[1])/2 - .2], POOL], .35, (x, z) => H(x, z) + .14), STREAM_M);
   w.scene.add(trickle);
   let frost = -1;
   const twinkle = new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex, color:0xdff4ff, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0}));

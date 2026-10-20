@@ -9,7 +9,8 @@ export function makeWorld(o){
   const sn = new THREE.DirectionalLight(o.sunCol || 0xffd9b0, o.sunI || .75); sn.castShadow = true; sn.shadow.mapSize.set(2048, 2048);
   Object.assign(sn.shadow.camera, {left:-16, right:16, top:16, bottom:-16, near:1, far:60}); sn.shadow.bias = -.0006; s.add(sn, sn.target);
   return {scene:s, colliders:[], occluders:[], occMeshes:[], npcs:[], usables:[], sun:sn, cam:o.cam || null, title:o.title,
-    ground: () => 0, surface: () => 'stone', area: () => o.title, bounds: null, cleared: false};
+    // water(x, z) is the height of the water standing over the ground there, or null where it's dry
+    ground: () => 0, water: () => null, surface: () => 'stone', area: () => o.title, bounds: null, cleared: false};
 }
 export function inWorld(w, fn){
   const prev = {scene:BUILD.scene, colliders:BUILD.colliders, occluders:BUILD.occluders, occMeshes:BUILD.occMeshes};

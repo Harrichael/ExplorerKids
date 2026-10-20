@@ -21,6 +21,7 @@ const CRATER = 6.6, RIM = 14.2, LAVA = -6.8, SEA = -34;
 // the other volcanoes along the coast, all on one line, the line where two plates meet
 const CHAIN = [[130, -26], [205, -41], [285, -57], [-125, 25], [-215, 43]];
 const VENT = [6.8, 5.4], POOL = [-7.6, 6.2], TOAST = [-9.6, .8];
+const POOL_Y = .04;
 // the ledge: a slab jutting out over the crater to the south-west, clear of the finds, lit from below by
 // the lava, with the plume rising off to one side
 const LOOK = [-5.5, -5.5];
@@ -66,7 +67,10 @@ export function buildRim(t){
     cam:{oy:7.4, oz:9.2, oyP:9.4, ozP:10.6}});
   w.far = 600;
   const ring = (x, z) => Math.hypot(x, z);
-  w.ground = (x, z) => { const r = ring(x, z); return r < CRATER ? -.4 - (CRATER - r)*1.6 : rimY(x, z); };
+  // the warm pool is a hand deep, so a foot in it goes in under the surface
+  const toPool = (x, z) => Math.hypot(x - POOL[0], z - POOL[1]);
+  w.ground = (x, z) => { const r = ring(x, z); return r < CRATER ? -.4 - (CRATER - r)*1.6 : rimY(x, z) - .14*(1 - sm(.8, 1.1, toPool(x, z))); };
+  w.water = (x, z) => toPool(x, z) < 1.1 ? POOL_Y : null;
   w.bounds = (x, z) => { const r = ring(x, z); return r > CRATER + .7 && r < RIM - .5; };
   w.surface = () => 'stone';
   w.area = (x, z) => ring(x, z) < CRATER + 2.2 ? 'The Crater Edge' : 'The Volcano Rim';
@@ -158,7 +162,7 @@ export function buildRim(t){
     // the warm pool, with pale floating pumice round its edge
     const poolTex = tex(256, 256, (c, cw, ch) => { const g = c.createRadialGradient(cw/2, ch/2, cw*.1, cw/2, ch/2, cw*.5); g.addColorStop(0, '#16566a'); g.addColorStop(.75, '#237a80'); g.addColorStop(1, '#4fa89c'); c.fillStyle = g; c.fillRect(0, 0, cw, ch);
       c.strokeStyle = 'rgba(200,240,230,.3)'; c.lineWidth = 3; for (let i = 0; i < 7; i++) { const x = 60 + Math.random()*136, y = 60 + Math.random()*136, r = 8 + Math.random()*16; c.beginPath(); c.ellipse(x, y, r, r*.55, 0, 0, 7); c.stroke(); } });
-    const pool = add(new THREE.CircleGeometry(1.15, 28), T(0xffffff, {map:poolTex, emissive:0x0c3a40, emissiveIntensity:.35}), POOL[0], .04, POOL[1], null, false); pool.rotation.x = -Math.PI/2;
+    const pool = add(new THREE.CircleGeometry(1.15, 28), T(0xffffff, {map:poolTex, emissive:0x0c3a40, emissiveIntensity:.35}), POOL[0], POOL_Y, POOL[1], null, false); pool.rotation.x = -Math.PI/2;
     // a ring of rounded pebbles, bigger at the back, like the pond at home
     for (let i = 0; i < 18; i++) { const a = i/18*Math.PI*2 + fr(-.08, .08), r0 = Math.sin(a) < 0 ? fr(.2, .3) : fr(.14, .22), k = 1.2 + r0*.4;
       bAdd([0x6a5a66, 0x7d6e78, 0x5a4a56][i % 3], new THREE.SphereGeometry(r0, 9, 6), XF(POOL[0] + Math.cos(a)*k, r0*.3, POOL[1] + Math.sin(a)*k, fr(1.1, 1.4), .6, 1, 0, -a, 0), {ink:.03, shadow:true}); }

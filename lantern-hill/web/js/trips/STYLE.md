@@ -109,6 +109,9 @@ if the child gets to do things. Never cut content to make a trip shorter. Make i
 - "Warm, inviting, cozy storybook with Zelda Wind Waker inspiration." Toon shading, ink
   outlines, chunky soft shapes, warm dusk light. "Make it look cool and real (not
   photorealistic)."
+- No emoji as art. "Don't use emojis, plan to replace them with storybook look art." Quiz
+  cards, icons and pictures are drawn in the game's style, so nothing changes from device
+  to device and no card stands out from the rest.
 - Judge every scene by eye, not by "it renders". Things he caught: flat 2D backdrops, a bare
   sky, thin smoke, smooth surfaces, straight lines, mauve or washed-out colours, people
   standing inside the bus, heads in the roof, flickering trim (z-fighting).
