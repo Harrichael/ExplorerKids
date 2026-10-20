@@ -158,7 +158,8 @@ export function cabin(){
       c.fillStyle = g; c.beginPath(); c.arc(m, m, m, 0, 7); c.fill(); c.strokeStyle = '#7a5020'; c.lineWidth = 14; c.lineCap = 'round';
       for (const a0 of [0, Math.PI]) { c.beginPath(); for (let k = 0; k <= 60; k++) { const r = 18 + k*1.8, a = a0 + k*.09; c.lineTo(m + r*Math.cos(a), m + r*Math.sin(a)); } c.stroke(); }
       c.strokeStyle = '#1a1320'; c.lineWidth = 6; c.beginPath(); c.arc(m, m, m - 3, 0, 7); c.stroke(); });
-    const back = add(new THREE.CircleGeometry(.95, 28), T(0xffffff, {map:swirl}), 0, 0, 0, drill, false); back.rotation.y = -Math.PI/2;
+    // just in front of the bit's base, which it would otherwise flicker against
+    const back = add(new THREE.CircleGeometry(.95, 28), T(0xffffff, {map:swirl}), -.03, 0, 0, drill, false); back.rotation.y = -Math.PI/2;
     add(new THREE.CylinderGeometry(.18, .18, .3, 12), T(C.woodDk), -.1, 0, 0, drill, false).rotation.z = Math.PI/2;
     for (let k = 0; k < 4; k++) { const r = .82 - k*.18, ring = add(new THREE.TorusGeometry(r, .06, 6, 18), T(0xa8782a), .3 + k*.5, 0, 0, drill, false); ring.rotation.y = Math.PI/2; ring.rotation.x = k*.4; }
   });
@@ -186,7 +187,8 @@ export function cabin(){
   });
   // the shots ride with the bus as it tips, but the camera stays upright, so the cabin is seen tilted
   // the class shot stands out past the windshield, where the drill would be, so it leaves the drill out
-  const tip = name => (pos, look) => { SHOTS[name](pos, look); drill.visible = spin && name !== 'class'; for (const p of [pos, look]) { const c = Math.cos(pitch), s = Math.sin(pitch), x = p.x, y = p.y; p.x = x*c - y*s; p.y = x*s + y*c; } };
+  // and Dr. Sparks, by the door, is just out of its frame, but her arms and clipboard reach in when she spins or waves
+  const tip = name => (pos, look) => { SHOTS[name](pos, look); drill.visible = spin && name !== 'class'; sparks.model.root.visible = name !== 'class'; for (const p of [pos, look]) { const c = Math.cos(pitch), s = Math.sin(pitch), x = p.x, y = p.y; p.x = x*c - y*s; p.y = x*s + y*c; } };
   const SHOTS = {
     // from just out past the windshield frame: inside the cab the front row is too close to see their faces
     class:   (pos, look) => { pos.set(4.4, 1.6 + sway, .3); look.set(-3, .6, .7); },

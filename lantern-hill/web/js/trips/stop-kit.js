@@ -39,23 +39,29 @@ export function spawnNPC(w, pid, x, z, ry, lines = []){
     blinkAt:1 + Math.random()*3, name:p.name, role:p.role, dot:p.dot, voice:p.voice, kind:p.kind, persona:p, lines, walk:0};
   w.npcs.push(n); return n;
 }
-// with a little hop, through a door at [x, y, z] and gone from sight; resolves once they're in
-export function hopIn(n, [x, y, z], s = .35){
-  const x0 = n.x, y0 = n.y, z0 = n.z, t0 = game.elapsed, m = n.model.root, sc = m.scale.x;
+// The Wonder Bus door is barely a metre high and everyone is taller, Dr. Sparks most of all. So they
+// shrink to fit as they hop up to it, magic-bus style, and their heads never go through the wall above.
+const DOOR = 1.0, smooth = k => (k = Math.min(1, Math.max(0, k)), k*k*(3 - 2*k));
+// with a little hop, up through a door at [x, y, z] just inside the wall, and gone from sight; resolves once they're in.
+// They start about half a metre out, so they've shrunk before they meet the wall.
+export function hopIn(n, [x, y, z], s = .45){
+  const x0 = n.x, y0 = n.y, z0 = n.z, t0 = game.elapsed, m = n.model.root, sc = m.scale.x, fit = Math.min(1, DOOR/(n.labelY - .25));
   n.range = 0; n.label.visible = false; n.pose = null; m.rotation.y = n.baseAngle = Math.atan2(x - x0, z - z0);
   Sound.tone(440, {type:'triangle', dur:.14, vol:.05, f2:880});
   return frames(() => { const u = Math.min(1, (game.elapsed - t0)/s);
-    n.x = x0 + (x - x0)*u; n.z = z0 + (z - z0)*u; n.y = y0 + (y - y0)*u + Math.sin(u*Math.PI)*.3;
-    m.position.set(n.x, n.y, n.z); m.scale.setScalar(sc*(1 - .45*u*u));
+    // high enough to clear the step, which is well off the ground
+    n.x = x0 + (x - x0)*u; n.z = z0 + (z - z0)*u; n.y = y0 + (y - y0)*u + Math.sin(u*Math.PI)*.45;
+    m.position.set(n.x, n.y, n.z); m.scale.setScalar(sc*(1 - (1 - fit)*smooth(u/.55)));
     if (u < 1) return false; m.visible = false; m.scale.setScalar(sc); return true; });
 }
-// the explorer too: one bouncy leap from wherever they stand
+// the explorer too: one bouncy leap from wherever they stand, shrinking to fit over the last stretch to the door
 export function heroHopIn([x, z], s = .55){
-  const x0 = player.x, z0 = player.z, t0 = game.elapsed, sc = hero.root.scale.x;
+  const x0 = player.x, z0 = player.z, t0 = game.elapsed, sc = hero.root.scale.x, fit = DOOR/1.75;
   player.angle = Math.atan2(x - x0, z - z0); player.y += .06; player.vy = 22*s/2;
   Sound.tone(392, {type:'triangle', dur:.18, vol:.06, f2:880});
   return frames(() => { const u = Math.min(1, (game.elapsed - t0)/s);
-    player.x = x0 + (x - x0)*u; player.z = z0 + (z - z0)*u; hero.root.scale.setScalar(sc*(1 - .3*u*u));
+    player.x = x0 + (x - x0)*u; player.z = z0 + (z - z0)*u;
+    hero.root.scale.setScalar(sc*(1 - (1 - fit)*smooth((1.2 - Math.hypot(x - player.x, z - player.z))/.75)));
     if (u < 1) return false; hero.root.visible = blob.visible = false; hero.root.scale.setScalar(sc);
     // the bus faded to show them climbing in; with them gone it's solid again at once
     game.world.occluders.forEach(o => { o.cur = 1; }); return true; });

@@ -63,7 +63,7 @@ export function classmates(w, t, door){
     arrive(spots = {}){
       CLASS.forEach((id, i) => {
         const k = n[id], f = finds.find(f => f.id === id), at = spots[id] || (f && f.at);
-        k.x = door[0] + (i - 2)*.35; k.z = door[1]; k.model.root.position.set(k.x, w.ground(k.x, k.z), k.z); k.model.root.visible = true; k.label.visible = true;
+        ({x:k.x, z:k.z} = clear(door[0] + (i - 2)*.35, door[1])); k.model.root.position.set(k.x, w.ground(k.x, k.z), k.z); k.model.root.visible = true; k.label.visible = true;
         // each spots their find a moment after getting there, so the calls come one by one
         if (at) k.goal = {...clear(at[0], at[1]), angle:at[2], run:true, then: () => { k.pose = (f && f.at === at && f.pose) || null; k.spotted = game.elapsed + 1 + i*1.6; }};
       });
@@ -102,7 +102,7 @@ export function classmates(w, t, door){
   const waving = () => [...new Set(finds.filter(f => !found.has(f) && (!f.when || f.when()) && f.id !== 'sparks').map(f => f.who.name))];
   // up to the door and in with a hop
   function goIn(k, run){
-    const [x, z] = aboard.door(.35), [ix, iz] = aboard.door(-.2);
+    const [x, z] = aboard.door(.5), [ix, iz] = aboard.door(-.2);
     k.in = true; k.pose = null; k.calling = false;
     k.goal = {x, z, run, then: () => hopIn(k, [ix, aboard.root.position.y + .3, iz])};
   }

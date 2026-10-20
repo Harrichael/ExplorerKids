@@ -93,11 +93,13 @@ export function explorerCheck(t, questions){
       add(new THREE.BoxGeometry(2.05, 1.7, .1), T(C.gold), 0, 0, -.06, cg); outline(cg.children[0], 1.03);
       add(new THREE.PlaneGeometry(1.9, 1.52), T(0xffffff, {map:card.t}), 0, 0, .001, cg, false);
       body.scale.set(1, 0, 1); body.visible = false;
-      const plug = sph(1, T(0xb8b0d0, {emissive:0x4a3a6a, emissiveIntensity:.25}), 0, 1.15, 0, g, 16); plug.scale.setScalar(.01); plug.visible = false; outline(plug, 1.04);
+      // a lumpy little cloud, like the ones it's made of; a smooth ball read as a big white ball in the arch
+      const lumps = [[0, 0, 0, .85], [-.55, .2, -.05, .55], [.55, .25, -.05, .55], [-.2, .62, -.1, .48], [.3, .55, -.1, .45], [-.7, -.25, -.1, .42], [.7, -.2, -.1, .42]];
+      const plug = add(mergeGeos(lumps.map(([lx, ly, lz, r]) => [new THREE.IcosahedronGeometry(1, 2), XF(lx, ly, lz, r, r*.85, r)])), T(0xb8b0d0, {emissive:0x4a3a6a, emissiveIntensity:.25}), 0, 1.15, 0, g); plug.scale.setScalar(.01); plug.visible = false; outline(plug, 1.04);
       // a grumpy little face, for a wrong answer; an arch with no answer this time is just shut
       const face = grp(0, 0, 0, 0, plug); plug.userData.face = face;
-      for (const ex of [-.3, .3]) sph(.09, T(C.ink), ex, .2, .92, face, 8, false);
-      add(new THREE.TorusGeometry(.2, .04, 6, 12, Math.PI), T(C.ink), 0, -.15, .95, face, false);
+      for (const ex of [-.3, .3]) sph(.09, T(C.ink), ex, .2, .8, face, 8, false);
+      add(new THREE.TorusGeometry(.2, .04, 6, 12, Math.PI), T(C.ink), 0, -.15, .82, face, false);
       slots.push({i, x:sx, g, body, mat:m, card, plug, k:0, to:0, at:0, answer:-1, shut:false, glow:0});
     });
     const sg = new THREE.SpriteMaterial({map:glowTex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, color:0xffe8a0});
@@ -227,7 +229,7 @@ export function explorerCheck(t, questions){
         // that arch puffs shut, and its little cloud bounces the explorer back for another go
         missed = true; s.shut = true; s.plug.visible = true; s.plug.userData.face.visible = true; s.plug.userData.grow = true; s.plug.userData.pop = game.elapsed; setPlug(s, true);
         game.camShake = 1.5; Sound.tone(520, {type:'square', dur:.2, vol:.05, f2:260, cut:1600}); Sound.tone(150, {dur:.3, vol:.12, f2:90});
-        await hopTo(player.x, AZ + 2.2, .5, .7);
+        await hopTo(player.x, AZ + 3, .5, .7);
         await t.say([['sparks', `Hmm, not quite! ${q.hint}`], ['sparks', "Try another arch!"]]);
       }
     }
