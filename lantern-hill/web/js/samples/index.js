@@ -25,6 +25,10 @@ export const SAMPLES = [
   {id:'spirogyra', from:'Where plates slide', name:'Spiral algae', tint:'#5aa04a', line:"Pond algae. A green ribbon twists down every cell, like a spiral staircase."},
   {id:'rotifer', from:'Where plates slide', name:'Rotifer', tint:'#c8b890', line:"Its two crowns of hairs beat so fast they look like spinning wheels, pulling food in."},
   {id:'tardigrade', from:'Where plates slide', name:'Water bear', tint:'#7a9a4a', line:"A water bear, from wet moss. It can dry up like a seed and wake up years later!"},
+  {id:'limu', from:'The hotspot island', name:"Pele's seaweed", tint:'#8a8a5a', line:"Not seaweed at all! Where lava hits the sea, it blows glass bubbles that pop into flakes thinner than paper."},
+  {id:'urchin', from:'The hotspot island', name:'Sea urchin spine', tint:'#c87aa8', line:"One spine of a sea urchin, sliced across. Inside, it's built like a star!"},
+  {id:'copepod', from:'The hotspot island', name:'Copepod', tint:'#d8c8a0', line:"A copepod, with just one bright eye. There are more of these tiny swimmers than almost any animal on Earth."},
+  {id:'coralline', from:'The hotspot island', name:'Pink rock algae', tint:'#e898a8', line:"Pink algae that builds itself a stony skeleton. It glues reefs together like cement."},
 ];
 export const byId = id => SAMPLES.find(s => s.id === id);
 

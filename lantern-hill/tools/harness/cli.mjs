@@ -72,9 +72,11 @@ else {
   if (cmd === 'open') {
     if (existsSync(portFile)) { console.log('a harness is already open; close it first'); process.exit(1); }
     const o = JSON.stringify({url: args[0] || 'http://127.0.0.1:8000/', ...flags});
-    spawn(process.execPath, [new URL(import.meta.url).pathname, '__daemon', o], {detached: true, stdio: 'ignore'}).unref();
+    const d = spawn(process.execPath, [new URL(import.meta.url).pathname, '__daemon', o], {detached: true, stdio: 'ignore'}); d.unref();
     for (let i = 0; i < 2400 && !existsSync(portFile); i++) await sleep(250);
-    console.log(existsSync(portFile) ? 'open; now `start`' : 'the browser did not open'); process.exit(0);
+    // giving up must take the daemon with it, or it opens a browser later that nobody closes
+    if (!existsSync(portFile)) { try { process.kill(d.pid); } catch {} console.log('the browser did not open'); process.exit(1); }
+    console.log('open; now `start`'); process.exit(0);
   }
   if (!existsSync(portFile)) { console.log('no harness open; run `open` first'); process.exit(1); }
   const r = await (await fetch(`http://127.0.0.1:${readFileSync(portFile, 'utf8')}/`, {method: 'POST', body: JSON.stringify({cmd, args: cmd === 'start' ? [args[0], args[1], flags.seed, flags.save] : args})})).json();

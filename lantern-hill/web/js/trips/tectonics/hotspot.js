@@ -17,7 +17,7 @@ import { game } from '../../state.js';
 import { tripBus } from '../bus.js';
 import { classmates } from '../class.js';
 import { goggles } from '../goggles.js';
-import { curio, puffs, tripWorld } from '../stop-kit.js';
+import { curio, puffs, sample, tripWorld } from '../stop-kit.js';
 import { storySky } from '../sky.js';
 import { flock, soarer } from './land-life.js';
 import { plume } from './plume.js';
@@ -716,6 +716,18 @@ function buildFinds(w, t, solid){
     from:[RIM[0] + 1.2, RIM[1] + 1.4], act: async () => { await t.wait(1.2); const fog = w.scene.fog, haze = [fog.near, fog.far]; fog.near = 400; fog.far = 1800;
       t.cut((pos, look) => { pos.set(RIM[0] + 4, ry2 + 4, RIM[1] + 2); look.set(ATOLL[0], 0, ATOLL[1]); });
       await t.until(() => !game.cutscene); [fog.near, fog.far] = haze; }});
+
+  // ---------- samples for the microscope at home ----------
+  // the farthest tide pool, toward the cove: a spiny urchin and a pink crust of algae on the rocks in it, and
+  // tiny swimmers in its water; and down the shore toward the steam, glassy flakes the lava blew where it meets the sea
+  const [tpx, tpz, tpr, tpy] = POOLW[2], LIMU = [10.4, -12.2];
+  const urchinG = grp(tpx + .15, tpy - .08, tpz - .1, 0, w.scene); outline(sph(.13, T(0x5a2a5a), 0, 0, 0, urchinG, 10), 1.1);
+  for (let k = 0; k < 14; k++) { const a = k*2.4, e = .3 + (k % 4)*.3, sp = add(new THREE.ConeGeometry(.012, .22, 4), T(0x4a2048), Math.cos(a)*Math.cos(e)*.13, Math.sin(e)*.13, Math.sin(a)*Math.cos(e)*.13, urchinG, false);
+    sp.lookAt(urchinG.position.x + Math.cos(a)*Math.cos(e)*9, urchinG.position.y + Math.sin(e)*9, urchinG.position.z + Math.sin(a)*Math.cos(e)*9); sp.rotateX(Math.PI/2); }
+  meshOf(mergeGeos([[-.3, .2, .16], [-.15, .35, .12], [.3, -.25, .14]].map(([dx, dz, r]) => [new THREE.SphereGeometry(r, 8, 5), XF(tpx + dx, tpy - .06, tpz + dz, 1, .35, 1)])), 0xe87a98, w.scene, .01);
+  meshOf(mergeGeos([[0, 0, .14, .5], [.22, .12, .1, 2], [-.18, .1, .09, 4], [.1, -.2, .08, 1]].map(([dx, dz, r, a]) => [new THREE.CircleGeometry(r, 6).rotateX(-Math.PI/2), XF(LIMU[0] + dx, ground(LIMU[0] + dx, LIMU[1] + dz) + .02, LIMU[1] + dz, 1, 1, .6, 0, a, 0)])), 0xb8b070, w.scene, .008);
+  sample(w, t, {ids:['urchin', 'copepod', 'coralline'], at:[tpx, tpz], y:tpy + .5, from:[tpx - tpr - .5, tpz - .2], verb:'Dip a jar in the tide pool'});
+  sample(w, t, {ids:['limu'], at:LIMU, y:ground(...LIMU) + .5, verb:'Pick up the glassy flakes'});
 
   // ---------- life about the shore: a green sea turtle dozing on the black sand, terns and a frigatebird overhead ----------
   const honu = grp(-7.2, ground(-7.2, -10.4) + .05, -10.4, 2.6, w.scene);

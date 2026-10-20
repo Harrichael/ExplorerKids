@@ -261,7 +261,58 @@ function trilobite(c, r, rnd){
   shine(c, -r*.2, -r*.55, r*.1, r*.03, .5); c.restore();
 }
 
-export const DRAW = {ash, sulfur, olivine, foram, radiolarian, diatom, microbes, crinoid, nummulite, trilobite, snowalgae, daphnia, spirogyra, rotifer, tardigrade};
+// Pele's seaweed (limu o Pele): glass flakes thinner than paper, from lava bubbles bursting in the sea
+function limu(c, r, rnd){
+  light(c, r, '#fdf6e0', '#d8cc9c'); haze(c, r, rnd, 'rgba(110,100,60,.18)');
+  const flake = (x, y, s, rot) => { c.save(); c.translate(x, y); c.rotate(rot);
+    c.beginPath(); c.moveTo(-s, -s*.2); c.bezierCurveTo(-s*.6, -s*.9, s*.5, -s*.8, s, -s*.1); c.bezierCurveTo(s*.7, s*.5, s*.1, s*.3, -s*.2, s*.7); c.bezierCurveTo(-s*.6, s*.5, -s*.8, s*.3, -s, -s*.2); c.closePath();
+    c.fillStyle = 'rgba(150,150,80,.45)'; c.fill(); line(c, 3); c.stroke();
+    // the curve of the bubble it once was, and a fold where the film creased
+    line(c, 1.5, 'rgba(42,24,40,.45)'); c.beginPath(); c.arc(s*.1, s*.9, s*.95, -2.3, -.9); c.stroke();
+    c.fillStyle = 'rgba(255,250,230,.75)'; c.beginPath(); c.arc(-s*.35, -s*.1, s*.12, 0, TAU); c.fill(); line(c, 1.5); c.stroke();
+    shine(c, -s*.2, -s*.45, s*.3, s*.06, .75); c.restore(); };
+  [[-.25, -.2, .42, .3], [.4, .35, .3, 2.1], [.42, -.45, .22, -1], [-.5, .5, .22, 1.2]].forEach(([x, y, s, a]) => flake(x*r, y*r, s*r, a));
+}
+// a sea urchin's spine cut across: wedges of crystal radiating out from the middle, ring after ring
+function urchin(c, r, rnd){
+  light(c, r, '#fff2f4', '#e0b8c8');
+  const R = r*.62;
+  c.beginPath(); for (let i = 0; i < 48; i++) { const a = i/48*TAU, d = R*(i%2 ? .93 : 1); c.lineTo(Math.cos(a)*d, Math.sin(a)*d); } c.closePath();
+  c.fillStyle = '#c86a9c'; c.fill(); line(c, 3.5); c.stroke();
+  for (let ring = 3; ring >= 1; ring--) { const d0 = R*ring/3.3; c.beginPath(); c.arc(0, 0, d0, 0, TAU); c.fillStyle = ['', '#f4c8dc', '#e8a4c4', '#d888b4'][ring]; c.fill(); line(c, 2); c.stroke(); }
+  line(c, 2); for (let i = 0; i < 24; i++) { const a = i/24*TAU; c.beginPath(); c.moveTo(Math.cos(a)*R*.16, Math.sin(a)*R*.16); c.lineTo(Math.cos(a)*R*.95, Math.sin(a)*R*.95); c.stroke(); }
+  c.fillStyle = 'rgba(255,255,255,.6)'; for (let i = 0; i < 24; i++) { const a = (i + .5)/24*TAU; for (const k of [.4, .62, .84]) { c.beginPath(); c.arc(Math.cos(a)*R*k, Math.sin(a)*R*k, R*.025, 0, TAU); c.fill(); } }
+  c.beginPath(); c.arc(0, 0, R*.16, 0, TAU); c.fillStyle = '#fff4f8'; c.fill(); line(c, 2.5); c.stroke();
+}
+// a copepod: a teardrop body, long feelers, and one red eye in the middle of its head
+function copepod(c, r, rnd){
+  light(c, r, '#eef8fa', '#a8d0d8'); haze(c, r, rnd, 'rgba(60,120,140,.18)');
+  c.save(); c.rotate(.3);
+  line(c, 3); for (const sx of [-1, 1]) { c.beginPath(); c.moveTo(sx*r*.12, -r*.42); c.quadraticCurveTo(sx*r*.55, -r*.6, sx*r*.85, -r*.25); c.stroke();
+    for (let k = 1; k < 8; k++) { const u = k/8, x = sx*(r*.12 + (r*.73)*u), y = -r*.42 - Math.sin(u*Math.PI)*r*.14 + u*r*.17; c.beginPath(); c.moveTo(x, y); c.lineTo(x + sx*r*.02, y - r*.05); c.stroke(); } }
+  c.beginPath(); c.moveTo(0, -r*.5); c.bezierCurveTo(r*.3, -r*.48, r*.26, r*.05, r*.06, r*.18); c.lineTo(-r*.06, r*.18); c.bezierCurveTo(-r*.26, r*.05, -r*.3, -r*.48, 0, -r*.5);
+  c.fillStyle = 'rgba(236,224,190,.85)'; c.fill(); line(c, 3.5); c.stroke();
+  line(c, 1.5, 'rgba(42,24,40,.5)'); for (let k = 0; k < 4; k++) { const y = -r*.28 + k*r*.1; c.beginPath(); c.moveTo(-r*.2 + k*r*.03, y); c.lineTo(r*.2 - k*r*.03, y); c.stroke(); }
+  c.beginPath(); c.moveTo(-r*.05, r*.18); c.lineTo(-r*.04, r*.46); c.lineTo(r*.04, r*.46); c.lineTo(r*.05, r*.18); c.fillStyle = 'rgba(236,224,190,.85)'; c.fill(); line(c, 3); c.stroke();
+  line(c, 2.5); for (const sx of [-1, 1]) { c.beginPath(); c.moveTo(sx*r*.03, r*.46); c.lineTo(sx*r*.1, r*.62); c.stroke(); }
+  for (const sx of [-1, 1]) { c.beginPath(); c.ellipse(sx*r*.17, r*.32, r*.07, r*.14, -sx*.3, 0, TAU); c.fillStyle = 'rgba(120,170,90,.7)'; c.fill(); line(c, 2); c.stroke(); }
+  c.beginPath(); c.arc(0, -r*.38, r*.045, 0, TAU); c.fillStyle = '#d82838'; c.fill(); line(c, 1.5); c.stroke();
+  c.beginPath(); c.ellipse(0, -r*.12, r*.06, r*.16, 0, 0, TAU); c.fillStyle = 'rgba(220,150,70,.55)'; c.fill();
+  c.restore();
+}
+// coralline algae: pink branches of stony segments, each packed with rows of tiny cells
+function coralline(c, r, rnd){
+  light(c, r, '#fff6ee', '#e8c8c0');
+  const seg = (x, y, a, len, w, depth) => { const ex = x + Math.cos(a)*len, ey = y + Math.sin(a)*len;
+    c.save(); c.translate(x, y); c.rotate(a); c.beginPath(); c.roundRect ? c.roundRect(0, -w/2, len, w, w*.45) : c.rect(0, -w/2, len, w);
+    c.fillStyle = depth%2 ? '#e87a98' : '#f098b0'; c.fill(); line(c, 2.5); c.stroke();
+    line(c, 1, 'rgba(42,24,40,.35)'); for (let k = w*.4; k < len - 2; k += w*.28) { c.beginPath(); c.moveTo(k, -w*.4); c.lineTo(k, w*.4); c.stroke(); } c.restore();
+    if (depth < 4) { seg(ex, ey, a - .45 + rnd()*.15, len*.85, w*.88, depth + 1); if (depth < 3) seg(ex, ey, a + .4 + rnd()*.15, len*.8, w*.85, depth + 1); } };
+  seg(-r*.1, r*.85, -Math.PI/2, r*.28, r*.15, 0);
+  seg(r*.55, r*.8, -Math.PI/2 - .5, r*.2, r*.11, 1);
+}
+
+export const DRAW = {ash, sulfur, olivine, foram, radiolarian, diatom, microbes, crinoid, nummulite, trilobite, snowalgae, daphnia, spirogyra, rotifer, tardigrade, limu, urchin, copepod, coralline};
 
 export function mulberry(a){ return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0)/4294967296; }; }
 const seedOf = id => [...id].reduce((h, ch) => Math.imul(h ^ ch.charCodeAt(0), 16777619), 2166136261);
