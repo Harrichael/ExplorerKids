@@ -22,8 +22,9 @@ if the child gets to do things. Never cut content to make a trip shorter. Make i
   mystery, and excitement. And if its not just a click maze, but actually interactable."
 - *(pattern)* Open on a mystery and close on its answer. Tectonics asks "why are the
   volcanoes in a row?" at the rim and answers it on the way home.
-- *(pattern)* Classmates hold the wrong ideas, and the explorer proves them wrong. Basil
-  keeps a worry list that the trip's science crosses off (`tectonics/worries.js`).
+- *(pattern)* Classmates hold the wrong ideas, and the explorer proves them wrong.
+- **Curiosity, not worry.** A worry list "encourages too much worrying. Maybe I'd rather be a
+  curiosity list." Give the class a list of "I wonder…" questions that the trip answers.
 - **Leaving a place** sounds like a teacher: "Alright class, next stop <blank>! Juniper, Mo,
   and <Explorer's Name>, when you are done come to the bus!" Use `cls.leaving(next)`. No
   game words the child won't know ("I don't know what 'call the bus' means").
@@ -37,6 +38,9 @@ if the child gets to do things. Never cut content to make a trip shorter. Make i
   You can interact with them and talk with them."
 - **Curiosity first.** "I really want field trips to maximize curiosity." Every place needs
   optional things to find. The deep-sea creatures at the ridge are the model he liked.
+- **No signs.** "I don't like the signs. It's too telly, too contrived, too limited and
+  walled." A spot worth visiting should draw the eye by itself (a jutting ledge, a glow, a
+  classmate peering over), never a "Lookout" or "Planted 1975" board.
 - **No invisible walls.** "Invisible wall is bad game design... but its okay if you give a
   big area for the kid to explore, reward curiosity." Bound a place with rock, cliff, water
   or bushes. No square edges, no flat fields.
@@ -46,13 +50,23 @@ if the child gets to do things. Never cut content to make a trip shorter. Make i
   finds the child may skip. Dropping a stop that adds nothing is fine if its lesson moves
   somewhere else ("Can that be streamlined? Keep the educational info").
 - **Choice and forks.** He likes the child steering the trip by what they choose to talk
-  about, and floated a real fork and "optional excursions". *(pattern)* Tectonics lets the
-  child pick which of two places comes first; both are required.
+  about, and wants real forks: "I'm actually A-okay with a fork ... If we add enough
+  curiosity and we make this fun enough and beautiful enough, it'll be really fun to replay
+  again." A place skipped this time is a reason to come back.
+- **Each place teaches its own thing, its own way.** "Almost all of the kids are noticing the
+  same thing in different ways ... I don't like that it teaches the same thing over and
+  over." One strong demonstration per idea; the other finds should open new ideas.
+- **Never trap the explorer.** A find must not block talking to others for long, must not
+  need a pixel-exact spot, and must always have a way out. A stuck find once forced him to
+  leave the trip.
 - **Notebook.** *(pattern)* Juniper's notebook gets a sticker per place, with a star per find,
   so a page with gaps is a reason to play again (`notebook.js`, `tectonics/pages.js`).
 - **Quiz.** After the trip, Dr. Sparks offers an optional quiz. "Our first playtester ... really
   enjoyed the quiz." Make it engaging. On the telescope he asked that kids can't just spam
   clicks through things: "require more clicks to prevent spam, not confirmation, thats weak".
+  Build a big question pool and draw from what this explorer actually did: "It should sort of
+  unlock questions ... some questions should be like more minor questions and some questions
+  more key questions. And we should have a higher chance to get key questions".
 
 ## Science
 
@@ -62,7 +76,14 @@ if the child gets to do things. Never cut content to make a trip shorter. Make i
 - **Show, don't tell.** If an idea matters, show it moving ("Not well emphasized ... that the
   magma was coming up. Find somewhere to show this (animation) and a subtle 'tell' if
   needed"). Physics should look right: steam from a hot crack, a bus that comes up from
-  below if it rode the magma up.
+  below if it rode the magma up, a bus that dives nose first (and the window view agrees),
+  rocks that look anchored rather than about to fall, water that flows downhill from its
+  spring.
+- **Magic to reveal, not to decorate.** The bus's gadgets exist to let the child see what
+  is really there: the heat bubble, or a fan that blows away scalding murk so the magma
+  shows. "Hey, this is too hot ... but we're going to peer through that to really show you
+  the underlying science." Not a gadget for its own sake, and not a needless mishap (the
+  drill bit snapping off felt "weird").
 - **Predict first.** For the lab and the globe he asked for a "predict first model" instead
   of "click mazey". *(pattern)* In trips: guess, then watch, then Sparks ties the guess to
   what happened (`t.ask`, then `goggles()`, then `t.say`).
@@ -133,6 +154,7 @@ Read the header comment of each file before using it. Reuse; don't rebuild.
 - [ ] The science is true, fine points too (magma vs lava, real coastlines, no country lines).
 - [ ] An optional quiz from Dr. Sparks at the end, hard to spam through.
 - [ ] Lab tie-ins: what unlocks the trip, and what the trip unlocks. Locked things stay hidden.
+- [ ] No signs. No find can trap the explorer, and each place teaches something new.
 - [ ] Nobody is named Theo, and no new pronouns are guessed.
 - [ ] Warm Wind Waker storybook look. No one clips into the bus, no flicker, no bare skies.
 - [ ] Leaving lines sound like a teacher ("Alright class, next stop ...").
