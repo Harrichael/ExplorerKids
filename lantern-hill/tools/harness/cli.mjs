@@ -11,13 +11,15 @@
 //   node tools/harness/cli.mjs ok               close the notebook or the badge
 //   node tools/harness/cli.mjs key e            any key: e r w t q y, Space, Enter, Escape, ArrowUp...
 //   node tools/harness/cli.mjs click '#leaveTrip'
-//   node tools/harness/cli.mjs state | shot [file.png] | speed 4 | eval '<js in the page>'
+//   node tools/harness/cli.mjs pace --speed 2 --every .05   change speed, picture spacing or --read at any moment
+//   node tools/harness/cli.mjs state | shot [file.png] | eval '<js in the page>'
 //   node tools/harness/cli.mjs close            stops the browser; prints where the picture log is
 //
-// open's options: --speed (game time per real second), --every (seconds of game time per logged picture,
-// 0 for none), --read (seconds a typed line stays before the talk moves on, 0 to press Space yourself),
-// --log (the folder), --minutes (closes itself after this long), --lock (a directory, so only one
-// browser runs at a time; or set LH_BROWSER_LOCK). HARNESS_SESSION names the session (default "h").
+// open's options set where things start, and `pace` changes them later: --speed (game time per real
+// second), --every (seconds of game time per logged picture, 0 for none; 2 if not given), --read
+// (seconds a typed line stays before the talk moves on, 0 to press Space yourself). Only these stay
+// fixed for the session: --log (the folder), --minutes (closes itself after this long), --lock (a
+// directory, so only one browser runs at a time; or set LH_BROWSER_LOCK). HARNESS_SESSION names the session (default "h").
 
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -40,7 +42,7 @@ async function daemon(){
   const run = {
     start: (trip, chapter, seed, save) => h.start({trip, chapter: /^\d+$/.test(chapter) ? +chapter : chapter, seed: seed ? JSON.parse(seed) : undefined, save: save ? JSON.parse(save) : undefined}),
     state: () => null, wait: s => h.wait(s), walk: n => h.walk(n), talk: n => h.talkTo(n), use: n => h.use(n), pick: w => h.pick(w), ok: () => h.ok(),
-    key: async k => { await h.key(k); return 'pressed ' + k; }, click: s => h.click(s), shot: f => h.shot(f), speed: n => h.pace({speed: +n}), eval: js => h.eval(js),
+    key: async k => { await h.key(k); return 'pressed ' + k; }, click: s => h.click(s), shot: f => h.shot(f), pace: o => h.pace(Object.fromEntries(Object.entries(o || {}).map(([k, v]) => [k, +v]))), eval: js => h.eval(js),
   };
   let busy = Promise.resolve();
   createServer((req, res) => { let body = ''; req.on('data', d => body += d); req.on('end', () => {
@@ -79,7 +81,7 @@ else {
     console.log('open; now `start`'); process.exit(0);
   }
   if (!existsSync(portFile)) { console.log('no harness open; run `open` first'); process.exit(1); }
-  const r = await (await fetch(`http://127.0.0.1:${readFileSync(portFile, 'utf8')}/`, {method: 'POST', body: JSON.stringify({cmd, args: cmd === 'start' ? [args[0], args[1], flags.seed, flags.save] : args})})).json();
+  const r = await (await fetch(`http://127.0.0.1:${readFileSync(portFile, 'utf8')}/`, {method: 'POST', body: JSON.stringify({cmd, args: cmd === 'start' ? [args[0], args[1], flags.seed, flags.save] : cmd === 'pace' ? [flags] : args})})).json();
   if (r.out !== undefined && r.out !== null) console.log(typeof r.out === 'string' ? r.out : JSON.stringify(r.out));
   if (r.state) console.log(show(r.state));
 }

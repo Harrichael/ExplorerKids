@@ -12,7 +12,7 @@ import { harness } from './harness.mjs';
 
 const argv = process.argv.slice(2), opt = (k, d) => { const i = argv.indexOf('--' + k); return i >= 0 ? argv[i + 1] : d; };
 const url = argv.find(a => /^https?:/.test(a)) || 'http://127.0.0.1:8000/', words = opt('answer', '').split(',').filter(Boolean).map(w => w.toLowerCase());
-const h = await harness(url, {speed: +opt('speed', 8), every: +opt('every', 1), log: opt('log'), minutes: +opt('minutes', 8)});
+const h = await harness(url, {speed: +opt('speed', 8), every: +opt('every', 2), log: opt('log'), minutes: +opt('minutes', 8)});
 const t0 = Date.now(), say = m => console.log(`${((Date.now() - t0)/1000).toFixed(0).padStart(4)}s  ${m}`);
 let last = '', tries = new Map(), out = 'gave up after 400 turns';
 try {

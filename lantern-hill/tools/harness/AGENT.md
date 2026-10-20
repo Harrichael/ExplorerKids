@@ -33,6 +33,8 @@ Commands:
 - `shot`: save a picture of the screen and print its path. Look at it with your Read tool when the
   text is not enough, or when the goal asks how something looks.
 - `state`: just print the screen again.
+- `pace --speed 2 --every .1`: change how fast the game runs, or how often a picture is logged (seconds of
+  game time), any time. Slow down and log densely around a moment you need to see closely, then speed up again.
 
 Tips: after `talk`, run `wait 20` to hear the whole talk. If a walk says `gave up`, try another
 target or report it. Don't repeat the same failing command more than twice.

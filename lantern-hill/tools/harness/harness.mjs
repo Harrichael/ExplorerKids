@@ -25,8 +25,9 @@ import { join } from 'node:path';
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-export async function harness(url, {speed = 1, read = 1.2, every = 1, log = join(tmpdir(), 'lh-runs', new Date().toISOString().replace(/[:.]/g, '-')),
+export async function harness(url, {speed = 1, read = 1.2, every = 2, log = join(tmpdir(), 'lh-runs', new Date().toISOString().replace(/[:.]/g, '-')),
   width = 1280, height = 800, lock = process.env.LH_BROWSER_LOCK, minutes = 8} = {}){
+  const now = {speed, read, every};
   if (lock) { for (let said = false; ; said = true) { try { mkdirSync(lock); break; } catch { if (!said) console.error('waiting for the browser lock', lock); await sleep(5000); } } }
   mkdirSync(log, {recursive: true});
   const profile = await mkdtemp(join(tmpdir(), 'lh-harness-'));
@@ -87,11 +88,12 @@ export async function harness(url, {speed = 1, read = 1.2, every = 1, log = join
       await clickAt(width/2, height/2); await sleep(800);
       if (await ev(`document.documentElement.classList.contains('dressing')`)) { await key('Escape'); await sleep(600); }
       await ev(`import(document.baseURI + 'js/testing.js')`);
-      await ev(`harness.pace(${JSON.stringify({speed, read, every})})`);
+      await ev(`harness.pace(${JSON.stringify(now)})`);
       return ev(`harness.start(${JSON.stringify(opts)})`);
     },
     async state(){ const s = await ev('harness.state()'); s.errors = errors.splice(0); s.frames = frames; return s; },
-    pace: o => ev(`harness.pace(${JSON.stringify(o)})`),
+    // speed, read and every can change at any moment; a fresh start keeps whatever they are now
+    pace: o => { Object.assign(now, o); return ev(`harness.pace(${JSON.stringify(o)})`).catch(() => now); },
     wait: (s = 10) => ev(`harness.wait(${+s})`),
     walk: name => ev(`harness.walk(${JSON.stringify(name)})`),
     async talkTo(name){ const r = await h.walk(name); if (r !== 'arrived') return r; await key('Space'); return 'talking to ' + name; },
