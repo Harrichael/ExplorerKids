@@ -12,8 +12,9 @@ import { game } from '../../state.js';
 import { tripBus } from '../bus.js';
 import { classmates } from '../class.js';
 import { goggles } from '../goggles.js';
-import { tripWorld } from '../stop-kit.js';
-import { storySky } from './sky.js';
+import { curio, tripWorld } from '../stop-kit.js';
+import { butterflies, flock, marmot, mountainGoat, soarer } from './land-life.js';
+import { storySky } from '../sky.js';
 
 const sm = (a, b, v) => { const k = clamp01((v - a)/(b - a)); return k*k*(3 - 2*k); };
 const bump = (x, z, cx, cz, rx, rz) => { const d = Math.hypot((x - cx)/rx, (z - cz)/rz); return d < 1 ? .5 + .5*Math.cos(d*Math.PI) : 0; };
@@ -34,6 +35,8 @@ const BUS = [12, 4], BUS_RY = Math.PI/2;
 const RUG = [-29.4, -29.2], HILL = [-22, -14], LOOKOUT = [6, -9], ROCK = [-5, 6.6], POOL = [HEAD[0] - 3, HEAD[1] + 3.2];
 // the time goggles' cutaway sits deep under the valley, where nothing above it can be seen
 const CUT = [0, -80, 0];
+// the shell layer, pale limestone that was once sea floor: in the canyon walls, the hilltop and the goggles' slice
+const SHELL = 0xe6dccb;
 
 // the land with no canyon or stream cut into it: rolling meadow, foothills rising north to the mountains,
 // steep slopes east and west, a river along the south
@@ -77,7 +80,10 @@ const FLAT_Y = FLATS.map(([x, z]) => land(x, z));
 function H(x, z){
   let h = land(x, z);
   const c = canyonAt(x, z);
-  if (c) { const fl = Math.min(floorY(c.s), h), w = halfW(c.s), k = sm(w, w + 2 + .16*(h - fl), c.d); h = fl + (h - fl)*k; }
+  // the walls are pushed back in places, never forward, into gullies between buttresses: a ripple that
+  // depends on x and z only, so it runs straight up the face and the walls read as standing upright
+  if (c) { const fl = Math.min(floorY(c.s), h), w = halfW(c.s), gul = .5 + .5*Math.sin(x*1.15 + 2.2*Math.sin(z*.43)) * Math.sin(z*1.05 + 1.8*Math.sin(x*.37));
+    const k = sm(w, w + 1.6 + .12*(h - fl), c.d - .8*sm(w, w + 1.5, c.d)*gul); h = fl + (h - fl)*k; }
   FLATS.forEach(([fx, fz, r], i) => { const y = i === 3 ? floorY(1) : FLAT_Y[i]; h = y + (h - y)*sm(r, r + 2.2, Math.hypot(x - fx, z - fz)); });
   const st = streamAt(x, z); if (st && st.d < 1.2) h -= .36*(1 - sm(.35, 1.15, st.d));
   return h;
@@ -101,7 +107,7 @@ export function buildValley(t){
     const k = inCanyon(x, z); if (!k) return null;
     const c = canyonAt(x, z), sx = -c.tz, sz = c.tx, side = sz < 0 ? -1 : 1;
     const ox = (-c.tx*6.2 + sx*side*1.4)*k, oz2 = oz + ((-c.tz*6.2 + sz*side*1.4) - oz)*k, gy = H(x, z);
-    return [ox, Math.max(oy + (3.3 - oy)*k, H(x + ox, z + oz2) - gy + 1.6), oz2];
+    return [ox, Math.max(oy + (2.8 - oy)*k, H(x + ox, z + oz2) - gy + 1.6), oz2];
   };
   w.spawn = [BUS[0] - 1.6, BUS[1] - 1.6, Math.PI];
   storySky(w, {sun:[-9, 16, 7], clouds3d:[[-90, 62, -70, 26], [60, 70, -110, 30], [100, 46, -20, 22], [-120, 50, 10, 26], [140, 56, 40, 28], [-50, 40, 70, 18]]});
@@ -114,9 +120,9 @@ export function buildValley(t){
     const gy = H(...ROCK);
     box2(.22, .06, .1, 0xd9a441, ROCK[0] + .45, gy + .5, ROCK[1] - .5, .3);
     sph(.09, T(0xc0483a), ROCK[0] - .4, gy + .52, ROCK[1] - .45, null, 10);
-    // the shell, in a knob of the bluish shell rock poking out of the hilltop
+    // the shell, in a knob of the pale shell rock poking out of the hilltop
     const hy = H(...HILL);
-    meshOf(mergeGeos([[new THREE.DodecahedronGeometry(.7, 1), XF(HILL[0] + .3, hy + .05, HILL[1] - .9, 1.3, .55, 1)], [new THREE.DodecahedronGeometry(.45, 1), XF(HILL[0] - .5, hy, HILL[1] - .4, 1, .5, 1.1)]]), 0x56688c, w.scene, .03);
+    meshOf(mergeGeos([[new THREE.DodecahedronGeometry(.7, 1), XF(HILL[0] + .3, hy + .05, HILL[1] - .9, 1.3, .55, 1)], [new THREE.DodecahedronGeometry(.45, 1), XF(HILL[0] - .5, hy, HILL[1] - .4, 1, .5, 1.1)]]), 0xcfc2aa, w.scene, .03);
     fossil = sph(.16, T(0xf3e6c8), HILL[0] + .6, hy + .08, HILL[1] - .2, null, 10); fossil.scale.set(1, .4, .9); outline(fossil, 1.12);
     for (let k = 0; k < 4; k++) add(new THREE.BoxGeometry(.02, .03, .3), T(0xb89a72), (k - 1.5)*.05, .1, 0, fossil, false).rotation.y = (k - 1.5)*.4;
     // Basil's pebble, round and pale among the darker stones in the stream
@@ -188,7 +194,7 @@ export function buildValley(t){
       const gy = H(...LOOKOUT);
       t.cut((pos, look) => { pos.set(LOOKOUT[0] + 2, gy + 2.4, LOOKOUT[1] + 5); look.set(LOOKOUT[0] - 1, gy + 7, LOOKOUT[1] - 20); });
       await say([['pip', pick === 0 ? "You were right! It crumpled up into a mountain!" : "Whoa! It didn't do that. It crumpled up into a mountain!"],
-                 ['pip', "And see the blue layer with the shells? It went all the way to the top!"],
+                 ['pip', "And see the pale shell layer, full of seashells? It went all the way to the top!"],
                  ['pip', "Hey! Something's glinting up on that hill!"]]);
       crumpled = glinting = true;
       t.cut(null);
@@ -208,7 +214,7 @@ export function buildValley(t){
       t.cut((pos, look) => { pos.set(HILL[0] - 1.6, fy + 2.2, HILL[1] + 3); look.set(HILL[0] + .6, fy + .1, HILL[1] - .2); });
       fossil.position.y = fy + .42; Sound.tone(880, {type:'triangle', dur:.2, vol:.07}); Sound.tone(1318, {type:'triangle', t:.12, dur:.4, vol:.06});
       await say([['pip', "A seashell! Made of stone. Way up on a mountain!"],
-                 ['pip', "Remember the time goggles? The shell layer went all the way up."],
+                 ['pip', "Remember the time goggles? The pale shell layer went all the way up."],
                  ['pip', "This mountain top was once the sea floor!"]]);
       t.cut(null);
     }});
@@ -247,8 +253,9 @@ export function buildValley(t){
     if (!mountains()) return "How do mountains grow, {name}? Juniper is up the canyon, and Pip is by the mountains. Go see!";
     if (crumpled && !cls.saw('shell')) return "Pip ran up the hill. Something is up there!";
     if (!cls.saw('pebble')) return "Basil is down by the stream. Go see what he found!";
-    return "Back to the bus whenever you're ready, {name}! Or go see anyone still waving.";
+    return "Back to the bus whenever you're ready, {name}! Or go see anyone still waving. Or go exploring: who knows what's up on the high ledges?";
   };
+  buildFinds(w, t);
 
   return {world:w, bus, cls,
     // in over the peaks from the north, round the valley, and down on the meadow
@@ -296,13 +303,21 @@ const box2 = (wd, h, d, c, x, y, z, ry) => { const m = add(new THREE.BoxGeometry
 // the same layers crumpled the same way; high up they go blue with distance and white with snow.
 const FOLD = `float fold(vec3 p){ return 3.4*cos((p.x + 24.)*.19)*(.65 + .35*cos(p.z*.09)) + 1.1*sin(p.x*.41 + p.z*.23); }`;
 function landMaterial(){
-  const strata = tex(128, 1024, (c, cw, ch) => {
-    const bands = [['#e9d2a2', 140], ['#b9663e', 104], ['#d9a86c', 168], ['#7a4a3a', 80], ['#c98e58', 128], ['#6f88ae', 92], ['#e2c08e', 148], ['#9a5e4e', 164]];
+  const shell = '#' + SHELL.toString(16);
+  const strata = tex(1024, 1024, (c, cw, ch) => {
+    // the shell layer is pale limestone, old sea floor, set between two darker bands so it stands out
+    const bands = [['#e9d2a2', 140], ['#b9663e', 104], ['#d9a86c', 168], ['#7a4a3a', 80], ['#c98e58', 128], [shell, 112], ['#a86848', 136], ['#d6a070', 156]];
     let y = 0;
     for (const [col, hgt] of bands) { c.fillStyle = col; c.fillRect(0, y, cw, hgt);
-      c.fillStyle = 'rgba(255,255,255,.12)'; c.fillRect(0, y, cw, 10);
-      for (let i = 0; i < 40; i++) { c.fillStyle = i % 2 ? 'rgba(40,24,30,.13)' : 'rgba(255,240,220,.16)'; c.beginPath(); c.ellipse(Math.random()*cw, y + 14 + Math.random()*(hgt - 24), 3 + Math.random()*8, 2 + Math.random()*2.5, 0, 0, 7); c.fill(); }
-      c.fillStyle = 'rgba(42,26,34,.8)'; c.fillRect(0, y + hgt - 5, cw, 5);
+      // a sunlit lip on top of each layer and a shadowed underside, so each one sits out like a little ledge
+      c.fillStyle = 'rgba(255,246,226,.3)'; c.fillRect(0, y, cw, 12);
+      const sh = c.createLinearGradient(0, y + hgt - 34, 0, y + hgt); sh.addColorStop(0, 'rgba(60,30,30,0)'); sh.addColorStop(1, 'rgba(60,30,30,.3)'); c.fillStyle = sh; c.fillRect(0, y + hgt - 34, cw, 34);
+      for (let i = 0; i < 160; i++) { c.fillStyle = i % 2 ? 'rgba(40,24,30,.13)' : 'rgba(255,240,220,.16)'; c.beginPath(); c.ellipse(Math.random()*cw, y + 16 + Math.random()*(hgt - 30), 8 + Math.random()*24, 3 + Math.random()*5, 0, 0, 7); c.fill(); }
+      if (col === shell) for (let i = 0; i < 70; i++) { const sx = Math.random()*cw, sy = y + 26 + Math.random()*(hgt - 48), r = 6 + Math.random()*4, a = (Math.random() - .5)*.8;
+        c.save(); c.translate(sx, sy); c.rotate(a); c.fillStyle = '#fbf4e4'; c.strokeStyle = 'rgba(120,90,64,.6)'; c.lineWidth = 1.8;
+        c.beginPath(); c.moveTo(0, r*.7); c.arc(0, 0, r, Math.PI*.95, Math.PI*.05); c.closePath(); c.fill(); c.stroke();
+        for (let k = -1; k <= 1; k++) { c.beginPath(); c.moveTo(0, r*.7); c.lineTo(k*r*.55, -r*.75); c.stroke(); } c.restore(); }
+      c.fillStyle = 'rgba(42,26,34,.85)'; c.fillRect(0, y + hgt - 7, cw, 7);
       y += hgt; }
   });
   strata.wrapS = strata.wrapT = THREE.RepeatWrapping;
@@ -311,10 +326,10 @@ function landMaterial(){
   m.onBeforeCompile = s => {
     Object.assign(s.uniforms, {strata:{value:strata}, gLo:{value:col(0x4f8a46)}, gHi:{value:col(0x76a554)}, gDry:{value:col(0x9aa860)}, gHigh:{value:col(0x5c7e62)},
       sand:{value:col(0xc9ae86)}, far:{value:col(0x6f8cb8)}, snow:{value:col(0xe4e8f0)}});
-    s.vertexShader = s.vertexShader.replace('#include <common>', '#include <common>\nattribute float tint; varying float vTint; varying vec3 vWp; varying vec3 vWn;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWp = (modelMatrix*vec4(transformed, 1.)).xyz; vWn = normalize(mat3(modelMatrix)*objectNormal); vTint = tint;');
+    s.vertexShader = s.vertexShader.replace('#include <common>', '#include <common>\nattribute float tint; attribute float cav; varying float vTint; varying float vCav; varying vec3 vWp; varying vec3 vWn;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWp = (modelMatrix*vec4(transformed, 1.)).xyz; vWn = normalize(mat3(modelMatrix)*objectNormal); vTint = tint; vCav = cav;');
     s.fragmentShader = s.fragmentShader.replace('#include <common>', `#include <common>
-      uniform sampler2D strata; uniform vec3 gLo, gHi, gDry, gHigh, sand, far, snow; varying float vTint; varying vec3 vWp; varying vec3 vWn;
+      uniform sampler2D strata; uniform vec3 gLo, gHi, gDry, gHigh, sand, far, snow; varying float vTint; varying float vCav; varying vec3 vWp; varying vec3 vWn;
       ${FOLD}`)
       .replace('#include <color_fragment>', `
       vec3 n = normalize(vWn); float steep = 1. - n.y;
@@ -325,8 +340,18 @@ function landMaterial(){
       float peb = sin(vWp.x*5.1 + sin(vWp.z*3.7)*2.)*sin(vWp.z*4.3 + sin(vWp.x*2.9)*2.);
       gr = mix(gr, sand*(.9 + .1*smoothstep(.4, .9, peb)), vTint);
       float b = vWp.y - fold(vWp);
-      vec3 rk = sRGBToLinear(texture2D(strata, vec2(fract((vWp.x + vWp.z)*.04), b/9.6))).rgb;
+      vec3 rk = sRGBToLinear(texture2D(strata, vec2(fract((vWp.x + vWp.z)*.1), b/9.6))).rgb;
+      // steep faces a shade darker and cooler than the tops, streaked and cracked by patterns of x and z
+      // alone, so every mark runs straight up and down the face
+      float face = smoothstep(.55, .95, steep);
+      float streak = sin(vWp.x*1.3 + 2.5*sin(vWp.z*.5))*sin(vWp.z*1.1 + 2.5*sin(vWp.x*.45));
+      float crack = (1. - smoothstep(.03, .1, abs(sin(vWp.x*.9 + vWp.z*.7 + 1.6*sin(vWp.x*.37 - vWp.z*.52)))))*smoothstep(-.2, .4, sin(vWp.y*.8 + vWp.x*.6 + vWp.z*.3));
+      rk *= mix(vec3(1.), vec3(.8, .75, .78)*(1. + .12*streak), face);
+      rk = mix(rk, vec3(.12, .07, .08), crack*face*.8);
       vec3 c = mix(gr, rk, smoothstep(.5, .58, steep + .03*mot));
+      // shade where a wall meets the floor, and a warm glint along each cliff's top edge
+      c *= 1. - .4*smoothstep(.1, 1.1, vCav);
+      c += vec3(.2, .12, .04)*smoothstep(.15, .9, -vCav)*(1. - .5*face);
       c = mix(c, far, smoothstep(45., 110., -vWp.z)*.6);
       c = mix(c, snow, smoothstep(31., 33., vWp.y + 3.*mot)*(1. - smoothstep(.55, .75, steep)*.7));
       diffuseColor.rgb *= c;`);
@@ -339,9 +364,15 @@ function grid(x0, x1, z0, z1, step, keep){
     pos[v*3] = x; pos[v*3 + 1] = H(x, z); pos[v*3 + 2] = z;
     const c = canyonAt(x, z), st = streamAt(x, z), dr = Math.abs(z - riverZ(x));
     tint[v] = Math.max(c ? (1 - sm(halfW(c.s) - 1.2, halfW(c.s) + .4, c.d))*sm(.1, .3, c.s) : 0, st ? 1 - sm(.7, 1.6, st.d) : 0, 1 - sm(3, 4.4, dr)); }
+  // how much higher the land a step or two round about is: up where a wall meets the floor (shade it),
+  // down along a cliff's top edge (catch the light on it)
+  const cav = new Float32Array(tint.length), r = Math.max(1, Math.round(1.5/step)), hy = v => pos[v*3 + 1];
+  for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) { let s = 0, n = 0;
+    for (const [di, dj] of [[r, 0], [-r, 0], [0, r], [0, -r], [r, r], [-r, -r], [r, -r], [-r, r]]) { const a = i + di, b = j + dj; if (a < 0 || b < 0 || a > nx || b > nz) continue; s += hy(b*(nx + 1) + a); n++; }
+    cav[j*(nx + 1) + i] = s/n - hy(j*(nx + 1) + i); }
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { if (keep && !keep(x0 + (i + .5)*step, z0 + (j + .5)*step)) continue;
     const a = j*(nx + 1) + i, b = a + nx + 1; idx.push(a, b, a + 1, a + 1, b, b + 1); }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('tint', new THREE.BufferAttribute(tint, 1));
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('tint', new THREE.BufferAttribute(tint, 1)); g.setAttribute('cav', new THREE.BufferAttribute(cav, 1));
   g.setIndex(idx); g.computeVertexNormals(); return g;
 }
 // a strip of water along a path, a little below the banks
@@ -377,6 +408,24 @@ function buildLand(w){
     for (const sd of [-1, 1]) if (frand() < .7) rocks(x - q.tz*hw*sd, z + q.tx*hw*sd, fr(.5, .9), 2); }
   for (let x = -28; x < 30; x += fr(3, 6)) { const z = -18 + 3*Math.sin(x*.2), d = canyonAt(x, z); if (d && d.d < halfW(d.s) + 4) continue; if (slope(x, z) < .9) rocks(x, z, fr(.6, 1.1), 2); }
   for (let z = -16; z < 16; z += fr(3, 5)) { rocks(29 + fr(-1, 1), z, fr(.6, 1.2), 2); rocks(-31 + fr(-1, 1), z, fr(.6, 1.2), 2); }
+  // scree banked against the foot of each canyon wall, bits broken off the layers above
+  for (let i = 4; i < CANYON.length; i += 2) { const [x, z] = CANYON[i], q = along(CANYON, x, z), s = i/(CANYON.length - 1), hw = halfW(s);
+    for (const sd of [-1, 1]) for (let k = 0; k < 3; k++) { if (frand() < .4) continue; const d = hw + fr(.2, .9), o = fr(-.6, .6), bx = x - q.tz*d*sd + q.tx*o, bz = z + q.tx*d*sd + q.tz*o, r = fr(.1, .24);
+      bAdd([0x9a7460, 0x8a6a5a, 0xa8846a][k], new THREE.DodecahedronGeometry(r, 0), XF(bx, H(bx, bz) + r*.2, bz, 1.1, fr(.5, .8), 1, fr(0, 6), fr(0, 6), 0), {ink:.02}); } }
+  // the hard layers, the shell limestone and a sandstone, stand out of the walls as ledges where the softer
+  // rock round them has worn back; each follows its layer's fold, so it lines up with the bands painted on the face
+  const foldAt = (x, z) => 3.4*Math.cos((x + 24)*.19)*(.65 + .35*Math.cos(z*.09)) + 1.1*Math.sin(x*.41 + z*.23);
+  for (const [b0, b1, col] of [[2.74, 3.79, 0xbcae96], [5.74, 7.31, 0xb07e50]]) for (let i = 3; i < CANYON.length - 1; i++) for (const sd of [-1, 1]) {
+    if (frand() < .55) continue;
+    const [cx, cz] = CANYON[i], q = along(CANYON, cx, cz), s = i/(CANYON.length - 1), nx = -q.tz*sd, nz = q.tx*sd, fl = floorY(s);
+    for (let k = -1; k < 3; k++) { const y = foldAt(cx, cz) + b1 - .02 + k*9.6, hb = b1 - b0;
+      if (y - hb < fl + 1.6) continue;
+      let d = halfW(s); while (H(cx + nx*d, cz + nz*d) < y - hb*.5 && d < halfW(s) + 8) d += .05;
+      // only where there's face above it, never perched on the rim
+      if (d >= halfW(s) + 8 || H(cx + nx*(d + 1.2), cz + nz*(d + 1.2)) < y + .8) continue;
+      const x = cx + nx*(d - .06), z = cz + nz*(d - .06), len = fr(1.6, 2.8), tilt = Math.atan((foldAt(x + q.tx*.5, z + q.tz*.5) - foldAt(x - q.tx*.5, z - q.tz*.5)));
+      if (Math.abs(tilt) > .4) continue;
+      bAdd(col, new THREE.DodecahedronGeometry(1, 0), XF(x, y - hb*.2, z, len*.5, hb*.22, .3, 0, Math.atan2(-q.tz, q.tx), tilt), {ink:.03, shadow:true}); } }
 
   // trees in clumps, round and inked like the ones at home
   const trees = [[20, -7], [23, -11], [25, -4], [19, -13], [26, -9], [-24, 6], [-21, 10], [-26, 12], [-18, 14], [24, 12], [27, 7], [21, 15], [-14, -4], [-3, -14], [17, -16]];
@@ -480,7 +529,7 @@ function buildCutaway(w){
   // interfaces bottom to top; the shell layer only exists in the basin between the two continents
   const basin = x => 1 - Math.min(1, Math.max(0, (Math.abs(x) - 1.8)/1.4));
   const tops = [x => -2.2, x => -1.3 - .3*basin(x), x => -.55 - .6*basin(x), x => .8 - 1.5*basin(x), x => .8 - 1.15*basin(x)];
-  const cols = [0x6a3e3a, 0xb0683e, 0xe0b47a, 0x8a5a48, 0x7a9ac4];
+  const cols = [0x6a3e3a, 0xb0683e, 0xe0b47a, 0x8a5a48, SHELL];
   const strip = (mat, z) => { const geo = new THREE.BufferGeometry(), idx = [];
     for (let i = 0; i < N; i++) { const a = i*2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((N + 1)*6), 3)); geo.setIndex(idx);
@@ -516,4 +565,164 @@ function buildCutaway(w){
   }
   step(0);
   return {step, shot: (pos, look) => { pos.set(CUT[0], CUT[1] + 1.8, CUT[2] + 11.5); look.set(CUT[0], CUT[1] + 1.2, CUT[2]); return true; }};
+}
+
+// ---------- things to find, for anyone who goes exploring ----------
+// Off the path, at the edges and up high: each one a curio with a little science, some with something to
+// do first. The valley's wildlife lives here too, with the finds it shares a home with.
+const LEDGE = [12, -25.7], LEDGE2 = [14.3, -26.4], BURROW = [-1.4, -19.4], FUZZ = [22.5, -22.6], CAVE = [32.6, -6.2], SKIP = [-5.4, 15.2];
+const GLACIER = [[-45, -26.2], [-41, -25.2], [-38, -24.4], [-35.6, -24]];
+function buildFinds(w, t){
+  const label = text => { const tx = tex(256, 80, (c, cw, ch) => { c.font = '52px Caprasimo, Georgia, serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 9; c.strokeStyle = 'rgba(26,19,32,.85)'; c.strokeText(text, cw/2, ch/2); c.fillStyle = '#fff4dc'; c.fillText(text, cw/2, ch/2); });
+    tx.wrapS = tx.wrapT = THREE.ClampToEdgeWrapping; const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:tx, transparent:true, depthWrite:false, opacity:0})); sp.scale.set(2.6, .8, 1); w.scene.add(sp); return sp; };
+  const life = [];
+
+  // an ammonite in the canyon wall, under a crust of dust, on the side away from the stream
+  const fos = (() => { const i = 40, s = i/(CANYON.length - 1), [cx, cz] = CANYON[i], q = along(CANYON, cx, cz), nx = q.tz, nz = -q.tx, fl = floorY(s);
+    let d = halfW(s); while (H(cx + nx*d, cz + nz*d) < fl + 2.5 && d < halfW(s) + 6) d += .05;
+    return {x:cx + nx*(d - .2), z:cz + nz*(d - .2), y:fl + 2.45, nx, nz, tx:q.tx, tz:q.tz, stand:[cx + nx*(halfW(s) - 1), cz + nz*(halfW(s) - 1)]}; })();
+  const spiral = tex(128, 128, (c, cw) => { c.fillStyle = '#d9c09a'; c.beginPath(); c.arc(64, 64, 62, 0, 7); c.fill(); c.strokeStyle = '#6a4a34'; c.lineWidth = 5; c.beginPath();
+    for (let a = 0; a < 6*Math.PI; a += .1) { const r = 3 + a*3.1; c.lineTo(64 + Math.cos(a)*r, 64 + Math.sin(a)*r); } c.stroke();
+    c.lineWidth = 2.5; for (let a = 2; a < 6*Math.PI; a += .45) { const r = 3 + a*3.1; c.beginPath(); c.moveTo(64 + Math.cos(a)*r, 64 + Math.sin(a)*r); c.lineTo(64 + Math.cos(a)*(r + 9), 64 + Math.sin(a)*(r + 9)); c.stroke(); }
+    c.strokeStyle = '#1a1320'; c.lineWidth = 6; c.beginPath(); c.arc(64, 64, 60, 0, 7); c.stroke(); });
+  const amm = new THREE.Group(); amm.position.set(fos.x, fos.y, fos.z); amm.lookAt(fos.x - fos.nx, fos.y + .25, fos.z - fos.nz); w.scene.add(amm);
+  add(new THREE.CircleGeometry(.34, 24), T(0xffffff, {map:spiral}), 0, 0, .02, amm, false);
+  const dust = add(new THREE.SphereGeometry(.4, 12, 8), new THREE.MeshToonMaterial({color:0xb98a5e, gradientMap:grad, transparent:true}), 0, 0, .02, amm, false); dust.scale.z = .25;
+  let brushed = -1;
+  life.push(dt => { if (brushed >= 0 && brushed < 1) { brushed = Math.min(1, brushed + dt/1.2); dust.material.opacity = 1 - brushed; dust.visible = brushed < 1; } });
+  curio(w, t, {name:'Curly stone', verb:'Brush off the dust', at:[fos.x, fos.z], y:fos.y + .4, lift:.1, view:[-fos.nx + fos.tx*.6, -fos.nz + fos.tz*.6],
+    lines:[['sparks', "{name}, look in the rock! A curly fossil, like a giant snail shell."],
+      ['sparks', "It's an ammonite. It swam in the sea, with arms like a squid poking out of its shell."],
+      ['pip', "A sea animal, inside a mountain? Like my shell!"],
+      ['sparks', "Ammonites lived for millions and millions of years, even in the time of the dinosaurs."],
+      ['sparks', "The rock at the very top of the tallest mountain on Earth was once sea floor, full of sea creatures!"]],
+    from:fos.stand, act: () => { brushed = 0; Sound.hiss({dur:1, vol:.06, type:'highpass', freq:2600}); }});
+
+  // the echo, at the canyon's head, where its walls are tallest
+  const E = CANYON[50], eq = along(CANYON, ...E), es = 50/(CANYON.length - 1), ey = floorY(es);
+  const echoes = [[E[0] + eq.tx*2, ey + 3, E[1] + eq.tz*2, 0, 1], [E[0] + eq.tz*(halfW(es) + 2) + eq.tx*6, ey + 4.2, E[1] - eq.tx*(halfW(es) + 2) + eq.tz*6, .7, .7],
+    [E[0] - eq.tz*(halfW(es) + 2) + eq.tx*7, ey + 4.6, E[1] + eq.tx*(halfW(es) + 2) + eq.tz*7, 1.3, .45], [E[0] + eq.tx*12, ey + 5.6, E[1] + eq.tz*12, 1.9, .25]]
+    .map(([x, y, z, at, a], i) => { const sp = label(i ? 'hello…' : 'HELLO!'); sp.position.set(x, y, z); sp.scale.multiplyScalar(i ? 1 : 1.2); return {sp, at, a}; });
+  let shout = -1;
+  life.push(dt => { if (shout < 0) return; shout += dt;
+    for (const {sp, at, a} of echoes) { const k = shout - at; sp.material.opacity = k < 0 || k > 2.4 ? 0 : a*Math.min(1, k*4)*Math.min(1, (2.4 - k)*1.5); sp.position.y += k > 0 && k < 2.4 ? dt*.25 : 0; }
+    if (shout > 5) shout = -1; });
+  curio(w, t, {name:'Big rock walls', verb:'Shout hello!', at:E, y:ey + 1.6, lift:2.4, view:[-eq.tx, -eq.tz],
+    lines:[['sparks', "Listen! Hello… hello… hello…"],
+      ['sparks', "Your voice bounced off the rock walls and came back to you. That's an echo!"],
+      ['sparks', "Sound is fast, but it takes a moment to get there and back. The farther the wall, the longer you wait."],
+      ['mo', "HELLO, MOUNTAINS! …They said it back!"]],
+    act: () => { shout = 0; [0, .7, 1.3, 1.9].forEach((d, i) => { Sound.tone(523, {t:d, dur:.22, vol:.07*(1 - i*.22), f2:659}); Sound.tone(392, {t:d + .14, dur:.3, vol:.06*(1 - i*.22)}); }); }});
+
+  // a glacier spilling down from the heights into the pool where the stream rises
+  const ice = [], blue = [];
+  const gc = new THREE.CatmullRomCurve3(GLACIER.map(([x, z]) => new THREE.Vector3(x, 0, z))).getSpacedPoints(26);
+  // only its snout shows, banked up against the foot of the wall; the rest lies up out of sight
+  const top = floorY(1);
+  gc.forEach((p, i) => { const u = i/(gc.length - 1), r = 1.9 - .8*u; if (H(p.x, p.z) > top + 3.5) return;
+    ice.push([new THREE.SphereGeometry(r, 16, 10), XF(p.x, top + .1, p.z, 1, .7, 1.1)]);
+    if (i % 3 === 1) blue.push([new THREE.BoxGeometry(r*1.2, .1, .1), XF(p.x, top + .1 + r*.7 - .03, p.z, 1, 1, 1, 0, .4 + Math.sin(i)*.3, 0)]); });
+  meshOf(mergeGeos(ice), 0xeaf4fa, w.scene, .04);
+  meshOf(mergeGeos(blue), 0x8ec4e2, w.scene);
+  const melt = GLACIER.at(-1);
+  const trickle = new THREE.Mesh(waterStrip([melt, [(melt[0] + POOL[0])/2, (melt[1] + POOL[1])/2 - .2], POOL], .35, (x, z) => H(x, z) + .14), T(0x63b8d6, {emissive:0x1a4a6a, emissiveIntensity:.25, side:THREE.DoubleSide}));
+  w.scene.add(trickle);
+  let frost = -1;
+  const twinkle = new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex, color:0xdff4ff, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0}));
+  twinkle.scale.set(1.6, 1.6, 1); twinkle.position.set(melt[0] - .6, H(...melt) + .9, melt[1]); w.scene.add(twinkle);
+  life.push((dt, tt) => { if (frost >= 0) { frost += dt; twinkle.material.opacity = Math.max(0, 1 - frost/1.6)*(.6 + .4*Math.sin(tt*20)); if (frost > 1.6) frost = -1; } });
+  curio(w, t, {name:'Ice', verb:'Touch the ice', at:[melt[0] - .4, melt[1]], y:H(...melt) + .9, lift:1, view:[1, .35],
+    lines:[['sparks', "Brr! Cold! That's a glacier, a giant river of ice."],
+      ['sparks', "It creeps downhill, slower than a snail. As it slides, it scrapes the rock underneath, like sandpaper."],
+      ['sparks', "Big glaciers carve out whole valleys, in a wide U shape."],
+      ['juniper', "And look, it's melting into the pool! That's where the stream begins."]],
+    from:[melt[0] + 1.3, melt[1] - .4], act: () => { frost = 0; Sound.tone(1568, {type:'triangle', dur:.25, vol:.04}); Sound.tone(2093, {type:'triangle', t:.1, dur:.35, vol:.035}); }});
+
+  // a mountain goat on a ledge of the cliff above the high shelf; once looked at, it hops along to another
+  const ledge = (x, z) => { const y = H(x, z) + .2; meshOf(new THREE.DodecahedronGeometry(.7, 0).scale(1.3, .45, 1), 0x9a8676, w.scene, .04).position.set(x, y - .25, z); return y; };
+  const gy1 = ledge(...LEDGE), gy2 = ledge(...LEDGE2);
+  const goat = mountainGoat(w.scene, LEDGE[0], gy1, LEDGE[1], .4); life.push((dt, tt) => goat.tick(dt, tt));
+  let hop = -1;
+  life.push(dt => { if (hop < 0 || hop >= 1) return; hop = Math.min(1, hop + dt/.9); const k = ease(hop);
+    goat.g.position.set(LEDGE[0] + (LEDGE2[0] - LEDGE[0])*k, gy1 + (gy2 - gy1)*k + Math.sin(hop*Math.PI)*1.2, LEDGE[1] + (LEDGE2[1] - LEDGE[1])*k); goat.g.rotation.y = .4 + (hop < 1 ? 1.2 : -2.2)*Math.sin(hop*Math.PI); });
+  curio(w, t, {name:'Something on the cliff', at:LEDGE, y:gy1 + 1.1, lift:.9, view:[.25, 1],
+    lines:[['sparks', "A mountain goat! Way up on that tiny ledge."],
+      ['sparks', "Its hooves have soft, grippy pads underneath, like the bottoms of sneakers. They cling to the rock."],
+      ['basil', "I'd never stand up there. Not for a million granola bars."],
+      ['mo', "A million? Let's not be hasty, Basil."]],
+    from:[LEDGE[0], LEDGE[1] + 2.4], post: () => { hop = 0; Sound.tone(330, {type:'sawtooth', dur:.35, vol:.03, f2:300, cut:900, vib:12}); }});
+
+  // a marmot up on the knoll, popping out of its burrow among the rocks to whistle a warning
+  const by = H(...BURROW);
+  for (const [dx, dz, r] of [[.9, -.5, .55], [-.7, -.7, .45], [-1, .2, .35]]) meshOf(new THREE.DodecahedronGeometry(r, 0), 0x8a7468, w.scene, .03).position.set(BURROW[0] + dx, H(BURROW[0] + dx, BURROW[1] + dz) + r*.3, BURROW[1] + dz);
+  add(new THREE.CircleGeometry(.28, 14), T(0x2a1e1a), BURROW[0], by + .03, BURROW[1], w.scene, false).rotation.x = -Math.PI/2;
+  const mar = marmot(w.scene, BURROW[0], by, BURROW[1], .6); mar.up = 0;
+  let seenMar = false, whistle = 0;
+  life.push((dt, tt) => { const d = Math.hypot(player.x - BURROW[0], player.z - BURROW[1]), want = d < 12 ? 1 : 0;
+    mar.up += (want - mar.up)*Math.min(1, dt*6);
+    // a few sharp whistles when it first spots someone coming
+    if (want && !seenMar) { seenMar = true; whistle = 2.4; [0, .5, 1.1].forEach(d => Sound.tone(2200, {t:d, dur:.14, vol:.04, f2:1900})); }
+    if (!want && d > 16) seenMar = false;
+    whistle = Math.max(0, whistle - dt); mar.tick(dt, tt, whistle > 0); });
+  curio(w, t, {name:'Whistle in the rocks', at:BURROW, y:by + .9, lift:.4, view:[.5, 1],
+    lines:[['sparks', "A marmot! That loud whistle means: 'Watch out, everybody!'"],
+      ['sparks', "Marmots dig burrows high up in the mountains. All winter long, they sleep, for six months or more!"],
+      ['mo', "Six months of napping? That's my kind of animal."]]});
+
+  // fuzzy edelweiss on the high shelf, small and low out of the wind
+  const fz = [], fc = [];
+  for (const [dx, dz] of [[0, 0], [.5, .3], [-.4, .4], [.2, -.5], [-.6, -.2], [.8, -.3]]) { const x = FUZZ[0] + dx, z = FUZZ[1] + dz, y = H(x, z) + .1;
+    for (let k = 0; k < 7; k++) { const a = k/7*Math.PI*2; fz.push([new THREE.SphereGeometry(.06, 6, 4), XF(x + Math.cos(a)*.07, y, z + Math.sin(a)*.07, 1.6, .5, .8, 0, -a, 0)]); }
+    fc.push([new THREE.SphereGeometry(.04, 6, 4), XF(x, y + .02, z)]); }
+  meshOf(mergeGeos(fz), 0xf6f2e8, w.scene, .012); meshOf(mergeGeos(fc), 0xe8d070, w.scene);
+  curio(w, t, {name:'Fuzzy flowers', verb:'Feel the fuzzy flowers', at:FUZZ, y:H(...FUZZ) + .6, lift:.1, view:[.2, 1],
+    lines:[['sparks', "Edelweiss! Feel how soft and fuzzy it is?"],
+      ['sparks', "Up high, it's cold and windy, and the sun is strong. The fuzz is like a woolly sweater for the flower."],
+      ['juniper', "Down in the meadow, flowers grow tall. Up here, they stay small and hug the ground, out of the wind!"]]});
+
+  // a crystal cave hidden in the eastern slope, behind the trees
+  const cy = H(...CAVE);
+  const mouth = add(new THREE.CircleGeometry(1.05, 20, 0, Math.PI), new THREE.MeshBasicMaterial({color:0x1e1426}), CAVE[0] + .25, cy - .1, CAVE[1], w.scene, false); mouth.rotation.y = -Math.PI/2;
+  for (let k = 0; k <= 6; k++) { const a = k/6*Math.PI, x = CAVE[0] + .05, z = CAVE[1] + Math.cos(a)*1.25, y = cy - .1 + Math.sin(a)*1.2;
+    meshOf(new THREE.DodecahedronGeometry(.42 + (k % 2)*.12, 0), 0x8a7468, w.scene, .035).position.set(x, Math.max(y, H(x, z) + .2), z); }
+  const glowMat = new THREE.MeshToonMaterial({color:0xb48ae8, gradientMap:grad, emissive:0x8a4ad8, emissiveIntensity:.25}), cr = [];
+  for (const [dz, h, lean] of [[0, .7, 0], [-.3, .5, .4], [.28, .55, -.35], [-.5, .35, .7], [.5, .4, -.7], [.12, .38, .2]]) {
+    cr.push([new THREE.CylinderGeometry(.08, .1, h, 6), XF(0, h/2, dz, 1, 1, 1, lean*.6, 0, .35)], [new THREE.ConeGeometry(.08, .16, 6), XF(0, h + .08, dz, 1, 1, 1, lean*.6, 0, .35)]); }
+  const crystals = meshOf(mergeGeos(cr), glowMat, w.scene, .015); crystals.position.set(CAVE[0] - .05, cy - .1, CAVE[1]); crystals.scale.setScalar(1.4);
+  let shine = -1;
+  life.push((dt, tt) => { if (shine >= 0) { shine = Math.min(1, shine + dt/1.5); } glowMat.emissiveIntensity = .25 + (shine > 0 ? shine*(.7 + .15*Math.sin(tt*3)) : 0); });
+  curio(w, t, {name:'Dark gap in the rocks', verb:'Peek inside', at:[CAVE[0] - .2, CAVE[1]], y:cy + .8, lift:.5, view:[-.7, 1],
+    lines:[['pip', "A secret cave! And it's full of purple crystals!"],
+      ['sparks', "That's amethyst, a kind of quartz. Long ago, water trickled into a crack here, carrying tiny bits of minerals."],
+      ['sparks', "Bit by bit, for thousands of years, those tiny bits stacked up into crystals."],
+      ['pip', "They all have six sides! Who made them so neat?"],
+      ['sparks', "Nobody! The tiny bits always stack up in the same pattern, all by themselves."]],
+    from:[CAVE[0] - 1.6, CAVE[1] - 1], act: () => { shine = 0; Sound.tone(1319, {type:'triangle', dur:.3, vol:.04}); Sound.tone(1760, {type:'triangle', t:.15, dur:.5, vol:.035}); }});
+
+  // flat stones by the river, for skipping
+  const stones = []; for (const [dx, dz] of [[.3, .4], [-.3, .5], [.1, .8]]) stones.push([new THREE.SphereGeometry(.12, 8, 5), XF(SKIP[0] + dx, H(SKIP[0] + dx, SKIP[1] + dz) + .03, SKIP[1] + dz, 1.3, .35, 1)]);
+  meshOf(mergeGeos(stones), 0x9a8e86, w.scene, .015);
+  const stone = sph(.1, T(0x8a7e78), 0, 0, 0, w.scene, 8); stone.scale.set(1.3, .35, 1); stone.visible = false;
+  const rings = []; for (let i = 0; i < 6; i++) { const r = add(new THREE.TorusGeometry(.3, .03, 4, 20), new THREE.MeshBasicMaterial({color:0xf4f8f6, transparent:true, opacity:0}), 0, RIVER_Y + .03, 0, w.scene, false); r.rotation.x = Math.PI/2; rings.push({r, age:9}); }
+  const BOUNCE = [0, 2.6, 4.6, 6.2, 7.4, 8.3, 8.9];
+  let skip = -1;
+  life.push(dt => {
+    for (const q of rings) { q.age += dt; q.r.scale.setScalar(1 + q.age*2.2); q.r.material.opacity = Math.max(0, .9 - q.age*.7); }
+    if (skip < 0) return; const prev = skip; skip += dt*2.6; const i = Math.floor(skip), f = skip - i;
+    if (i >= BOUNCE.length - 1) { stone.visible = false; skip = -1; return; }
+    if (Math.floor(prev) !== i && i > 0) { const q = rings[i - 1]; q.age = 0; q.r.position.x = SKIP[0] + BOUNCE[i]*.25; q.r.position.z = SKIP[1] + 2.5 + BOUNCE[i]; Sound.tone(900 + i*80, {type:'sine', dur:.08, vol:.04}); }
+    const z0 = BOUNCE[i], z1 = BOUNCE[i + 1], hgt = i ? .9/(i + 1) : 1.1, y0 = i ? RIVER_Y + .04 : H(...SKIP) + 1;
+    stone.position.set(SKIP[0] + (z0 + (z1 - z0)*f)*.25, y0 + (RIVER_Y + .04 - y0)*f + Math.sin(f*Math.PI)*hgt, SKIP[1] + 2.5 + z0 + (z1 - z0)*f); stone.rotation.y += dt*20; });
+  curio(w, t, {name:'Flat stones', verb:'Skip a stone', at:[SKIP[0] + 2.5, SKIP[1] + 3], y:H(...SKIP) + .5, lift:1.5, view:[.8, -.6],
+    lines:[['sparks', "Look at it go! A flat stone, thrown low and fast, bounces right off the water."],
+      ['sparks', "This river carries sand and mud from the mountains, all the way down to the sea."],
+      ['juniper', "And at the bottom of the sea, the mud piles up in layers. Like the stripes in the canyon!"],
+      ['sparks', "Yes! The layers turn to rock. And one day, crashing plates might crumple them into new mountains."]],
+    from:SKIP, act: () => { skip = 0; stone.visible = true; Sound.hiss({dur:.2, vol:.05, type:'highpass', freq:3000}); }});
+
+  // and life all about: a golden eagle wheeling over the canyon, swallows over the meadow, butterflies on the flowers
+  life.push(soarer(w.scene, -14, 24, -20, 16).tick, soarer(w.scene, 30, 34, -50, 22, {sp:-.11, s:2.2}).tick);
+  life.push(flock(w.scene, 2, 5, 6, 6).tick);
+  life.push(butterflies(w.scene, [[2, 8], [-14, 8], [8, -2], [18, 6], [-10, -6], [14, 12], [-2, 12], [24, -14], [-18, 2]], H).tick);
+  w.anims.push((dt, tt) => life.forEach(f => f(dt, tt)));
 }

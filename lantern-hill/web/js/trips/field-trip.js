@@ -26,6 +26,7 @@ import { game } from '../state.js';
 import { ask, endConvo, story } from '../ui/dialogue.js';
 import { $ } from '../ui/dom.js';
 import { pageTurn } from '../ui/page-turn.js';
+import { explorerCheck } from './quiz.js';
 import { heroHopIn, hopIn, spawnNPC } from './stop-kit.js';
 
 const objEl = $('obj'), leaveBtn = $('leaveTrip');
@@ -162,9 +163,9 @@ function run(from = 0){
   (async () => { for (const [, play] of trip.chapters.slice(from)) await play(me, shared); })()
     .then(() => { if (dir === me) returnHome(shared); }, e => { if (e !== GONE) throw e; });
 }
-function makeDirector(){
+function makeDirector({leave = true} = {}){
   let held = null;
-  const d = {gone:false, ends:[() => { if (held) held.parent.remove(held); held = null; }]};
+  const d = {gone:false, heard:new Set(), ends:[() => { if (held) held.parent.remove(held); held = null; }]};
   const live = p => p.then(v => { if (d.gone) throw GONE; return v; });
   const frames = test => live(new Promise(ok => { const f = () => d.gone || test() ? ok() : requestAnimationFrame(f); f(); }));
   Object.assign(d, {
@@ -180,24 +181,25 @@ function makeDirector(){
     play(w, spawn){
       if (game.world !== w) enterWorld(w, spawn || w.spawn);
       else if (spawn) { player.x = spawn[0]; player.z = spawn[1]; player.angle = spawn[2] ?? player.angle; }
-      game.cutscene = false; game.cutCam = null; hero.root.visible = true; blob.visible = true; leaveBtn.hidden = false;
+      game.cutscene = false; game.cutCam = null; hero.root.visible = true; blob.visible = true; leaveBtn.hidden = !leave;
     },
     say: lines => live(new Promise(ok => story(lines, ok))),
     // a question with answers to pick from; resolves with the index of the one picked
     // shown in a shuffled order, so the right answer isn't always first; resolves with its index as given
     ask: (who, text, answers) => { const order = answers.map((a, i) => i).sort(() => Math.random() - .5);
       return live(new Promise(ok => ask(who, text, order.map(i => answers[i]), j => ok(order[j])))); },
-    // an extra the explorer can ask for or skip, its two answers always in the same places; resolves true if asked for
-    more: (who, text) => live(new Promise(ok => ask(who, text, ["Tell me more!", "Let's keep going!"], i => ok(i === 0)))),
+    // an extra the explorer can ask for or skip, its two answers always in the same places; resolves true if asked for.
+    // What was asked for is kept in d.heard, for the Explorer Check.
+    more: (who, text) => live(new Promise(ok => ask(who, text, ["Tell me more!", "Let's keep going!"], i => { if (i === 0) d.heard.add(text); ok(i === 0); }))),
     wait: s => { const end = game.elapsed + s; return frames(() => game.elapsed >= end); },
     // f(k) every frame as k runs from 0 to 1 over s seconds of game time
     tween: (s, f) => { const t0 = game.elapsed; return frames(() => { const k = Math.min(1, (game.elapsed - t0)/s); f(k); return k >= 1; }); },
     until: test => frames(test),
     // in the middle of a scene, the explorer has control again, with `goal` to do, until p settles;
-    // resolves with its value
+    // resolves with its value. Meanwhile d.busy, so side finds step aside and leave the keys to the goal.
     free: async (p, goal) => { const was = objEl.hidden ? '' : objEl.textContent;
-      game.cutscene = false; game.cutCam = null; if (goal) objective(goal);
-      try { return await p; } finally { if (!d.gone) { game.cutscene = true; objective(was); } } },
+      game.cutscene = false; game.cutCam = null; if (goal) objective(goal); d.busy = true;
+      try { return await p; } finally { d.busy = false; if (!d.gone) { game.cutscene = true; objective(was); } } },
     // things in a place to press, each glowing where it is; resolves with the index of the one pressed,
     // once they're all taken away again
     use: (w, ...spots) => { let hit = -1;
@@ -216,6 +218,7 @@ function makeDirector(){
 }
 const endTrip = d => { if (d) d.ends.splice(0).forEach(f => f()); };
 function returnHome(shared){
+  if (trip.quiz) { const q = trip.quiz, had = (load('trips') || {})[q.pool] || []; save('trips', {[q.pool]: [...new Set([...had, ...q.found(shared, dir.heard)])]}); }
   endTrip(dir); dir = null;
   pageTurn(() => {
     Sound.setTheme('home'); away(false); enterWorld(HQ, [17.4, 2.4, -2.5]); hero.root.visible = false; blob.visible = false; leaveBtn.hidden = true; objective('');
@@ -223,7 +226,7 @@ function returnHome(shared){
     game.cutCam = (pos, look) => { pos.set(16.4, 4.4, 10.8); look.set(van.position.x, van.position.y + 1, van.position.z); };
     flyVan({mode:'land', t0:game.elapsed + .6, dur:3, done: () => {
       hero.root.visible = true; blob.visible = true; game.cutCam = null; game.cutscene = false;
-      story(trip.outro, () => { TRIP.on = false; showBadge(shared); });
+      story(trip.outro, () => { TRIP.on = false; showBadge(shared, trip.quiz && (() => offerCheck(trip, shared))); });
     }});
   }, null, ['The end of the trip', 'Home to Lantern Hill']);
 }
@@ -234,7 +237,8 @@ function leaveTrip(){
   pageTurn(() => { Sound.setTheme('home'); away(false); resetVan(); enterWorld(HQ, [16.2, 2.4, Math.PI]); hero.root.visible = true; blob.visible = true; leaveBtn.hidden = true; objective(''); }, null, ['', 'Back to Lantern Hill']);
 }
 leaveBtn.addEventListener('click', e => { e.stopPropagation(); leaveTrip(); });
-function showBadge(shared){
+function showBadge(shared, then){
+  afterBadge = then || null;
   const saved = load('trips'), done = saved && typeof saved === 'object' ? saved : {};
   done[trip.id] = true; save('trips', done);
   trip.badge.draw($('badgeCan'), shared); $('bTitle').textContent = trip.badge.title;
@@ -243,4 +247,34 @@ function showBadge(shared){
   [523, 659, 784, 1046, 1319].forEach((f, i) => Sound.tone(f, {type:'triangle', t:i*.1, dur:.45, vol:.09}));
   setTimeout(() => $('badgeOk').focus({preventScroll:true}), 80);
 }
-$('badgeOk').addEventListener('click', () => { $('badge').hidden = true; game.cutscene = false; Sound.next(); });
+let afterBadge = null;
+$('badgeOk').addEventListener('click', () => { $('badge').hidden = true; game.cutscene = false; Sound.next(); const f = afterBadge; afterBadge = null; if (f) f(); });
+
+// ---------- Dr. Sparks's Explorer Check, after a trip or any time from the bus ----------
+function offerCheck(t, shared){
+  ask('sparks', "Oh, {name}! Before you go… want to try my Explorer Check? It's up on a cloud!", ["Yes, let's go!", "Maybe later"],
+    i => i ? story([['sparks', "Any time! Just hop on the Wonder Bus and ask."]]) : startCheck(t, shared));
+}
+// shared: what the trip just played remembered, for its badge; none when started from the bus at HQ.
+// The questions come from what was found on every trip so far, so they're drawn the same way from either.
+export function startCheck(t, shared = null){
+  if (TRIP.on || game.cutscene) return;
+  trip = t; TRIP.on = true; Sound.setTheme('trip');
+  // the check's own way home is the Wonder Bus, parked on the cloud
+  const me = dir = makeDirector({leave:false});
+  pageTurn(() => { away(true); van.visible = false;
+    const qs = t.quiz.questions((load('trips') || {})[t.quiz.pool]);
+    explorerCheck(me, qs).then(stars => { if (dir === me) checkDone(t, shared, stars, qs.length); }, e => { if (e !== GONE) throw e; });
+  }, null, ['The Explorer Check', 'Up on a cloud']);
+}
+function checkDone(t, shared, stars, of){
+  const saved = load('trips') || {}, best = Math.max(saved[t.quiz.key] || 0, stars);
+  // a first perfect score shows the badge again, with its new ring of stars
+  const newly = stars === of && (saved[t.quiz.key] || 0) < of;
+  save('trips', {[t.quiz.key]: best});
+  endTrip(dir); dir = null;
+  pageTurn(() => { Sound.setTheme('home'); away(false); resetVan(); enterWorld(HQ, [17.4, 2.4, -2.5]); hero.root.visible = true; blob.visible = true; leaveBtn.hidden = true; objective(''); },
+    () => { TRIP.on = false; game.cutscene = false;
+      if (newly) story([['sparks', "Wait, {name}! Look at your badge. A perfect Explorer Check earns it a ring of stars!"]], () => showBadge(shared, null)); },
+    ['', 'Home to Lantern Hill']);
+}

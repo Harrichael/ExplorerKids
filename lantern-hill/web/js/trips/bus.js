@@ -4,6 +4,7 @@
 //   const bus = tripBus(w, {x, y, z, ry});          // parked
 //   bus.gear('drill');                              // or 'sub', 'bubble', null for plain
 //   await bus.fly([[x, y, z], ...], 4);             // along a smooth path, nose first
+//   await bus.fly(path, 3, {level:false});          // a steep path too: a dive points its nose down
 //   await bus.boarding(t);                          // until the explorer climbs back aboard
 //
 // The model faces +x, like the bus at HQ.
@@ -45,10 +46,10 @@ export function tripBus(w, at){
       const pts = [[-2.5, -1.05], [3.2, -1.05], [3.2, 1.05], [-2.5, 1.05]].map(([lx, lz]) => [x + lx*Math.cos(ry) + lz*Math.sin(ry), z - lx*Math.sin(ry) + lz*Math.cos(ry)]);
       solid({minX:Math.min(...pts.map(p => p[0])), maxX:Math.max(...pts.map(p => p[0])), minZ:Math.min(...pts.map(p => p[1])), maxZ:Math.max(...pts.map(p => p[1])), minY:y - 1, maxY:y + 3}); },
     // nose along the path, climbing and diving with it, banking into turns; resolves on arrival
-    fly(points, dur, {roll = 1, easing = ease} = {}){
+    fly(points, dur, {roll = 1, easing = ease, level = true} = {}){
       const curve = new THREE.CatmullRomCurve3(points.map(p => new THREE.Vector3(...p)), false, 'centripetal');
       solid(null);
-      return new Promise(done => { bus.flight = {curve, dur, t:0, roll, easing, done}; });
+      return new Promise(done => { bus.flight = {curve, dur, t:0, roll, easing, level, done}; });
     },
     // the door, on the bus's left side, in the place's coordinates
     door(out = 0){ const a = root.rotation.y, lx = 1.62, lz = -.97 - out; return [root.position.x + lx*Math.cos(a) + lz*Math.sin(a), root.position.z - lx*Math.sin(a) + lz*Math.cos(a)]; },
@@ -75,7 +76,7 @@ export function tripBus(w, at){
     // a path straight up or down has no heading of its own; keep the one it had
     if (Math.hypot(tan.x, tan.z) > .05) root.rotation.y = yaw;
     // straight up or down it rides level like a lift, with a little wobble, instead of standing on its tail
-    const lift = clamp01((Math.abs(tan.y) - .85)/.12), wob = Math.sin(f.t*7)*.035*lift;
+    const lift = f.level ? clamp01((Math.abs(tan.y) - .85)/.12) : 0, wob = Math.sin(f.t*7)*.035*lift;
     body.rotation.set(-Math.max(-.4, Math.min(.4, turn*6))*f.roll*(1 - lift) + wob, 0, Math.atan2(tan.y, Math.hypot(tan.x, tan.z))*(1 - lift) + wob*.6);
     body.position.y = 0;
     if (f.t >= f.dur) { bus.flight = null; body.rotation.x = 0; f.done(); }

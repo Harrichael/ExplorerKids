@@ -209,8 +209,11 @@ export async function pageTurn(mid, after, chapter){
   game.cutscene = true; await fonts();
   open(from, 0, shots[0].c, null, chapter ? {ch:chapter[0], title:chapter[1]} : null);
   const t = await pullBack();
-  if (mid) mid();
+  // a crash in mid() still finishes the turn, then shows as a page error, rather than leaving the book open for good
+  let crash = null;
+  if (mid) try { mid(); } catch (e) { crash = e; }
   await turnTo(t, tripChime);
+  if (crash) throw crash;
   if (chapter) showBanner(chapter[0], chapter[1]);
   if (after) after();
 }

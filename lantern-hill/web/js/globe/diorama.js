@@ -13,7 +13,7 @@ import { BIOMES } from '../earth/biomes.js';
 import { eatenBy, layout } from './food-web.js';
 
 const TOKEN = .24, ASPECT = 320/256, DISC = .6125*TOKEN*ASPECT, RIM = TOKEN*.42;
-const SPACE = .27, DEPTH = .42, ISLAND = .07;
+const SPACE = .27, DEPTH = .42, ISLAND = .07, LINE = 8, SUB = .27;
 const COL = {edge: 0xefe0bf, food: 0x8fd694, eater: 0xf2a65a, sun: 0xffd25a};
 const EMOJI = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 
@@ -29,16 +29,25 @@ function label(g, lines, y, size){
   g.lineJoin = 'round'; g.lineWidth = size*.28; g.strokeStyle = '#1a1320'; g.fillStyle = '#efe0bf';
   lines.forEach((t, i) => { g.strokeText(t, x, y + i*size*1.05); g.fillText(t, x, y + i*size*1.05); });
 }
-function tokenTex(s){
+// a living thing's token: its photo in a ring, green for a maker, and its name; the emoji stands in
+// until the photo comes, or if there isn't one
+function tokenTex(s, photo){
   const words = s.name.split(' '), half = Math.ceil(words.length/2);
   const lines = s.name.length > 11 && words.length > 1 ? [words.slice(0, half).join(' '), words.slice(half).join(' ')] : [s.name];
-  const t = tex(256, 320, g => {
-    g.fillStyle = '#1a1320'; g.beginPath(); g.arc(128, 124, 110, 0, 7); g.fill();
-    g.fillStyle = s.eats.length ? '#f6ecd6' : '#cfe6b8'; g.beginPath(); g.arc(128, 124, 100, 0, 7); g.fill();
-    g.font = `118px ${EMOJI}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(s.icon, 128, 134);
+  const paint = (g, im) => {
+    g.clearRect(0, 0, 256, 320);
+    g.fillStyle = '#1a1320'; g.beginPath(); g.arc(128, 124, 112, 0, 7); g.fill();
+    g.fillStyle = s.eats.length ? '#f2a65a' : '#8fd694'; g.beginPath(); g.arc(128, 124, 104, 0, 7); g.fill();
+    g.save(); g.beginPath(); g.arc(128, 124, 94, 0, 7); g.clip();
+    if (im) { const k = 188/Math.min(im.width, im.height); g.drawImage(im, 128 - im.width*k/2, 124 - im.height*k/2, im.width*k, im.height*k); }
+    else { g.fillStyle = '#f6ecd6'; g.fill(); g.font = `118px ${EMOJI}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(s.icon, 128, 134); }
+    g.restore();
     label(g, lines, lines.length > 1 ? 262 : 278, 36);
-  });
-  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; return t;
+  };
+  const t = tex(256, 320, g => paint(g, null));
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  if (photo) { const im = new Image(); im.onload = () => { paint(t.image.getContext('2d'), im); t.needsUpdate = true; }; im.src = photo; }
+  return t;
 }
 const BADGE = {guess: ['?', '#d9a441'], right: ['✓', '#3e9b54'], wrong: ['✗', '#c4473a'], missed: ['!', '#e0802e']};
 const badgeTex = {};
@@ -55,6 +64,15 @@ const sunTex = tex(128, 128, g => {
   g.beginPath(); g.arc(0, 0, 34, 0, 7); g.fill(); g.stroke();
 });
 sunTex.wrapS = sunTex.wrapT = THREE.ClampToEdgeWrapping;
+// where a vent web's energy comes from instead: a black chimney puffing hot water
+const ventTex = tex(128, 128, g => {
+  g.fillStyle = 'rgba(255,140,60,.35)'; g.beginPath(); g.arc(64, 60, 40, 0, 7); g.fill();
+  g.fillStyle = '#2b2230'; g.strokeStyle = '#1a1320'; g.lineWidth = 5;
+  g.beginPath(); g.moveTo(40, 122); g.lineTo(54, 50); g.lineTo(74, 50); g.lineTo(88, 122); g.closePath(); g.fill(); g.stroke();
+  g.fillStyle = '#ff8a3c'; g.fillRect(56, 46, 16, 7);
+  g.fillStyle = '#3d3440'; for (const [x, y, r] of [[64, 34, 12], [56, 20, 10], [72, 12, 9]]) { g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+});
+ventTex.wrapS = ventTex.wrapT = THREE.ClampToEdgeWrapping;
 
 // ---------- scenery: a few props that say which biome this is ----------
 const WOOD = T(C.woodLt), ROCK = T(0x8a8090), SNOW = T(0xf4f8fb), SAND = T(0xe3c486), POND = T(0x4a8ab8);
@@ -76,6 +94,8 @@ const PROP = {
     stem(g, .09, .03); outline(ball(g, .05, c, 0, .12, 0), 1.08).scale.y = .75; },
   berg: g => { outline(mesh(g, new THREE.ConeGeometry(.05, .07, 5), SNOW, 0, .02, 0), 1.08).scale.y = .8; },
   wave: g => { mesh(g, new THREE.SphereGeometry(.025, 8, 6), T(0xdff0f7), 0, .004, 0).scale.set(1.8, .3, .6); },
+  chimney: (g, c, r) => { const h = .1 + r()*.08; outline(mesh(g, new THREE.CylinderGeometry(.012, .028, h, 7), ROCK, 0, h/2, 0), 1.08); mesh(g, new THREE.SphereGeometry(.016, 8, 6), T(0x3d3440), 0, h + .012, 0); },
+  worms: g => { for (let i = 0; i < 5; i++) { const x = Math.cos(i*1.3)*.018, z = Math.sin(i*1.3)*.018, h = .04 + (i % 3)*.012; mesh(g, new THREE.CylinderGeometry(.004, .004, h, 5), T(0xf4f0e4), x, h/2, z); mesh(g, new THREE.SphereGeometry(.007, 6, 5), T(0xd0342c), x, h, z); } },
   coral: (g, c, r) => { for (let i = 0; i < 3; i++) { const b = mesh(g, new THREE.CylinderGeometry(.006, .01, .05 + r()*.03, 5), T(c), (i - 1)*.012, .03, 0); b.rotation.z = (i - 1)*.4; ball(g, .012, c, (i - 1)*.022, .06, 0); } },
 };
 const CORALS = [0xf27a8a, 0xf2a65a, 0xb07ad8, 0xf2d25a];
@@ -98,6 +118,7 @@ const SCENERY = {
   ocean: [['wave', 10]],
   reef: [['coral', 14]],
   'polar-sea': [['berg', 7]],
+  vent: [['chimney', 6], ['worms', 8], ['rock', 4]],
 };
 function mesh(g, geo, mat, x, y, z){ const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; g.add(m); return m; }
 const ball = (g, r, c, x, y, z) => mesh(g, new THREE.SphereGeometry(r, 12, 9), T(c), x, y, z);
@@ -105,13 +126,20 @@ const cone = (g, r, h, c, y) => mesh(g, new THREE.ConeGeometry(r, h, 8), T(c), 0
 const stem = (g, h, y = h/2) => mesh(g, new THREE.CylinderGeometry(.009, .013, h, 6), WOOD, 0, y, 0);
 
 // ---------- building one ----------
-export function showDiorama(parent, at, web, biomeId, fit, facing){
+export function showDiorama(parent, at, web, biomeId, fit, facing, photoOf){
   if (D) hideDiorama();
-  const biome = BIOMES[biomeId], ground = new THREE.Color(biome.color).getHex();
+  // a vent's floor is the dark sea bed, whatever colour marks it on the map
+  const biome = BIOMES[biomeId], ground = new THREE.Color(biome.chemicals ? '#3b3340' : biome.color).getHex();
   const root = new THREE.Group(); root.position.copy(at); root.rotation.y = facing; root.scale.setScalar(.001); parent.add(root);
-  const {rows, x} = layout(web.species), n = rows.length;
-  const wide = Math.max(...rows.map(r => r.length*SPACE + .06));
-  const front = ((n - 1)*DEPTH + .24)/2, back = front - (n - 1)*DEPTH - .2;
+  // a row wider than LINE wraps onto staggered lines just behind it, so a big web stays round enough
+  // that its tokens can be read
+  const lines = []; let z = 0;
+  layout(web.species).rows.forEach((r, k) => {
+    if (k) z -= DEPTH - SUB;
+    for (let i = 0; i < r.length; i += LINE, z -= SUB) lines.push({who: r.slice(i, i + LINE), z, shift: (i/LINE) % 2 ? SPACE/2 : 0});
+  });
+  const span = -lines[lines.length - 1].z, wide = Math.max(...lines.map(l => l.who.length*SPACE + l.shift + .06));
+  const front = (span + .24)/2, back = front - span - .2;
   const R = Math.max(Math.hypot(wide/2, Math.max(front, -back)) + .06, .5);
 
   const island = new THREE.Group(); root.add(island);
@@ -122,17 +150,17 @@ export function showDiorama(parent, at, web, biomeId, fit, facing){
 
   // the animals
   const tokens = new Map();
-  rows.forEach((r, k) => r.forEach(s => {
-    const map = tokenTex(s), mat = new THREE.SpriteMaterial({map, transparent: true, alphaTest: .1}); disposables.push(map, mat);
+  lines.forEach(l => l.who.forEach((s, i) => {
+    const map = tokenTex(s, photoOf(s.name)), mat = new THREE.SpriteMaterial({map, transparent: true, alphaTest: .1}); disposables.push(map, mat);
     const sp = new THREE.Sprite(mat); sp.center.set(.5, 0); sp.scale.set(TOKEN, TOKEN*ASPECT, 1); sp.userData.name = s.name;
-    const home = new THREE.Vector3(x.get(s.name)*SPACE, ISLAND + .012, front - k*DEPTH);
+    const home = new THREE.Vector3((i - (l.who.length - 1)/2)*SPACE + l.shift, ISLAND + .012, front + l.z);
     sp.position.copy(home); sp.visible = false; root.add(sp);
     const badge = new THREE.Sprite(new THREE.SpriteMaterial({transparent: true, depthTest: false})); badge.scale.setScalar(.06); badge.visible = false; badge.renderOrder = 3; root.add(badge); disposables.push(badge.material);
     tokens.set(s.name, {s, sp, home, badge, disc: home.clone().setY(home.y + DISC), shown: false, size: 0, want: 0, fade: 1, wantFade: 1, shake: 0, ph: Math.random()*6, copies: []});
   }));
 
-  // the sun, and every arrow; each grows in when asked
-  const sun = new THREE.Sprite(new THREE.SpriteMaterial({map: sunTex, transparent: true})); disposables.push(sun.material);
+  // the sun (or a vent, for a web whose makers live on its chemicals), and every arrow; each grows in when asked
+  const sun = new THREE.Sprite(new THREE.SpriteMaterial({map: biome.chemicals ? ventTex : sunTex, transparent: true})); disposables.push(sun.material);
   // low and off to the right (the row names are on the left), so its light reaches the plants without crossing the animals
   sun.scale.setScalar(.2); sun.position.set(R*.9, ISLAND + .24, front + .02); root.add(sun);
   const edges = [];
@@ -140,10 +168,11 @@ export function showDiorama(parent, at, web, biomeId, fit, facing){
     const to = tokens.get(s.name).disc;
     if (!s.eats.length) edges.push(arrow(root, sun.position, to, 'Sun', s.name, disposables, .1));
     for (const f of s.eats) edges.push(arrow(root, tokens.get(f).disc, to, f, s.name, disposables, RIM));
+    for (const f of s.sometimes) edges.push(Object.assign(arrow(root, tokens.get(f).disc, to, f, s.name, disposables, RIM, .003), {sometimes: true}));
   }
   // the camera frames the animals and their steps; the island's rim can fall off the edge
   const scale = Math.min(1, fit/R);
-  D = {root, web, tokens, edges, sun, disposables, grow: 0, t: 0, sparks: [], sel: null, scale, at: at.clone(), radius: Math.max(wide/2 + .14, (front - back)/2 + .12)*scale, top: (ISLAND + .3)*scale};
+  D = {root, web, tokens, edges, sun, spins: !biome.chemicals, disposables, grow: 0, t: 0, sparks: [], sel: null, scale, at: at.clone(), radius: Math.max(wide/2 + .14, (front - back)/2 + .12)*scale, top: (ISLAND + .3)*scale};
 }
 
 function scenery(g, biomeId, R, w, front, back, r){
@@ -158,7 +187,7 @@ function scenery(g, biomeId, R, w, front, back, r){
   }
 }
 
-function arrow(root, a, b, food, eater, disposables, startGap){
+function arrow(root, a, b, food, eater, disposables, startGap, thick = food === 'Sun' ? .004 : .0055){
   // the longer the jump, the higher the arc, so arrows that skip a row pass over it
   const mid = a.clone().add(b).multiplyScalar(.5); mid.y += .04 + a.distanceTo(b)*.18; mid.z += .07;
   const bez = new THREE.QuadraticBezierCurve3(a.clone(), mid, b.clone());
@@ -168,7 +197,7 @@ function arrow(root, a, b, food, eater, disposables, startGap){
   while (t1 > .55 && bez.getPoint(t1).distanceTo(b) < RIM + .012) t1 -= .01;
   const pts = []; for (let i = 0; i <= 16; i++) pts.push(bez.getPoint(t0 + (t1 - t0)*i/16));
   const curve = new THREE.CatmullRomCurve3(pts), mat = new THREE.MeshBasicMaterial({color: food === 'Sun' ? COL.sun : COL.edge, transparent: true, opacity: .8, depthWrite: false});
-  const geo = new THREE.TubeGeometry(curve, 24, food === 'Sun' ? .004 : .0055, 5); geo.setDrawRange(0, 0);
+  const geo = new THREE.TubeGeometry(curve, 24, thick, 5); geo.setDrawRange(0, 0);
   const tube = new THREE.Mesh(geo, mat); root.add(tube);
   const head = new THREE.Mesh(new THREE.ConeGeometry(.016, .036, 8), mat); head.visible = false;
   const end = curve.getPoint(1), dir = curve.getTangent(1);
@@ -280,13 +309,13 @@ export function updateDiorama(dt){
     e.tube.geometry.setDrawRange(0, Math.ceil(e.p*24)*5*6);
     e.head.visible = e.p >= 1;
     const color = e.kind === 'food' ? COL.food : e.kind === 'eater' ? COL.eater : e.food === 'Sun' ? COL.sun : COL.edge;
-    e.mat.color.setHex(color); e.mat.opacity = e.kind === 'dim' ? .07 : e.kind ? 1 : .75;
+    e.mat.color.setHex(color); e.mat.opacity = (e.kind === 'dim' ? .07 : e.kind ? 1 : .75)*(e.sometimes ? .55 : 1);
     for (const d of e.dots) {
       d.visible = e.p >= 1 && e.kind !== 'dim';
       if (d.visible) { d.position.copy(e.curve.getPointAt((D.t*.45 + d.userData.o) % 1)); d.material.color.setHex(e.kind ? color : e.food === 'Sun' ? 0xffe9a0 : 0xffd98a); }
     }
   }
-  D.sun.material.rotation = D.t*.3;
+  if (D.spins) D.sun.material.rotation = D.t*.3;
   D.sparks = D.sparks.filter(p => {
     p.life -= dt; p.s.position.addScaledVector(p.v, dt); p.v.y -= dt*.6; p.s.material.opacity = Math.max(0, p.life/.7);
     if (p.life > 0) return true; D.root.remove(p.s); p.s.material.dispose(); return false;

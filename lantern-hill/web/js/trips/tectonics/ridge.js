@@ -7,16 +7,16 @@
 import * as THREE from 'three';
 import { T, XF, add, bAdd, bFlush, cyl, ease, fr, glowM, glowTex, grad, grp, mergeGeos, meshOf, outline, sph, tex } from '../../core/kit.js';
 import { Sound } from '../../core/sound.js';
-import { addUsable, inWorld } from '../../core/world.js';
+import { inWorld } from '../../core/world.js';
 import { hero, player } from '../../player.js';
 import { game } from '../../state.js';
 import { tripBus } from '../bus.js';
 import { classmates } from '../class.js';
 import { goggles } from '../goggles.js';
-import { puffTex, puffs, tripWorld } from '../stop-kit.js';
+import { curio as kitCurio, puffTex, puffs, tripWorld } from '../stop-kit.js';
 import { anglerfish, atolla, ghostOctopus, glowJelly, seaPig, whaleFall, yetiCrab } from './deep-life.js';
 import { PAD, buildRift, crackX, ground, ledgeX, onLedge, walkable, wallAt } from './rift.js';
-import { worries } from './worries.js';
+import { wonders } from './wonders.js';
 
 // the plates' bands of rock run the valley's length beside the crack, each edge wavering a little
 const BAND = 1.35, BANDS = 8, SPREAD = 2.4, Z0 = -25, Z1 = 18, ROWS = 72;
@@ -130,9 +130,9 @@ export function buildRidge(t){
   });
 
   // ---------- the water: marine snow, hot shimmer, bubbles, and specks that glow ----------
-  const cloud = (n, size, col, map = glowTex) => { const pos = new Float32Array(n*3), cols = new Float32Array(n*3), geo = new THREE.BufferGeometry();
+  const cloud = (n, size, col, map = glowTex, blending = THREE.AdditiveBlending) => { const pos = new Float32Array(n*3), cols = new Float32Array(n*3), geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
-    const pts = new THREE.Points(geo, new THREE.PointsMaterial({size, map, vertexColors:true, color:col, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending}));
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({size, map, vertexColors:true, color:col, transparent:true, depthWrite:false, blending}));
     pts.frustumCulled = false; w.scene.add(pts); return {pos, cols, geo, pts, n}; };
   // marine snow: specks of dust drifting down through the light
   const N = 600, snow = cloud(N, .12, 0xe0f0ff), sp = snow.pos;
@@ -152,6 +152,23 @@ export function buildRidge(t){
   const burst = (x, z, n, y) => { for (let i = 0; i < n; i++) bubble(x, z, y); };
   const glints = cloud(90, .22, 0xffffff), gph = [];
   for (let i = 0; i < glints.n; i++) { glints.pos.set([(Math.random() - .5)*46, .6 + Math.random()*6, -24 + Math.random()*40], i*3); gph.push([Math.random()*20, .4 + Math.random()*.8]); }
+  // the murk the sub comes up into: black mineral smoke and pale hot shimmer filling the whole valley, till
+  // the bus's fan swirls it out along a curve, away from the bus, to the cliffs, where some hangs on as haze
+  const MC = [crackX(-3.5), -3.5], EX = 15.5, EZ = 24, murk = [];
+  const smokeC = cloud(380, 4.4, 0xffffff, puffTex, THREE.NormalBlending), hazeC = cloud(200, 6, 0xffffff, puffTex, THREE.NormalBlending);
+  // the pale shimmer skips the fog, so its puffs read as they swirl off, and as haze far out by the cliffs
+  smokeC.pts.material.opacity = .82; hazeC.pts.material.fog = false;
+  for (const [c, dark] of [[smokeC, true], [hazeC, false]]) for (let i = 0; i < c.n; i++) {
+    const a = fr(0, 7), q = Math.sqrt(Math.random()), x = MC[0] + Math.cos(a)*q*EX, z = MC[1] + Math.sin(a)*q*EZ, dx = x - PAD[0], dz = z - PAD[1], d = Math.hypot(dx, dz) || 1;
+    // out along the line from the bus until well past the valley's oval
+    let s = d; const out = fr(1.08, 1.35); while (((PAD[0] + dx/d*s - MC[0])/EX)**2 + ((PAD[1] + dz/d*s - MC[1])/EZ)**2 < out*out) s += .5;
+    const g = dark ? fr(.04, .11) : fr(.5, .68); c.cols.set(dark ? [g, g*.88, g*.85] : [g*1.15, g, g*.78], i*3);
+    murk.push({c, o:i*3, x, z, tx:PAD[0] + dx/d*s, tz:PAD[1] + dz/d*s, nx:-dz/d, nz:dx/d, swing:fr(.25, .45)*(s - d), y:fr(.3, dark ? 5.5 : 7.5), d, ph:fr(0, 6)}); }
+  // 0 murky, 1 blown clear; the water stays a touch hazier than before, so the far cliffs fade softly
+  let clear = 0;
+  const fog = w.scene.fog, CLEAR = new THREE.Color(0x0c2036), MURK = new THREE.Color(0x3c352d);
+  const murky = k => { fog.color.copy(CLEAR).lerp(MURK, k); w.scene.background.copy(fog.color); fog.near = 9 - 8*k; fog.far = 34 - 18*k; };
+  murky(1);
 
   const bus = tripBus(w); bus.gear('sub');
   // headlights, for the dark down here
@@ -223,6 +240,10 @@ export function buildRidge(t){
     bub.geo.attributes.position.needsUpdate = bub.geo.attributes.color.needsUpdate = true;
     gph.forEach(([ph, r], i) => { const f = Math.pow(Math.max(0, Math.sin(tt*r + ph)), 6); glints.cols.set([f*.3, f*.9, f], i*3); });
     glints.geo.attributes.color.needsUpdate = true;
+    // nearest the bus goes first; each puff bows sideways on its way out, so the whole murk turns as it goes
+    for (const m of murk) { const u = ease(Math.min(1, Math.max(0, clear*1.9 - m.d/34*.9))), b = Math.sin(Math.PI*u)*m.swing, p = m.c.pos, o = m.o;
+      p[o] = m.x + (m.tx - m.x)*u + m.nx*b + Math.sin(tt*.21 + m.ph)*.6; p[o + 1] = m.y + Math.sin(tt*.37 + m.ph)*.35 + u*2.2; p[o + 2] = m.z + (m.tz - m.z)*u + m.nz*b + Math.cos(tt*.17 + m.ph)*.6; }
+    smokeC.geo.attributes.position.needsUpdate = hazeC.geo.attributes.position.needsUpdate = true; hazeC.pts.material.opacity = .42 - .26*clear;
     if (fan.visible) { blades.rotation.z += dt*(fanOn ? 16 : .5); }
     if (fanOn) { fanHead.getWorldPosition(fanFrom);
       gusts.forEach((g, i) => { g.k += dt*.45; if (g.k > 1) g.k -= 1; const o = i*3;
@@ -258,7 +279,7 @@ export function buildRidge(t){
   // ---------- what the class finds ----------
   const say = t.say;
   let goggled = false;
-  cls.find('juniper', {name:'pillow', at:[PILLOW[0] + .8, PILLOW[1] + 1.1, -2.5], pose:'crouch', call:"Come feel these lumpy rocks!", after:["Brand-new sea floor. Fresh from the crack!"],
+  cls.find('juniper', {name:'pillow', when: () => clear >= 1, at:[PILLOW[0] + .8, PILLOW[1] + 1.1, -2.5], pose:'crouch', call:"Come feel these lumpy rocks!", after:["Brand-new sea floor. Fresh from the crack!"],
     async scene(){
       pillowGlow.emissiveIntensity = .6;
       await say([['juniper', "Touch this lumpy rock, {name}. It's still a tiny bit warm!"]]);
@@ -267,7 +288,7 @@ export function buildRidge(t){
                  ['juniper', "The cold water cooled it into new rock. Brand-new sea floor!"]]);
       pillowGlow.emissiveIntensity = .25;
     }});
-  cls.find('mo', {name:'pebble', at:[MO[0], MO[1], 0], pose:'still', call:"{name}! Look at my feet!", after:["My legs still feel a million years old."],
+  cls.find('mo', {name:'pebble', when: () => clear >= 1, at:[MO[0], MO[1], 0], pose:'still', call:"{name}! Look at my feet!", after:["My legs still feel a million years old."],
     async scene(){
       await say([['mo', "Look! One foot on each side of the crack."], ['mo', "Each foot's on a different plate!"],
                  ['mo', "Here's a pebble. Drop it right by the crack, {name}."]]);
@@ -294,46 +315,53 @@ export function buildRidge(t){
       await say([['mo', pick === 0 ? "You were right! New rock carried your pebble away from the crack." : "Whoa! New rock carried your pebble away from the crack."],
                  ['mo', "And my feet slid apart too! Whoa, what a stretch!"],
                  ['sparks', "The plates pull apart. Hot rock fills the gap and makes new sea floor."],
-                 ['basil', "The crack didn't swallow the pebble. It carried it away!"]]);
-      const line = worries(2);
+                 ['basil', "So that's what happens at a crack in the sea floor! New rock comes up and carries things away."]]);
+      const line = wonders(2);
       const s0 = splits; await t.tween(.6, k => { splits = s0*(1 - k); });
       await say([['basil', line]]);
       goggled = true;
     }});
-  // the mouth is lost in hot shimmer until the bus's fan blows it clear, and then the magma shows
+  // the first thing the bus does here is blow the murk away: magic, but only to show what's really there,
+  // so everyone who comes sees the magma well up
   const switchAt = (() => { const a = BUS_RY, lx = -2, lz = -1.75; return [BUS[0] + lx*Math.cos(a) + lz*Math.sin(a), BUS[1] - lx*Math.sin(a) + lz*Math.cos(a)]; })();
-  cls.find('pip', {name:'shimmer', at:[MOUTH[0] + 2.6, MOUTH[1] + .6, -Math.PI/2], call:"I can't see into the crack!", after:["Magma comes up, lava cools. New sea floor!"],
-    async scene(){
-      const side = (pos, look) => { pos.set(MOUTH[0] - 3.6, 2.2, MOUTH[1] + 3.8); look.set(MOUTH[0] + .4, .5, MOUTH[1]); };
-      t.cut(side);
-      await say([['pip', "{name}, something's glowing down in this crack. But it's all steamy!"],
-                 ['sparks', "It's really super-hot water, shimmering up from under the crack."],
-                 ['sparks', "Way down here, the water's squeezed so hard it can't even boil!"],
-                 ['pip', "I still can't see a thing. Hey! Doesn't the Wonder Bus have a fan?"]]);
-      // up it pops from the roof, turned to the crack
-      fan.visible = true; bus.root.updateMatrixWorld(true); fanHead.lookAt(fanTo);
-      t.cut((pos, look) => { pos.set(BUS[0] - 5, 4.2, BUS[1] + 6.5); look.set(BUS[0], 2.4, BUS[1]); });
-      Sound.tone(392, {type:'triangle', dur:.12, vol:.07, f2:784});
-      await t.tween(.5, k => { fan.scale.setScalar(.001 + k*(1.15 - .15*k)); });
-      await say([['pip', "There it is! Go switch it on, {name}!"]]);
-      await t.free(t.use(w, {name:'Bus fan', x:switchAt[0], z:switchAt[1], y:ground(...switchAt), verb:'Switch on the fan', short:'Fan', glow:[switchAt[0], ground(...switchAt) + 1.3, switchAt[1]]}), 'Switch on the bus’s fan');
-      fanOn = true; wind.pts.visible = true;
-      Sound.hiss({dur:3, vol:.1, type:'bandpass', freq:600, f2:1400, q:.6}); Sound.tone(140, {type:'sawtooth', dur:1.2, vol:.04, f2:320, cut:700});
-      t.cut(side);
-      await t.tween(2.2, k => { thick = 1 - ease(k); });
-      // with the water clear, the magma bulges up, glows as lava in the cold sea, and crusts over
-      Sound.tone(90, {type:'sawtooth', dur:2, vol:.06, f2:60, cut:400});
-      await t.tween(2.2, k => pose(big, k*.2));
-      await say([['pip', "Whoa! Glowing melted rock, pushing up out of the crack!"],
-                 ['sparks', "Hot rock rises up from the mantle, and a little of it melts. Underground, that's magma."],
-                 ['juniper', "And once it comes out here on the sea floor, it's called lava. Remember?"]]);
-      const pick = await t.ask('pip', "What happens when hot lava touches the icy water?", ["It cools into black rock", "It stays runny forever", "It turns into sand"]);
-      await t.tween(2.4, k => pose(big, .2 + k*.42));
-      await say([['pip', pick === 0 ? "Yes! Its skin cools fast, into a lumpy black pillow." : "Look! Its skin cools fast, into a lumpy black pillow."],
-                 ['pip', "That's brand-new sea floor, being made right now!"]]);
-      big.t = .62*big.period; big.auto = true;
-      t.cut(null);
-    }});
+  async function blowClear(){
+    await say([['pip', "{name}, I can't see into the crack! Something's glowing down there, but it's all steamy!"],
+               ['sparks', "It's really super-hot water, shimmering up from under the crack."],
+               ['sparks', "Way down here, the water's squeezed so hard it can't even boil!"],
+               ['juniper', "Why does everything look so wobbly?"],
+               ['sparks', "Hot water bends light a little differently from cold water. So it shimmers, like air over a hot road."],
+               ['basil', "And what's all that black smoke?"],
+               ['sparks', "The hot water soaks minerals out of the rock deep down, the way tea soaks up sugar."],
+               ['sparks', "When it hits the icy sea, the minerals turn into tiny black specks. That's the smoke!"],
+               ['pip', "I still can't see a thing. Hey! Doesn't the Wonder Bus have a fan?"]]);
+    // up it pops from the roof, turned to the crack
+    fan.visible = true; bus.root.updateMatrixWorld(true); fanHead.lookAt(fanTo);
+    t.cut((pos, look) => { pos.set(BUS[0] - 5, 4.2, BUS[1] + 6.5); look.set(BUS[0], 2.4, BUS[1]); });
+    Sound.tone(392, {type:'triangle', dur:.12, vol:.07, f2:784});
+    await t.tween(.5, k => { fan.scale.setScalar(.001 + k*(1.15 - .15*k)); });
+    await say([['sparks', "It does! That water's far too hot to swim into. But we can blow it aside, and peek at what's really underneath."],
+               ['pip', "There it is! Go switch it on, {name}!"]]);
+    await t.free(t.use(w, {name:'Bus fan', x:switchAt[0], z:switchAt[1], y:ground(...switchAt), verb:'Switch on the fan', short:'Fan', glow:[switchAt[0], ground(...switchAt) + 1.3, switchAt[1]]}), 'Switch on the bus’s fan');
+    fanOn = true; wind.pts.visible = true;
+    Sound.hiss({dur:4, vol:.1, type:'bandpass', freq:600, f2:1400, q:.6}); Sound.tone(140, {type:'sawtooth', dur:1.2, vol:.04, f2:320, cut:700});
+    // high over the bus, to watch the murk swirl off down the valley
+    t.cut((pos, look) => { pos.set(BUS[0] + 4.5, 8.5, BUS[1] + 9); look.set(MOUTH[0] - 1, .5, MOUTH[1] - 6); });
+    await t.tween(5, k => { clear = k; murky(1 - ease(Math.max(0, k*1.6 - .6))); thick = 1 - ease(Math.min(1, k*1.3)); });
+    const side = (pos, look) => { pos.set(MOUTH[0] - 3.6, 2.2, MOUTH[1] + 3.8); look.set(MOUTH[0] + .4, .5, MOUTH[1]); };
+    t.cut(side);
+    // with the water clear, the magma bulges up, glows as lava in the cold sea, and crusts over
+    Sound.tone(90, {type:'sawtooth', dur:2, vol:.06, f2:60, cut:400});
+    await t.tween(2.2, k => pose(big, k*.2));
+    await say([['pip', "Whoa! Glowing melted rock, pushing up out of the crack!"],
+               ['sparks', "Hot rock rises up from the mantle, and a little of it melts. Underground, that's magma."],
+               ['juniper', "And once it comes out here on the sea floor, it's called lava. Remember?"]]);
+    const pick = await t.ask('pip', "What happens when hot lava touches the icy water?", ["It cools into black rock", "It stays runny forever", "It turns into sand"]);
+    await t.tween(2.4, k => pose(big, .2 + k*.42));
+    await say([['pip', pick === 0 ? "Yes! Its skin cools fast, into a lumpy black pillow." : "Look! Its skin cools fast, into a lumpy black pillow."],
+               ['pip', "That's brand-new sea floor, being made right now!"], ['pip', "Magma comes up, lava cools. New sea floor!"]]);
+    big.t = .62*big.period; big.auto = true;
+    t.cut(null);
+  }
   cls.find('pip', {name:'stripes', at:[crackX(-3.4) + 2.6, -3.4, -Math.PI/2], when: () => goggled, call:"Come look at the stripes!", after:["Newest by the crack, oldest far away. Like rings in a tree!"],
     async scene(){
       const pip = cls.n.pip, cx = crackX(-3.4);
@@ -358,37 +386,27 @@ export function buildRidge(t){
                  ['pip', "Newest by the crack, older and older as you go. Like rings in a tree!"]]);
       t.cut(null);
     }});
-  cls.find('basil', {name:'smoker', at:[SMOKER[0] + 1.4, SMOKER[1] + 1.3, -2.3], call:"That chimney is puffing black smoke!", after:["Worms with no sunlight. Huh. I guess they're brave too."],
+  cls.find('basil', {name:'smoker', when: () => clear >= 1, at:[SMOKER[0] + 1.4, SMOKER[1] + 1.3, -2.3], call:"That chimney is puffing black smoke!", after:["Worms that don't need sunlight! I never even thought to wonder about that."],
     async scene(){
       smoke.burst = 1.2;
       t.cut((pos, look) => { pos.set(SMOKER[0] + 3.2, ground(...SMOKER) + 2.4, SMOKER[1] + 3.6); look.set(SMOKER[0], ground(...SMOKER) + 1.4, SMOKER[1]); });
       await say([['basil', "{name}, that chimney is puffing black smoke. Underwater!"],
-                 ['basil', "It's really super-hot water, from under the crack. And look at the worms!"]]);
+                 ['basil', "It's that hot mineral water from under the crack. And look at the worms!"]]);
       const pick = await t.ask('basil', "It's so dark down here. Can plants grow?", ["No, there's no sunlight", "Yes, lots of plants"]);
       await say([['basil', pick === 0 ? "Right, no sunlight at all." : "Nope, it's much too dark. No sunlight at all."],
                  ['basil', "The worms get their food from the hot water instead. So weird!"]]);
       t.cut(null);
     }});
   const smoke = puffs(w, SMOKER[0], ground(...SMOKER) + 3.2, SMOKER[1], {rate:3, rise:1.1, size:1.4, color:0x18141c, opacity:.75, spread:.3, life:3.2});
+  // two stubbier chimneys along the crack, puffing their share of the murk
+  inWorld(w, () => { for (const [d, z] of [[-2.6, -11.5], [2.5, 13.4]]) { const [x, zz] = at(d, z), y = ground(x, zz), g = grp(x, y, zz);
+    for (let i = 0; i < 3; i++) outline(add(new THREE.CylinderGeometry(.34 - i*.08, .44 - i*.08, .5, 8), T([0x2a2428, 0x3a3034][i % 2]), (i % 2)*.04, .25 + i*.48, 0, g), 1.04);
+    puffs(w, x, y + 1.6, zz, {rate:2, rise:1, size:1, color:0x18141c, opacity:.7, spread:.25, life:3}); } });
   cls.hint = () => goggled ? (cls.saw('stripes') ? "Back to the bus whenever you're ready, {name}! Or go see anyone still waving. Or go exploring: who knows what lives out by the cliffs?" : "Pip is waving at you. Go see the stripes!") :
     "Mo is standing on the crack, and Juniper found some lumpy rocks. Go see! I think there's a job for my time goggles.";
 
   // ---------- things to look closer at, for anyone who goes exploring ----------
-  const looked = new Set();
-  // view: which way from the animal the camera looks in from, where it isn't hemmed in by rock
-  const curio = (name, [x, z], y, lines, view, lift = .6) => addUsable(w, {name, verb:'Look closer', short:'Look', x, z, y:ground(x, z), range:2.2, glow:[x, y, z], when: () => !looked.has(name),
-    async action(){
-      if (game.cutscene) return;
-      looked.add(name); game.cutscene = true;
-      const [vx, vz] = view, d = Math.hypot(vx, vz), ux = vx/d, uz = vz/d, cy = ground(x, z);
-      // the explorer steps to one side of the shot and peers in, rather than blocking it
-      const sx = x + ux*.8 + uz*1.8, sz = z + uz*.8 - ux*1.8;
-      if (walkable(sx, sz)) { player.x = sx; player.z = sz; player.angle = Math.atan2(x - sx, z - sz); }
-      player.pose = 'peer';
-      t.cut((pos, look) => { pos.set(x + ux*4.2 - uz*.9, cy + lift + 1.5, z + uz*4.2 + ux*.9); look.set(x, cy + lift, z); });
-      try { await say(lines); } catch (e) { if (t.gone) return; throw e; } finally { player.pose = null; }
-      t.cut(null); game.cutscene = false;
-    }});
+  const curio = (name, at, y, lines, view, lift) => kitCurio(w, t, {name, at, y, lines, view, lift});
   curio('Fuzzy crabs', at(-7.8, -2.4), ground(...SMOKER) + 1, [['sparks', "Yeti crabs! See their fuzzy, hairy arms?"],
     ['sparks', "They grow tiny living things called bacteria in all that fuzz. Then they eat them!"],
     ['sparks', "They wave their arms in the warm vent water, to help their garden grow."]], [-.6, 1]);
@@ -404,7 +422,7 @@ export function buildRidge(t){
     ['sparks', "Lots of deep-sea animals make their own light. It's called bioluminescence."],
     ['sparks', "If something tries to eat this one, it flashes like a burglar alarm. That calls a bigger animal to scare the attacker away!"]], [-.15, 1], 2);
   curio('Big bones', [WHALE[0] + .9, WHALE[1] + 1], ground(...WHALE) + 1, [['sparks', "Whale bones! When a whale dies, it sinks all the way down here."],
-    ['sparks', "Crabs, fish, and red bone-eating worms come to feast on it."], ['sparks', "One whale can feed them for years and years!"]], [1, .8]);
+    ['sparks', "Crabs, fish, and red bone-eating worms come to feast on it."], ['sparks', "One whale can feed them for years and years!"]], [1, .2]);
 
   return {world:w, bus, cls,
     // the magma the class rode up the mantle on brings the bus with it: up out of the crack's mouth
@@ -427,7 +445,7 @@ export function buildRidge(t){
       bus.gear('sub'); burst(MOUTH[0], MOUTH[1], 60, 2.4);
       Sound.tone(880, {type:'sine', dur:.08, vol:.08, f2:1400}); Sound.tone(523, {type:'triangle', t:.12, dur:.2, vol:.06}); Sound.tone(784, {type:'triangle', t:.22, dur:.25, vol:.06});
       await t.wait(.8);
-      await say([['pip', "Whoosh! We popped right out onto the sea floor!"], ['pip', "Bubbles! We're a submarine now?!"],
+      await say([['pip', "Whoosh! We popped right out onto the sea floor!"], ['pip', "Bubbles! We're a submarine now?!"], ['mo', "Um, where is the sea floor? It's all murky!"],
                  ['sparks', "Welcome to a ridge on the ocean floor!"]]);
       const gy = ground(...BUS);
       t.watch(w, (pos, look) => { pos.set(MOUTH[0] - 4, 5, MOUTH[1] - 7); look.copy(bus.root.position); });
@@ -439,13 +457,14 @@ export function buildRidge(t){
       t.cut((pos, look) => { pos.set(9, 8.5, 14); look.set(1, 0, 0); });
       cls.arrive({sparks:[dx - .4, dz + 1.3, -Math.PI/2]});
       await t.wait(2.6);
-      await say([['sparks', "Helmets on, everyone! This glowing crack is where two plates pull apart."]]);
+      await say([['sparks', "Helmets on, everyone! Somewhere in this murk is a glowing crack, where two plates pull apart."]]);
       myHelmet = helmet(); hero.head.add(myHelmet);
       t.onEnd(() => { if (myHelmet) { myHelmet.parent.remove(myHelmet); myHelmet = null; } });
       t.play(w, [dx, dz, -Math.PI/2]); game.cutscene = true;
       // one lamp after another clicks on, the explorer's last
       for (const l of lamps) { l.on(true); Sound.tone(1400, {type:'square', dur:.03, vol:.03, cut:3000}); if (l === myHelmet.userData.lamp) myLamp.intensity = 1.3; await t.wait(.22); }
       await say([['sparks', "And lamps on! It's very, very dark this deep."]]);
+      await blowClear();
       game.cutscene = false;
       t.goal('Visit anyone who waves!');
     },

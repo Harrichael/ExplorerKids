@@ -3,9 +3,8 @@
 // the land and the sea, the countries globe (countries.js) for the world's nations and the people in
 // them, and the weather globe (weather.js) for the sky over it, today.
 //
-// This owns what they share: the pictures and their sharp close-ups, leaning in from a weather
-// satellite's view down to a small plane's, the names written over it, the lines drawn on it, and
-// the card's real photos. Each globe owns its lenses, its names, its card and what Hoot says.
+// This owns what they share: the pictures and their sharp close-ups, the names written over it, the
+// lines drawn on it, and the card's real photos. Each globe owns its lenses, its names, its card and what Hoot says.
 //
 // globe.js owns the room globe, the camera and the hands; `room` is what it borrows from globe.js.
 
@@ -14,7 +13,8 @@ import { camera, canvas } from '../core/render.js';
 import { Sound } from '../core/sound.js';
 import { loadGeography } from '../earth/geography.js';
 import { makeCountries } from './countries.js';
-import { LENSES, closeUp, wholeEarth } from './imagery.js';
+import { makeCloseUp } from './close-up.js';
+import { LENSES, wholeEarth } from './imagery.js';
 import { makeNames } from './names.js';
 import { makeNature } from './nature.js';
 import { article, photoCredit, pictures } from './photos.js';
@@ -27,12 +27,9 @@ css.textContent = `
 .glenses::-webkit-scrollbar{display:none}
 .glens{flex:none;font-weight:900;font-size:13px;color:var(--parch);background:rgba(26,19,32,.82);border:2px solid rgba(217,164,65,.55);border-radius:999px;padding:5px 12px;box-shadow:0 0 0 2px var(--ink)}
 .glens[aria-pressed=true]{background:var(--gold);color:var(--ink);border-color:var(--gold)}
-.gzoom{pointer-events:auto;position:absolute;left:max(16px,env(safe-area-inset-left,0px));top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:8px}
-.gzoom button{width:46px;height:46px;border-radius:14px;font-family:var(--display);font-size:24px;line-height:1;color:var(--parch);background:var(--plum);border:2.5px solid var(--gold);box-shadow:0 0 0 3px var(--ink);padding:0}
-.gzoom .like{font-weight:900;font-size:11px;color:var(--parch);text-align:center;max-width:78px;line-height:1.25;text-shadow:0 1px 3px #000}
 .realearth .gcredit{bottom:calc(92px + env(safe-area-inset-bottom,0px));max-width:45%}
 .glenstip{position:absolute;left:max(16px,env(safe-area-inset-left,0px));max-width:50%;bottom:calc(92px + env(safe-area-inset-bottom,0px));font-weight:800;font-size:12px;color:var(--parch);text-shadow:0 1px 3px #000;pointer-events:none}
-.talking .glenses,.talking .gzoom,.talking .glenstip{visibility:hidden}
+.talking .glenses,.talking .glenstip{visibility:hidden}
 .gshelf{pointer-events:auto;flex:none;display:flex;gap:4px}.realearth .gfound{display:none}
 .gshelf button{font-weight:900;font-size:13px;color:var(--parch);background:rgba(26,19,32,.82);border:2px solid rgba(217,164,65,.6);border-radius:999px;padding:4px 10px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .gshelf button[aria-pressed=true]{background:var(--gold);color:var(--ink);border-color:var(--gold)}
@@ -57,7 +54,7 @@ css.textContent = `
 .gchoices{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px}
 .gchoices button{font-weight:900;font-size:14px;color:var(--ink);background:#fbf4e2;border:2.5px solid var(--ink);border-radius:12px;padding:7px 8px;line-height:1.25}
 .gchoices button.right{box-shadow:0 0 0 3px #3e9b54}.gchoices button.wrong{box-shadow:0 0 0 3px #c4473a}.gchoices button.dim{opacity:.55}
-@media (max-aspect-ratio:1/1){.gzoom{top:auto;left:auto;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(96px + env(safe-area-inset-bottom,0px));transform:none}.glenstip{max-width:calc(100% - 140px)}.gzoom button{width:40px;height:40px;font-size:21px}#gCard .gpic{aspect-ratio:16/8}.gshelf span{display:none}}`;
+@media (max-aspect-ratio:1/1){.glenstip{max-width:calc(100% - 140px)}#gCard .gpic{aspect-ratio:16/8}.gshelf span{display:none}}`;
 document.head.appendChild(css);
 
 // leaning in past where the satellites stop getting sharper (about 48) is only for telling a
@@ -65,7 +62,6 @@ document.head.appendChild(css);
 const RAD = Math.PI/180, MAX_MAG = 96;
 // Natural Earth says at which web-map zoom each name first shows; the whole globe in view is about zoom 2
 const magFor = min => Math.max(1, 2**(min - 2.4));
-const like = m => m < 2.5 ? 'Like a weather satellite' : m < 10 ? 'Like the Space Station' : m < 40 ? 'Like a high-flying jet' : 'Like a small plane';
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
 // 'That's the Pacific Ocean', 'the United States of America', but 'Lake Victoria', 'France'
 const the = name => /^(the |lake )/i.test(name) || !/ocean|sea$|gulf|bay$|united|republic|kingdom|islands$|netherlands|philippines|emirates|bahamas/i.test(name) ? name : 'the ' + name;
@@ -77,21 +73,18 @@ export function makeRealEarth(room){
   const names = makeNames(); canvas.after(names.el);
   names.el.hidden = true;
   const bar = document.createElement('div'); bar.className = 'glenses'; bar.setAttribute('role', 'group'); bar.setAttribute('aria-label', 'Ways to see the Earth');
-  const zoomer = document.createElement('div'); zoomer.className = 'gzoom';
-  zoomer.innerHTML = '<button aria-label="Zoom in">+</button><div class="like"></div><button aria-label="Zoom out">−</button>';
   const tip = document.createElement('div'); tip.className = 'glenstip';
   // beside the chips along the bottom: each globe's own buttons for what its chips are about
   const shelf = document.createElement('div'); shelf.className = 'gshelf'; shelf.setAttribute('role', 'group');
   hud.querySelector('#gChips').before(shelf);
-  hud.append(tip, bar, zoomer); tip.hidden = bar.hidden = zoomer.hidden = shelf.hidden = true;
-  const [zIn, likeEl, zOut] = zoomer.children;
-  zIn.addEventListener('click', () => zoomBy(2)); zOut.addEventListener('click', () => zoomBy(.5));
+  hud.append(tip, bar); tip.hidden = bar.hidden = shelf.hidden = true;
 
   // ---------- on the globe: its pictures, a close-up, borders, coasts and rivers, and a ring ----------
   const layer = new THREE.Group(); layer.visible = false; globeBall.add(layer);
   // photos of the Earth are already lit by the Sun, so the room's lamps don't shade them again
   const skin = new THREE.MeshBasicMaterial({color: 0xffffff});
-  let maps = null, lens = null, textures = new Map(), patch = null, want = null, asking = null, settled = 0;
+  let maps = null, lens = null, textures = new Map();
+  const zoom = makeCloseUp(globeBall, R);
   const lines = (polylines, color, opacity, lift) => {
     const pts = [];
     for (const l of polylines) for (let i = 0; i + 3 < l.length; i += 2) pts.push(surface(l[i + 1], l[i]).multiplyScalar(R*lift), surface(l[i + 3], l[i + 2]).multiplyScalar(R*lift));
@@ -128,7 +121,7 @@ export function makeRealEarth(room){
     const l = lens = g.lenses.find(x => x.id === id) || g.lenses[0], was = g;
     store.lenses[g.id] = l.id; room.keep(); tip.textContent = l.tip;
     bar.querySelectorAll('.glens').forEach(b => b.setAttribute('aria-pressed', b.dataset.id === l.id));
-    dropPatch(); want = null; drawnAt = '';
+    zoom.reset(); drawnAt = '';
     g.lensChanged?.(l);
     // a live lens's picture is of now, so it's painted afresh once its data is
     const key = l.id + (l.stamp ? l.stamp() : '');
@@ -158,44 +151,8 @@ export function makeRealEarth(room){
     for (const r of rivers) r.visible = false;
   }
 
-  // ---------- the close-up: a sharper picture of just what's in view, once the globe holds still ----------
-  // The explorer looks along the line from the camera to the globe's middle, so what's in the middle
-  // of the view is where that line meets the surface; how much shows round it depends on the zoom.
-  const at = new THREE.Vector3(), mid = new THREE.Vector3();
-  function inView(){
-    const c = globeBall.getWorldPosition(mid), d = camera.position.distanceTo(c);
-    at.copy(camera.position).sub(c).normalize().multiplyScalar(R).add(c);
-    const p = globeBall.worldToLocal(at.clone()).normalize();
-    const tanH = Math.tan(camera.fov*RAD/2)/camera.zoom, half = Math.min(60, (d - R)*tanH/R/RAD*1.15);
-    return {lat: Math.asin(p.y)/RAD, lon: Math.atan2(-p.z, p.x)/RAD, half, perDeg: innerHeight/2/half};
-  }
-  function wanted(v){
-    // the base picture is 4096 wide, about 11 pixels a degree; leaning in past that is when a close-up helps
-    if (v.perDeg < 14 || room.view.mag < 2) return null;
-    const half = v.half*1.6, grid = Math.max(.5, half/2), snap = x => Math.round(x/grid)*grid;
-    const lonHalf = Math.min(180, half*Math.max(1, camera.aspect)/Math.max(.15, Math.cos(v.lat*RAD)));
-    const box = {s: Math.max(-90, snap(v.lat) - half), n: Math.min(90, snap(v.lat) + half), w: Math.max(-180, snap(v.lon) - lonHalf), e: Math.min(180, snap(v.lon) + lonHalf)};
-    const perDeg = Math.min(lens.sharpest, v.perDeg*Math.min(devicePixelRatio, 1.5));
-    const w = Math.round(Math.min(2048, (box.e - box.w)*perDeg)), h = Math.round(Math.min(2048, (box.n - box.s)*perDeg));
-    return {box, w, h, perDeg: Math.min(w/(box.e - box.w), h/(box.n - box.s)), lens};
-  }
-  const covers = (a, v) => a && a.lens === lens && v.lat - v.half > a.box.s && v.lat + v.half < a.box.n && v.lon > a.box.w && v.lon < a.box.e
-    && a.perDeg >= Math.min(lens.sharpest, v.perDeg)*.7;
-  async function fetchPatch(w){
-    asking = w;
-    try {
-      const t = await closeUp(w.lens, w.box, w.w, w.h, maps);
-      if (asking !== w || !g.on) { t.dispose(); return; }
-      const b = w.box, mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(R*1.0006, Math.max(8, Math.ceil((b.e - b.w)/2)), Math.max(6, Math.ceil((b.n - b.s)/2)), (b.w + 180)*RAD, (b.e - b.w)*RAD, (90 - b.n)*RAD, (b.n - b.s)*RAD),
-        new THREE.MeshBasicMaterial({map: t, transparent: true, opacity: 0}));
-      dropPatch(); patch = Object.assign(mesh, {want: w}); layer.add(patch);
-    } catch (e) { if (want === w) want = null; /* the base picture still shows; the next settle tries again */ } finally { if (asking === w) asking = null; }
-  }
-  function dropPatch(){ if (!patch) return; layer.remove(patch); patch.geometry.dispose(); patch.material.map.dispose(); patch.material.dispose(); patch = null; }
-
   // ---------- names ----------
-  const shown = new THREE.Vector3(), normal = new THREE.Vector3(), toCam = new THREE.Vector3();
+  const shown = new THREE.Vector3(), normal = new THREE.Vector3(), toCam = new THREE.Vector3(), mid = new THREE.Vector3();
   function project(lat, lon){
     shown.copy(surface(lat, lon)).multiplyScalar(R); globeBall.localToWorld(shown);
     normal.copy(shown).sub(globeBall.getWorldPosition(mid)).normalize(); toCam.copy(camera.position).sub(shown).normalize();
@@ -274,7 +231,7 @@ export function makeRealEarth(room){
 
   // ---------- the three globes, and what they share ----------
   const sat = {room, card, store, esc, the, head, photoBlock, gallery, offline, MAX_MAG, magFor, layer, globeBall, R, surface, project,
-    maps: () => maps, centre: () => inView(), ring: showRing, hideRing: () => { ring.visible = false; },
+    maps: () => maps, centre: () => zoom.centre(), ring: showRing, hideRing: () => { ring.visible = false; },
     shelf, lens: () => lens, setLens: id => setLens(id), renamed: () => { drawnAt = ''; }, redraw: () => room.redraw()};
   const globes = {geo: makeNature(sat), countries: makeCountries(sat), weather: makeWeather(sat)};
   let g = globes.geo;
@@ -289,7 +246,7 @@ export function makeRealEarth(room){
   async function enter(kind){
     if (g.on) leave();
     g = globes[kind]; g.on = true;
-    hud.classList.add('realearth', kind); layer.visible = true; names.el.hidden = false; tip.hidden = bar.hidden = zoomer.hidden = shelf.hidden = false;
+    hud.classList.add('realearth', kind); layer.visible = true; names.el.hidden = false; tip.hidden = bar.hidden = shelf.hidden = false;
     shelf.setAttribute('aria-label', g.shelfLabel); shelf.replaceChildren();
     drawnAt = ''; ring.visible = false; showLenses(); lineUp(); g.enter();
     await setLens(store.lenses[kind]);
@@ -298,10 +255,9 @@ export function makeRealEarth(room){
   function leave(){
     if (!g.on) return;
     g.leave(); g.on = false;
-    hud.classList.remove('realearth', g.id); layer.visible = false; names.el.hidden = true; names.clear(); tip.hidden = bar.hidden = zoomer.hidden = shelf.hidden = true;
-    dropPatch(); asking = null; want = null; ring.visible = false; room.credit('');
+    hud.classList.remove('realearth', g.id); layer.visible = false; names.el.hidden = true; names.clear(); tip.hidden = bar.hidden = shelf.hidden = true;
+    zoom.reset(); ring.visible = false; room.credit('');
   }
-  function zoomBy(k){ room.view.fly = null; room.view.mag = Math.max(1, Math.min(MAX_MAG, room.view.mag*k)); Sound.tone(k > 1 ? 880 : 660, {type: 'triangle', dur: .06, vol: .04}); }
 
   // a tap: a name if it's on one, else wherever on the globe it landed
   function tap(x, y){ const it = names.hit(x, y); if (!it) return false; return g.tap(it); }
@@ -312,21 +268,12 @@ export function makeRealEarth(room){
   function frame(dt, still){
     if (!g.on || !maps) return;
     const m = room.view.mag;
-    likeEl.textContent = like(m);
-    zIn.disabled = m >= MAX_MAG - .01; zOut.disabled = m <= 1.01;
     if (g.lines.rivers) for (const r of rivers) r.visible = m >= r.mag;
     if (ring.visible) ring.material.opacity = .6 + Math.sin(performance.now()/240)*.35;
-    if (patch && patch.material.opacity < 1) patch.material.opacity = Math.min(1, patch.material.opacity + dt*3);
     g.frame?.(dt);
     drawNames();
-    // a close-up is asked for once the globe has held still a moment, and only if the one shown won't do
-    settled = still ? settled + dt : 0;
-    if (settled > .3 && !asking) {
-      const v = inView();
-      if (!covers(patch && patch.want, v)) { const w = wanted(v); if (w && JSON.stringify(w.box) !== JSON.stringify(want && want.box)) { want = w; fetchPatch(w); } }
-      if (patch && room.view.mag < 1.6) dropPatch();
-    }
+    zoom.frame(dt, still, m, lens, maps);
   }
 
-  return {enter, leave, draw, chips: () => g.on && g.chips(), tap, press, back, frame, zoomBy, MAX_MAG};
+  return {enter, leave, draw, chips: () => g.on && g.chips(), tap, press, back, frame, MAX_MAG};
 }

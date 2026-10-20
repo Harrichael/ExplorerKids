@@ -3,7 +3,7 @@ import { makeLabel } from '../characters/build.js';
 import { PERSONA } from '../characters/cast.js';
 import { C, T, XF, add, box, cyl, grp, leafCloud, mergeGeos, meshOf, outlineMat, rrect, tex } from '../core/kit.js';
 import { Sound } from '../core/sound.js';
-import { makeWorld } from '../core/world.js';
+import { addUsable, makeWorld } from '../core/world.js';
 import { blob, hero, player } from '../player.js';
 import { game } from '../state.js';
 
@@ -74,3 +74,31 @@ export function miniTree(x, y, z, s, parent){ const g = grp(x, y, z, 0, parent);
   meshOf(mergeGeos([[new THREE.CylinderGeometry(.05*s, .09*s, .5*s, 8), XF(0, .25*s, 0)]]), C.woodDk, g, .02*s);
   leafCloud(g, [[0, .68*s, 0, .26*s, 1], [.17*s, .6*s, .08*s, .17*s, 0], [-.16*s, .62*s, -.06*s, .18*s, 1], [.02*s, .86*s, .02*s, .16*s, 2]], .025*s);
   return g; }
+
+// Something a curious explorer can stop and look closer at, off the trip's path: the camera leans in
+// and a few lines of real science play. Each can be seen once; w.curios counts what has been.
+//   curio(w, t, {name:'Fuzzy crabs', at:[x, z], y:1.2, view:[-.6, 1], lines:[['sparks', "Yeti crabs!"]]})
+// A find out of reach is used from where the explorer can stand, `from`. pre() plays out first (a guess,
+// say), act() starts as the look does and runs alongside it, and post() follows once it's over.
+export function curio(w, t, {name, at:[x, z], y, lines, view = [0, 1], lift = .6, verb = 'Look closer', from, pre, act, post}){
+  const c = w.curios || (w.curios = {all:[], seen:new Set()}); c.all.push(name);
+  const [ax, az] = from || [x, z];
+  return addUsable(w, {name, verb, short:'Look', x:ax, z:az, y:w.ground(ax, az), range:2.2, glow:[x, y, z], when: () => !c.seen.has(name) && !t.busy,
+    async action(){
+      if (game.cutscene) return;
+      const gone = e => { if (!t.gone) throw e; };
+      if (pre) { game.cutscene = true; try { await pre(); } catch (e) { return gone(e); } finally { game.cutscene = false; } }
+      if (act) (async () => act())().catch(gone);
+      c.seen.add(name); game.cutscene = true;
+      const [vx, vz] = view, d = Math.hypot(vx, vz), ux = vx/d, uz = vz/d, cy = w.ground(x, z);
+      // the explorer steps well aside, to whichever side there's ground, and peers in from the edge of the
+      // shot, so the find has it to itself
+      for (const sd of [2.2, -2.2]) { const sx = x + ux*.3 + uz*sd, sz = z + uz*.3 - ux*sd;
+        if (!w.bounds || w.bounds(sx, sz)) { player.x = sx; player.z = sz; player.angle = Math.atan2(x - sx, z - sz); break; } }
+      player.pose = 'peer';
+      t.cut((pos, look) => { pos.set(x + ux*4.6, cy + lift + 1.8, z + uz*4.6); look.set(x, cy + lift, z); });
+      try { await t.say(lines); } catch (e) { return gone(e); } finally { player.pose = null; }
+      t.cut(null); game.cutscene = false;
+      if (post) post();
+    }});
+}
