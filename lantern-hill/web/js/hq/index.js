@@ -17,7 +17,7 @@ import { bFlush } from '../core/kit.js';
 import { addUsable } from '../core/world.js';
 import { load } from '../save.js';
 import { game } from '../state.js';
-import { story } from '../ui/dialogue.js';
+import { ask, story } from '../ui/dialogue.js';
 import { openWardrobe } from '../ui/wardrobe.js';
 import { ARMCHAIRS, LAB_DESK, WINDOW_SEAT } from './cottage.js';
 import { BED } from '../garden/bed.js';
@@ -90,8 +90,10 @@ async function boardWonderBus(){
     story([['sparks', "The Wonder Bus is itching to visit a real volcano, {name}! But first, try the Fizzy Volcano at my science desk."]]);
     return;
   }
-  const [{ startTrip }, { tectonics }] = await Promise.all([import('../trips/field-trip.js'), import('../trips/tectonics/index.js')]);
-  startTrip(tectonics);
+  const [{ startCheck, startTrip }, { tectonics }] = await Promise.all([import('../trips/field-trip.js'), import('../trips/tectonics/index.js')]);
+  if (!load('trips')?.tectonics) { startTrip(tectonics); return; }
+  ask('sparks', "Where to, {name}?", ["The volcano trip!", "Your Explorer Check, on a cloud!", "Not right now"],
+    i => i === 0 ? startTrip(tectonics) : i === 1 && startCheck(tectonics));
 }
 addUsable(HQ, {name:'Wardrobe', x:8.95, z:3.2, range:1.7, verb:'Open the wardrobe', short:'Open', glow:[8.9, 2.95, 3.2], action: () => openWardrobe(false)});
 addUsable(HQ, {name:'Flashcards', x:-.45, z:5.4, range:1.5, verb:'Practice phonogram cards', short:'Cards', glow:[-.45, 1.25, 6.1], action:openFlashcards});

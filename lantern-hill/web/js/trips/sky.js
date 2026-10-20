@@ -5,8 +5,8 @@
 //   storySky(w, {sun:[-9, 16, 7], clouds3d:[[x, y, z, size], ...]});
 
 import * as THREE from 'three';
-import { T, XF, meshOf, mergeGeos } from '../../core/kit.js';
-import { camera } from '../../core/render.js';
+import { T, XF, meshOf, mergeGeos } from '../core/kit.js';
+import { camera } from '../core/render.js';
 
 // its own seed, so the sky never reshuffles the place's seeded layout
 const seeded = s => () => (s = (s*16807) % 2147483647)/2147483647;

@@ -35,6 +35,18 @@ const VIEWS = {
   bubbles:{flow:[0, .8], light:0x8ad0ff, draw: (c, w, h) => { grad(c, w, h, ['#1e5a8a', '#123a6a', '#1e5a8a']); rings(c, w, h, 60); }},
   deep:   {flow:[.05, 0], light:0x6aa0e0, draw: (c, w, h) => { grad(c, w, h, ['#0e2a4a', '#081a32']); c.fillStyle = 'rgba(200,230,255,.5)'; for (let i = 0; i < 90; i++) c.fillRect(rnd(w), rnd(h), 2, 2); }},
   sunset: {flow:[.1, 0], light:0xffb890, draw: (c, w, h) => { grad(c, w, h, ['#5a3a7a', '#e07a6a', '#ffc070']); clouds(c, w, h, .3, 'rgba(255,220,190,.8)'); }},
+  // golden hills far below, split by the long dark line of a fault
+  hills:  {flow:[.09, 0], light:0xffd0a0, draw: (c, w, h) => { grad(c, w, h*.5, ['#6a7ab8', '#e8a88a', '#ffd6a4']); clouds(c, w, h*.42, .22, 'rgba(255,236,220,.8)');
+            ridge(c, w, h, .47, .03, [2, 5], '#c8a070'); ridge(c, w, h, .53, .035, [3, 7], '#d8ae52');
+            dots(c, w, h, .55, .7, '#4a6a3a', 26, 9); ridge(c, w, h, .66, .02, [4, 9], '#e2bc62');
+            // the fault, with a trough of shade along its uphill side
+            const at = x => h*(.615 + .03*Math.sin(x/w*Math.PI*2*3) + .006*Math.sin(x/w*Math.PI*2*41));
+            c.strokeStyle = 'rgba(150,100,50,.45)'; c.lineWidth = 12; line(c, w, x => at(x) - 5); c.strokeStyle = '#3a2620'; c.lineWidth = 4; line(c, w, at);
+            dots(c, w, h, .7, .95, '#4a6a3a', 14, 14); }},
+  // snowy mountains far off, crumpled up where two plates crash
+  peaks:  {flow:[.05, 0], light:0xd8e4ff, draw: (c, w, h) => { grad(c, w, h, ['#5a78c0', '#b8cce8', '#ffe2c4', '#ffe2c4']); clouds(c, w, h*.36, .2, 'rgba(255,250,245,.85)');
+            range(c, w, h, 13, .36, .6, '#8e9cc4'); range(c, w, h, 10, .43, .67, '#6e6a8e');
+            ridge(c, w, h, .64, .02, [3, 8], '#5e8a4e'); dots(c, w, h, .64, .78, '#2f5537', 60, 7); ridge(c, w, h, .76, .02, [2, 6], '#4e7a44'); }},
 };
 let seed = 3; const rnd = n => (seed = (seed*16807) % 2147483647)/2147483647*n;
 function grad(c, w, h, stops){ const g = c.createLinearGradient(0, 0, 0, h); stops.forEach((s, i) => g.addColorStop(i/(stops.length - 1), s)); c.fillStyle = g; c.fillRect(0, 0, w, h); }
@@ -44,6 +56,18 @@ function strata(c, w, h, cols, fleck){ for (let y = 0, i = 0; y < h; i++) { cons
   c.fillStyle = fleck; for (let i = 0; i < 160; i++) { const x = rnd(w), y = rnd(h), r = 2 + rnd(5); tiled(w, h, (dx, dy) => { c.beginPath(); c.arc(x + dx, y + dy, r, 0, 7); c.fill(); }); } }
 function blobs(c, w, h, col, n){ c.fillStyle = col; for (let i = 0; i < n; i++) { const x = rnd(w), y = rnd(h), r = 8 + rnd(26); tiled(w, h, (dx, dy) => { c.beginPath(); c.arc(x + dx, y + dy, r, 0, 7); c.fill(); }); } }
 function rings(c, w, h, n){ c.strokeStyle = 'rgba(210,240,255,.8)'; c.lineWidth = 3; for (let i = 0; i < n; i++) { const x = rnd(w), y = rnd(h), r = 4 + rnd(14); tiled(w, h, (dx, dy) => { c.beginPath(); c.arc(x + dx, y + dy, r, 0, 7); c.stroke(); }); } }
+// a wavy band of land from y = k*h down to the bottom; its waves fit a whole number of times across, so it tiles
+function ridge(c, w, h, k, amp, [p1, p2], col){ const y = x => h*(k + amp*Math.sin(x/w*Math.PI*2*p1 + 1) + amp*.5*Math.sin(x/w*Math.PI*2*p2));
+  c.fillStyle = col; c.beginPath(); c.moveTo(0, h); for (let x = 0; x <= w; x += 4) c.lineTo(x, y(x)); c.lineTo(w, h); c.fill();
+  c.strokeStyle = 'rgba(26,19,32,.5)'; c.lineWidth = 2; line(c, w, y); }
+function line(c, w, y){ c.beginPath(); for (let x = 0; x <= w; x += 4) c.lineTo(x, y(x)); c.stroke(); }
+function dots(c, w, h, y0, y1, col, n, r){ c.fillStyle = col; for (let i = 0; i < n; i++) { const x = rnd(w), y = h*(y0 + rnd(y1 - y0)), s = r*(.6 + rnd(.6));
+  tiled(w, h, (dx, dy) => { c.beginPath(); c.arc(x + dx, y + dy, s, 0, 7); c.arc(x + dx + s*.8, y + dy + s*.2, s*.7, 0, 7); c.fill(); }); } }
+// a row of peaks, each with a snowy cap, between heights top and base
+function range(c, w, h, n, top, base, col){ for (let i = 0; i < n; i++) { const x = (i + rnd(.6))*w/n, y = h*(top + rnd(.08)), hw = w/n*(.55 + rnd(.35)), b = h*base, sn = .38;
+  tiled(w, h, (dx, dy) => { if (dy) return; c.fillStyle = col; c.beginPath(); c.moveTo(x + dx - hw, b); c.lineTo(x + dx, y); c.lineTo(x + dx + hw*.9, b); c.fill(); c.strokeStyle = 'rgba(26,19,32,.55)'; c.lineWidth = 2; c.stroke();
+    c.fillStyle = '#f6f6fa'; c.beginPath(); c.moveTo(x + dx, y); c.lineTo(x + dx - hw*sn, y + (b - y)*sn); c.lineTo(x + dx - hw*sn*.4, y + (b - y)*sn*.8); c.lineTo(x + dx, y + (b - y)*sn*1.05);
+    c.lineTo(x + dx + hw*sn*.4, y + (b - y)*sn*.78); c.lineTo(x + dx + hw*.9*sn, y + (b - y)*sn); c.closePath(); c.fill(); }); } }
 // a spot cut off at one edge carries on at the other, so the painting streams past with no seam
 function tiled(w, h, f){ for (const dx of [-w, 0, w]) for (const dy of [-h, 0, h]) f(dx, dy); }
 

@@ -1,9 +1,10 @@
 // Juniper's field notebook: after each place, a sticker of what the class found there goes in, so
 // the explorer sees the trip's story build up page by page and gets to say it back once more. Each
 // page shows a star per find at that place, filled for the ones the explorer saw, so a page with
-// stars left over is a reason to go again; a page with every star goes gold.
+// stars left over is a reason to go again; a page with every star goes gold. Under the stars, a
+// count of the place's secrets the explorer stopped to look closer at.
 //
-//   await notebook(PAGES, 2, [{seen:2, of:4}, , {seen:1, of:4}]);   // PAGES = [{title, note, draw(ctx, w, h)}, ...]
+//   await notebook(PAGES, 2, [{seen:2, of:4, curios:{seen:1, of:6}}, , {seen:1, of:4}]);   // PAGES = [{title, note, draw(ctx, w, h)}, ...]
 //   // shows pages 0 and 2, sticking in 2; page 1, with no tally, is still to come
 
 import { Sound } from '../core/sound.js';
@@ -20,7 +21,8 @@ export function notebook(pages, now, tallies = []){
     const s = document.createElement('div'); s.className = 'slot' + (n ? '' : ' empty') + (i === now ? ' new' : '') + (full ? ' full' : '');
     const c = document.createElement('canvas'); c.width = 240; c.height = 170;
     if (n) pg.draw(c.getContext('2d'), c.width, c.height);
-    const stars = n ? `<span class="stars" aria-label="${n.seen} of ${n.of} finds">${'★'.repeat(n.seen)}<i>${'★'.repeat(n.of - n.seen)}</i></span>` : '';
+    const c2 = n && n.curios, stars = n ? `<span class="stars" aria-label="${n.seen} of ${n.of} finds">${'★'.repeat(n.seen)}<i>${'★'.repeat(n.of - n.seen)}</i></span>` +
+      (c2 && c2.of ? `<span class="curios${c2.seen === c2.of ? ' all' : ''}">🔍 ${c2.seen} of ${c2.of} secrets</span>` : '') : '';
     const cap = document.createElement('div'); cap.className = 'cap'; cap.innerHTML = n ? `<b>${pg.title}</b>${pg.note}${stars}` : '<b>?</b>';
     s.append(c, cap); return s;
   }));

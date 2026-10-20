@@ -5,7 +5,7 @@
 // and fence that cross them, until they snap and the ground shakes.
 
 import * as THREE from 'three';
-import { C, T, XF, add, bAdd, bFlush, box, clamp01, ease, fr, frand, grp, leafCloud, outline, tex } from '../../core/kit.js';
+import { C, T, XF, add, bAdd, bFlush, box, clamp01, ease, fr, frand, grp, leafCloud, mergeGeos, meshOf, outline, sph, tex } from '../../core/kit.js';
 import { Sound } from '../../core/sound.js';
 import { inWorld } from '../../core/world.js';
 import { flower, grassTuft } from '../../hq/wider.js';
@@ -15,14 +15,18 @@ import { game } from '../../state.js';
 import { tripBus } from '../bus.js';
 import { classmates } from '../class.js';
 import { goggles } from '../goggles.js';
-import { signpost, tripWorld } from '../stop-kit.js';
-import { storySky } from './sky.js';
+import { addUsable } from '../../core/world.js';
+import { curio, signpost, tripWorld } from '../stop-kit.js';
+import { butterflies, duck, flock, groundSquirrel, hawk, soarer } from './land-life.js';
+import { storySky } from '../sky.js';
 import { worries } from './worries.js';
 
 // The fault runs north to south along x = 0. West of it is the Pacific Plate; everything east of it
 // rides the North American Plate, and has been carried south for as long as it has been riding.
 const ROAD_Z = 2.5, FENCE_Z = 5.4, ORCH_Z = -9.5, ORCH_OFF = 1.8;
 const SPLIT = [0, -.6], SPLIT_OFF = 1.3, ROCK = [-3.4, 4.1], POND = [-12.9, -4.4];
+// a sag pond, sunk in a dip right on the fault
+const SAG = [0, 7.2];
 const BUS = [11, -5.2], BUS_RY = Math.PI;
 // downstream from the eastern hills: along, then down the fault's trough to catch up with itself, and on to the pond
 const CREEK = [[20, -3.8], [15, -2.9], [10, -2.4], [5, -2.6], [1.5, -2.7], [.35, -3.3], [.05, -4.6], [-.2, -5.8], [-1.2, -6.4], [-4, -6.6], [-8, -6.3], [-10.8, -5.5], [-12.2, -4.8]];
@@ -43,7 +47,7 @@ function ground(x, z){
   const roll = .3*Math.sin(x*.33 + 1.3)*Math.sin(z*.37 + .4) + .15*Math.sin(x*.71 - z*.53 + 2);
   const ridge = .5*Math.exp(-(((x - 2.7)/1.1)**2))*(.65 + .35*Math.sin(z*.45));
   const tall = 2.4 + 7*sm(4, -9, z), a = Math.atan2(z - ZC, x);
-  return (roll + ridge)*flat - .42*Math.exp(-((x/1.4)**2))*(1 - .6*band) - .14*Math.exp(-((dc/.55)**2)) - .3*Math.exp(-((dp/1.7)**2))
+  return (roll + ridge)*flat - .42*Math.exp(-((x/1.4)**2))*(1 - .6*band) - .14*Math.exp(-((dc/.55)**2)) - .3*Math.exp(-((dp/1.7)**2)) - .38*Math.exp(-((Math.hypot(x - SAG[0], z - SAG[1])/1.25)**2))
     + tall*sm(.9, 1.45, q)*(1 + .18*Math.sin(a*7) + .1*Math.sin(a*13 + 1));
 }
 
@@ -55,7 +59,7 @@ export function buildFault(t){
   const trunks = [];
   w.ground = ground;
   // the oval's edge is lined with bushes, boulders and gates; the pond, the trunks and the rocks are walked round
-  w.bounds = (x, z) => oval(x, z) < .91 && Math.hypot(x - POND[0], z - POND[1]) > 1.6 && Math.hypot(x - ROCK[0], z - ROCK[1]) > .75
+  w.bounds = (x, z) => oval(x, z) < .91 && Math.hypot(x - POND[0], z - POND[1]) > 1.6 && Math.hypot(x - ROCK[0], z - ROCK[1]) > .75 && Math.hypot(x - SAG[0], z - SAG[1]) > 1.2
     && Math.hypot(x + .55, z - SPLIT[1]) > .8 && Math.hypot(x - .55, z - SPLIT[1] - S.split) > .8 && trunks.every(([tx, tz, r]) => Math.hypot(x - tx, z - tz) > r);
   w.surface = (x, z) => Math.abs(z - ROAD_Z - (x > 0 ? S.slip : 0)) < .6 ? 'stone' : 'grass';
   w.area = x => Math.abs(x) < 1.6 ? 'The Fault Line' : x < 0 ? 'The Pacific Plate' : 'The North American Plate';
@@ -109,7 +113,7 @@ export function buildFault(t){
 
     // ---------- the fault ----------
     // a jagged crack down the trough, the whole length of the valley, hidden where the creek and the road cross it
-    for (let z = -12.5, k = 0; z < 9.6; z += .5, k++) { if ((z > -6.8 && z < -2.5) || Math.abs(z - ROAD_Z - .5) < 1 || Math.abs(z - SPLIT[1] - SPLIT_OFF/2) < 1.4) continue;
+    for (let z = -12.5, k = 0; z < 9.6; z += .5, k++) { if ((z > -6.8 && z < -2.5) || Math.abs(z - ROAD_Z - .5) < 1 || Math.abs(z - SPLIT[1] - SPLIT_OFF/2) < 1.4 || Math.abs(z - SAG[1]) < 1.5) continue;
       const x = Math.sin(k*1.7)*.08; bAdd(0x2a1e1a, new THREE.BoxGeometry(.2, .06, .54), XF(x, ground(x, z + .25) + .015, z + .25, 1, 1, 1, 0, Math.sin(k*2.3)*.15, 0)); }
     signpost(-1.5, ROAD_Z - 1.4, 'The Fault Line', ground(-1.5, ROAD_Z - 1.4), .25);
     // the rock the fault cut in two, a white stripe running through it; the east half rides south
@@ -182,7 +186,7 @@ export function buildFault(t){
     leafCloud(w.scene, canopy);
     // golden grass, orange poppies and purple lupines, thick by the edges and the water, sparse out in the open
     const clear = (x, z) => Math.abs(z - ROAD_Z - (x > 0 ? 1 : 0)) < 1.2 || creekD(x, z) < .8 || Math.hypot(x - POND[0], z - POND[1]) < 2 || Math.abs(x) < .5
-      || Math.hypot(x - BUS[0], z - BUS[1]) < 3.6 || Math.hypot(x - SPLIT[0], z - SPLIT[1] - .6) < 1.8 || Math.hypot(x - ROCK[0], z - ROCK[1]) < 1 || (x > -4.5 && x < 6 && Math.abs(z - FENCE_Z - .6) < 1.2);
+      || Math.hypot(x - BUS[0], z - BUS[1]) < 3.6 || Math.hypot(x - SPLIT[0], z - SPLIT[1] - .6) < 1.8 || Math.hypot(x - ROCK[0], z - ROCK[1]) < 1 || Math.hypot(x - SAG[0], z - SAG[1]) < 1.7 || (x > -4.5 && x < 6 && Math.abs(z - FENCE_Z - .6) < 1.2);
     for (let i = 0; i < 520; i++) { const a = fr(0, Math.PI*2), q = Math.sqrt(fr(0, 1))*1.02, c0 = Math.cos(a), s0 = Math.sin(a);
       const x = RX*q*Math.sign(c0)*Math.abs(c0)**.5, z = ZC + RZ*q*Math.sign(s0)*Math.abs(s0)**.5;
       if (clear(x, z)) continue; const y = ground(x, z), r = frand();
@@ -341,7 +345,8 @@ export function buildFault(t){
       t.cut(null);
     }});
   cls.hint = () => !cls.saw('quake') ? "Basil is down by the broken road. Go see what's wrong!" :
-    "Back to the bus whenever you're ready, {name}! Or go see anyone still waving.";
+    "Back to the bus whenever you're ready, {name}! Or go see anyone still waving. Or go exploring: what's hiding round the edges?";
+  buildFinds(w, t, trunks);
 
   return {world:w, bus, cls,
     // in low over the northern hills, round, and down beside the creek
@@ -421,4 +426,137 @@ function buildMap(w){
   }
   step(0);
   return {step, shot: (pos, look) => { pos.set(CUT[0], CUT[1] + 3.2, CUT[2] + 13.5); look.set(CUT[0], CUT[1] + 3, CUT[2]); return true; }};
+}
+
+// ---------- things to find, for anyone who goes exploring ----------
+// Round the valley's edges, each a curio with a little science, some with something to do first; and the
+// valley's wildlife, living alongside them. Each solid thing goes in trunks, to be walked round.
+const SQUIRRELS = [-10.6, 4.4], SEIS = [10.4, 6.3], HOUSE = [12.5, -9.6], POPPIES = [-6.6, -11], SNAG = [-15, .6];
+function buildFinds(w, t, trunks){
+  const near = ([x, z]) => Math.hypot(player.x - x, player.z - z);
+  const life = [];
+
+  // ---------- the sag pond, with a pair of ducks and their duckling ----------
+  const sy = ground(SAG[0] + 1.15, SAG[1]) + .05;
+  const pondWater = add(new THREE.CircleGeometry(1.2, 28), T(0x5aa0c8, {emissive:0x1b4262, emissiveIntensity:.35}), SAG[0], sy, SAG[1], w.scene, false); pondWater.rotation.x = -Math.PI/2;
+  for (let k = 0; k < 18; k++) { const a = k/18*Math.PI*2 + Math.sin(k*3)*.15, r = 1.25 + .15*Math.sin(k*5), x = SAG[0] + Math.cos(a)*r, z = SAG[1] + Math.sin(a)*r;
+    if (k % 4 === 3) { bAdd(0x9a8e86, new THREE.DodecahedronGeometry(.16, 0), XF(x, ground(x, z), z, 1.3, .6, 1, 0, a, 0), {ink:.02}); continue; }
+    for (let j = 0; j < 3; j++) bAdd(0x6a8a4a, new THREE.ConeGeometry(.035, .5 + .2*Math.sin(k + j), 3), XF(x + (j - 1)*.07, ground(x, z) + .22, z + Math.sin(j*2)*.06, 1, 1, 1, (j - 1)*.15, 0, Math.sin(k + j)*.2)); }
+  bFlush(w.scene);
+  const ducks = [duck(w.scene, true), duck(w.scene, false), duck(w.scene, false)];
+  ducks[2].g.scale.setScalar(.55);
+  let quack = 0;
+  life.push((dt, tt) => { quack = Math.max(0, quack - dt);
+    ducks.forEach((d, i) => { const a = tt*.35 + i*.5 - (i === 2 ? .45 : 0), r = i === 2 ? .55 : .6 - i*.05;
+      d.g.position.set(SAG[0] + Math.cos(a)*r, sy + .02 + Math.sin(tt*2 + i)*.01, SAG[1] + Math.sin(a)*r*.8); d.g.rotation.y = -a + Math.PI;
+      d.head.rotation.x = quack > 0 ? Math.sin(tt*20)*.3 : Math.max(0, Math.sin(tt*.6 + i*2) - .8)*3; }); });
+  curio(w, t, {name:'Ducks', at:SAG, y:sy + .7, lift:0, view:[-1, .1],
+    lines:[['sparks', "A sag pond! Right on the fault, the ground got stretched and sank into a dip."],
+      ['sparks', "Rain and springs fill the dips up. All along a fault like this, you find little ponds in a row."],
+      ['mo', "And ducks! Hello, ducks. I'd share my crumbs, but my snack is still missing."]],
+    from:[SAG[0] - 1, SAG[1] - 1.6], act: () => { quack = 1.6; [0, .3, .7].forEach(d => Sound.tone(420, {type:'sawtooth', t:d, dur:.12, vol:.03, f2:300, cut:1200})); }});
+
+  // ---------- ground squirrels, popping up as the explorer comes near ----------
+  const sqs = [[0, 0, .4], [1.3, .7, -.6], [-.9, 1.1, 1.2]].map(([dx, dz, ry]) => { const x = SQUIRRELS[0] + dx, z = SQUIRRELS[1] + dz, y = ground(x, z);
+    meshOf(new THREE.SphereGeometry(.34, 12, 6, 0, Math.PI*2, 0, Math.PI/2), 0xb08a58, w.scene).position.set(x, y - .12, z);
+    add(new THREE.CircleGeometry(.13, 12), T(0x2a1e1a), x, y + .06, z + .2, w.scene, false).rotation.x = -Math.PI/2.4;
+    const s = groundSquirrel(w.scene, x, y + .05, z + .2, ry); s.up = 0; return s; });
+  life.push((dt, tt) => { const d = near(SQUIRRELS), looking = game.cutscene && d < 5;
+    sqs.forEach((s, i) => { const want = looking || (d < 10 && d > 2.6 + i*.4) ? 1 : 0; s.up += (want - s.up)*Math.min(1, dt*(want ? 4 : 12)); s.flag = looking ? 1 : 0; s.tick(dt, tt); }); });
+  curio(w, t, {name:'Little burrows', at:SQUIRRELS, y:ground(...SQUIRRELS) + .9, lift:.2, view:[1, .2],
+    lines:[['sparks', "California ground squirrels! They dig long tunnels under these hills."],
+      ['sparks', "They have a trick for rattlesnakes: they wave their tails, and make them warm!"],
+      ['sparks', "Rattlesnakes can sense warmth. So a hot, waving tail says: 'I see you, snake. Go away!'"],
+      ['basil', "Wait. There are SNAKES here?"]]});
+
+  // ---------- a seismometer: a sensor buried in the ground, and a drum that draws every shake ----------
+  const sg = grp(SEIS[0], ground(...SEIS), SEIS[1], -.5, w.scene); trunks.push([SEIS[0], SEIS[1], .9]);
+  outline(box(1.6, .12, 1.1, T(0xb4aaa0), 0, .06, 0, sg), 1.04);
+  outline(add(new THREE.SphereGeometry(.3, 14, 8, 0, Math.PI*2, 0, Math.PI/2), T(C.cream), -.45, .12, -.15, sg), 1.08);
+  outline(box(.7, .5, .45, T(0x5a8aa8), .28, .37, -.12, sg), 1.05);
+  const paper = tex(512, 128, (c, cw, ch) => { c.fillStyle = '#f6efe0'; c.fillRect(0, 0, cw, ch); });
+  paper.wrapS = THREE.RepeatWrapping; const pc = paper.image.getContext('2d');
+  const axle = grp(.28, .78, -.12, 0, sg); axle.rotation.z = Math.PI/2;
+  const drum = add(new THREE.CylinderGeometry(.16, .16, .62, 24), T(0xffffff, {map:paper}), 0, 0, 0, axle, false);
+  for (const sx of [-1, 1]) outline(add(new THREE.CylinderGeometry(.17, .17, .03, 24), T(0x6b4430), 0, sx*.32, 0, axle, false), 1.06);
+  const pen = grp(.28, .96, -.12, 0, sg); add(new THREE.BoxGeometry(.03, .03, .34), T(0x2a2224), 0, 0, -.17, pen, false); sph(.025, T(0xc0483a), 0, -.02, 0, pen, 6);
+  // the solar panel that keeps it listening day and night
+  add(new THREE.CylinderGeometry(.03, .03, 1.3, 6), T(0x8a8a8a), -.6, .7, .35, sg);
+  outline(box(.6, .04, .42, T(0x2a3a6a), -.6, 1.38, .35, sg), 1.06).rotation.x = .5;
+  let phase = 0, kick = 0, kickV = 0, last = 0, px = player.x, pz = player.z, stompAt = -1;
+  const stomp = () => { player.y += .12; player.vy = 4.5; stompAt = game.elapsed + .38; };
+  life.push((dt, tt) => {
+    const sp = Math.hypot(player.x - px, player.z - pz)/Math.max(dt, 1e-3), d = near(SEIS); px = player.x; pz = player.z;
+    if (stompAt > 0 && game.elapsed >= stompAt) { stompAt = -1; kickV += 26; game.camShake = Math.max(game.camShake, .8); Sound.tone(70, {dur:.25, vol:.12, f2:45}); }
+    // a springy kick for a stomp, footsteps nearby, and every quake, with a tiny hum underneath it all
+    kickV += (-kick*90 - kickV*5)*dt; kick += kickV*dt;
+    const amp = Math.max(-1, Math.min(1, kick*.6 + .04*Math.sin(tt*37) + .03*Math.sin(tt*91) + (sp > .5 && d < 5 ? (Math.random() - .5)*.25*(1 - d/5) : 0) + (Math.random() - .5)*game.camShake*.4));
+    phase = (phase + dt*.05) % 1;
+    const x = phase*512, y = 64 + amp*52;
+    pc.fillStyle = '#f6efe0'; pc.fillRect(x, 0, 14, 128); pc.fillStyle = 'rgba(120,150,190,.25)'; pc.fillRect(x, 63, 14, 2);
+    pc.strokeStyle = '#2a2a4a'; pc.lineWidth = 2.5; pc.beginPath(); pc.moveTo(x - (x < 3 ? 0 : 3), last); pc.lineTo(x, y); pc.stroke(); last = y;
+    paper.needsUpdate = true;
+    drum.rotation.y = Math.PI/2 - phase*Math.PI*2; pen.position.x = .28 + amp*.25; });
+  curio(w, t, {name:'Little white station', verb:'Stomp the ground!', at:[SEIS[0], SEIS[1]], y:ground(...SEIS) + 1.2, lift:.7, view:[-.4, -1],
+    lines:[['sparks', "See that wiggle on the drum? That's YOUR stomp!"],
+      ['sparks', "This is a seismometer. It feels the ground shake, even shakes far too small for us to feel."],
+      ['sparks', "Around the world, thousands of tiny earthquakes happen every single day. Most are so small that only machines like this notice."],
+      ['basil', "Thousands? Every DAY?"],
+      ['sparks', "Tiny ones, Basil. Scientists listen to them all, to learn how the plates are moving."]],
+    from:[SEIS[0] - .3, SEIS[1] - 1.4], act: () => { stompAt = game.elapsed + .15; }});
+  addUsable(w, {name:'Seismometer', verb:'Stomp the ground!', short:'Stomp', x:SEIS[0] - .3, z:SEIS[1] - 1.4, y:ground(SEIS[0] - .3, SEIS[1] - 1.4), range:2.2,
+    glow:[SEIS[0], ground(...SEIS) + 1.2, SEIS[1]], when: () => w.curios.seen.has('Little white station'), action: stomp});
+
+  // ---------- a house built to ride out earthquakes ----------
+  const hg = grp(HOUSE[0], ground(...HOUSE), HOUSE[1], Math.atan2(-HOUSE[0], -HOUSE[1]), w.scene); trunks.push([HOUSE[0], HOUSE[1], 1.7]);
+  outline(box(2.5, .3, 2, T(0xb4aaa0), 0, .15, 0, hg), 1.03);
+  for (let k = 0; k < 5; k++) for (const sz of [-1, 1]) { const b = add(new THREE.CylinderGeometry(.04, .04, .05, 6), T(0x3a3238), -1 + k*.5, .2, sz*1.01, hg, false); b.rotation.x = Math.PI/2; }
+  outline(box(2.3, 1.4, 1.8, T(0xf0e2c4), 0, 1, 0, hg), 1.03);
+  for (const sx of [-1, 1]) { const r = outline(box(1.4, .08, 2.1, T(0xa84a3a), sx*.6, 1.98, 0, hg), 1.04); r.rotation.z = -sx*.62; }
+    outline(box(.45, .8, .06, T(C.woodLt), .55, .7, -.92, hg), 1.06);
+  outline(box(.42, .36, .06, T(0x9ad0e8), -.55, 1.1, -.92, hg), 1.08);
+  // wooden cross-braces on the walls, so they can't fold over when the ground sways
+  for (const [x, w0] of [[-.6, 1], [.6, -1]]) for (const sd of [-1, 1]) { const b = outline(box(.07, 1.55, .05, T(C.woodDk), x, 1, .92, hg), 1.1); b.rotation.z = sd*.62*w0; }
+  for (const sd of [-1, 1]) { const b = outline(box(.05, 1.55, .07, T(C.woodDk), 1.17, 1, 0, hg), 1.1); b.rotation.x = sd*.72; }
+  curio(w, t, {name:'A sturdy house', at:[HOUSE[0], HOUSE[1]], y:ground(...HOUSE) + 2.4, lift:1.1, view:[-.8, .7],
+    lines:[['basil', "This house has big X's on its walls. Is it a treasure map?"],
+      ['sparks', "Those are braces, Basil. They keep the walls stiff, so the house can't fold over when the ground shakes."],
+      ['sparks', "And see the bolts at the bottom? They hold the house tight to its base, so it can't slide off."],
+      ['basil', "A house that's ready for earthquakes. I like this house."]],
+    from:[HOUSE[0] - 1.7, HOUSE[1] + 1.9]});
+
+  // ---------- a patch of poppies ----------
+  const pet = [], stems = [];
+  for (let k = 0; k < 16; k++) { const a = k*2.4, r = .25 + .12*k**.8, x = POPPIES[0] + Math.cos(a)*r, z = POPPIES[1] + Math.sin(a)*r*.7, y = ground(x, z), h = .3 + .08*Math.sin(k*1.7);
+    stems.push([new THREE.CylinderGeometry(.012, .015, h, 4), XF(x, y + h/2, z)]);
+    for (let j = 0; j < 4; j++) { const b = j*Math.PI/2 + k; pet.push([new THREE.SphereGeometry(.07, 7, 5), XF(x + Math.cos(b)*.05, y + h + .04, z + Math.sin(b)*.05, .9, .35, 1.2, 0, -b, .9)]); } }
+  meshOf(mergeGeos(stems), 0x6a9a4a, w.scene); meshOf(mergeGeos(pet), 0xf28a2a, w.scene, .01);
+  curio(w, t, {name:'Orange flowers', at:POPPIES, y:ground(...POPPIES) + .5, lift:0, view:[.2, 1],
+    lines:[['juniper', "California poppies! I'm pressing one in my notebook. Well, a drawing of one."],
+      ['sparks', "Poppies close their petals up at night and on cloudy days, then open again when the sun comes back."],
+      ['juniper', "Flowers with a bedtime!"]]});
+
+  // ---------- a hawk on a dead tree, which takes off once looked at ----------
+  const sny = ground(...SNAG); trunks.push([SNAG[0], SNAG[1], .4]);
+  outline(add(new THREE.CylinderGeometry(.1, .2, 3, 7), T(0x8a7a6a), SNAG[0], sny + 1.5, SNAG[1], w.scene), 1.06);
+  for (const [a, l, y] of [[.7, 1.1, 2.1], [-2.3, .8, 1.5], [2.4, .6, 2.6]]) { const b = outline(add(new THREE.CylinderGeometry(.04, .07, l, 5), T(0x8a7a6a), SNAG[0] + Math.cos(a)*l*.35, sny + y + l*.3, SNAG[1] + Math.sin(a)*l*.35, w.scene), 1.08); b.rotation.set(Math.sin(a)*.9, 0, -Math.cos(a)*.9); }
+  const hk = hawk(w.scene), perch = new THREE.Vector3(SNAG[0], sny + 3.08, SNAG[1]); hk.g.position.copy(perch); hk.g.rotation.y = Math.PI/2; hk.fold();
+  let flight = -1;
+  life.push((dt, tt) => { if (flight < 0) { hk.head.rotation.y = Math.sin(tt*.7)*.8; return; } flight += dt;
+    const k = Math.min(1, flight/3), a = flight*.22, cx = -2, cz = -2, r = 13;
+    const sx = cx + Math.cos(a)*r, sz = cz + Math.sin(a)*r*.8, syy = 14 + Math.sin(flight*.3)*1.5;
+    hk.g.position.set(perch.x + (sx - perch.x)*ease(k), perch.y + (syy - perch.y)*ease(k), perch.z + (sz - perch.z)*ease(k));
+    hk.g.rotation.set(0, -a + (k < 1 ? -.8 : 0), -.3*k); hk.flap(k < 1 ? Math.sin(flight*12) : .12 + (Math.sin(flight*.5) > .85 ? Math.sin(flight*5)*.5 : 0)); });
+  curio(w, t, {name:'A bird on the old tree', at:[SNAG[0], SNAG[1]], y:perch.y + .4, lift:2.6, view:[1, .35],
+    lines:[['sparks', "A red-tailed hawk! See its rusty red tail?"],
+      ['sparks', "Its eyes are so sharp, it can spot a mouse in the grass from way up in the sky."],
+      ['pip', "I bet it has a super cool scream."],
+      ['sparks', "It does! When an eagle screams in a movie, it's often really a red-tailed hawk."]],
+    from:[SNAG[0] + 1.7, SNAG[1]], post: () => { flight = 0; Sound.tone(2200, {type:'sawtooth', dur:.9, vol:.03, f2:1300, cut:2600}); }});
+
+  // and life all about: swallows over the grass, butterflies on the flowers, another hawk high up
+  life.push(flock(w.scene, -3, 2.6, -2, 5, {r:8}).tick);
+  life.push(butterflies(w.scene, [[-6, -11], [-9, 6], [6, 6], [-4, -1], [8, -8], [12, 1], [-12, -1], [3, -6]], ground, [0xf2963a, 0xf6efe0, 0xffd36b, 0xf2963a]).tick);
+  life.push(soarer(w.scene, 10, 26, -30, 20, {s:2, body:0x6a4430, tail:0xc0583a}).tick);
+  w.anims.push((dt, tt) => life.forEach(f => f(dt, tt)));
 }
