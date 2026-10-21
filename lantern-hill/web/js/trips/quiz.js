@@ -23,6 +23,7 @@ import { tripBus } from './bus.js';
 import { heroHopIn, puffs, spawnNPC, tripWorld } from './stop-kit.js';
 import { storySky } from './sky.js';
 
+const short = () => innerHeight < 520 && innerWidth > innerHeight;
 const RIM = 10.6, AZ = -1.4, SLOTS = [-3.6, 0, 3.6], START = [0, 4.4], OPEN = .82;
 const ARCH_COL = [C.rust, 0x2f8f8a, C.plum];
 const CLASS_AT = {sparks:[4.6, 4.8, -.6], pip:[-5.6, 1.4, .9], juniper:[6.9, 1.8, -.9], basil:[-4.2, 3.2, 1.2], mo:[7.6, 3.9, -1.1]};
@@ -47,7 +48,9 @@ function heap(parts, x, y, z, s, n, rnd){
 
 export function explorerCheck(t, questions){
   const w = tripWorld({title:'The Explorer Check', bg:0xf0d2b0, sky:0xfff0dc, groundCol:0x9a8ac0, hemi:.85, sunCol:0xffd6a4, sunI:.85, fogNear:60, fogFar:240,
-    cam:{oy:7.4, oz:8.4, oyP:8.8, ozP:9.8, lookY:1.7}});
+    // portrait stands back so all three cards fit across; a phone on its side stands back and looks up a
+    // little, so the cards sit below the place's name box instead of under it
+    cam:{oy:7.4, oyP:11.2, ozP:13.2, get oz(){ return short() ? 12 : 8.4; }, get lookY(){ return short() ? 2.3 : 1.7; }}});
   w.far = 600;
   w.bounds = (x, z) => Math.hypot(x, z) < RIM - 1.2;
   w.surface = () => 'grass';

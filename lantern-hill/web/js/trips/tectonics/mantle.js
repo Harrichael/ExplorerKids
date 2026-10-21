@@ -160,7 +160,7 @@ export function buildMantle(t){
     c.font = '30px Caprasimo, Georgia, serif'; c.textAlign = 'center'; c.lineWidth = 7; c.strokeStyle = 'rgba(26,19,32,.85)'; c.fillStyle = '#efe0bf';
     const label = (s, x, y) => { c.strokeText(s, x, y); c.fillText(s, x, y); };
     label('plate', 380, 40); label('plate', 760, 40);
-    if (S.labels) { label('hot rock rises', 512, 488); label('cool rock sinks', 300, 470); label('cool rock sinks', 860, 470); }
+    if (S.labels) { label('hot rock rises', 512, 250); label('cool rock sinks', 268, 330); label('cool rock sinks', 756, 330); }
     wallTex.needsUpdate = true;
   }
   let sag = null, curFlow = 0;
@@ -214,7 +214,7 @@ export function buildMantle(t){
                  ['pip', "Look at the cliff. That's the mantle, cut open."]]);
       const pick = await t.ask('pip', "What will the hot rock near the bottom do?", ["Rise up", "Sink down", "Stay still"]);
       S.lapse = true; const p0 = S.phase;
-      await goggles(t, {shot:(pos, look) => { pos.set(0, 1.6, 4.2); look.set(0, 1, CLIFF); }, years:1e8, dur:8,
+      await goggles(t, {shot:(pos, look) => { pos.set(0, 4.2, 7.5); look.set(0, 4, CLIFF); }, years:1e8, dur:8,
         step: k => { S.phase = p0 + k*Math.PI*2; S.apart = k; S.labels = k > .25; }});
       await say([['pip', pick === 0 ? "You guessed it! The hot rock rose up." : "Whoa! The hot rock rose up."],
                  ['pip', "Then it cooled off at the top and sank. Round and round!"],

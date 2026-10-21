@@ -249,10 +249,24 @@ export function buildRim(t){
 
     // the sea far below, and the coast's other volcanoes standing in a line across it
     const sea = add(new THREE.PlaneGeometry(1400, 1400), T(0x3a6a9a, {emissive:0x10304a, emissiveIntensity:.4}), 0, SEA, 0, null, false); sea.rotation.x = -Math.PI/2;
-    for (const [x, z] of CHAIN) { const h = 30 + Math.abs(x)*.03, g = new THREE.Group(); g.position.set(x, SEA, z); w.scene.add(g);
-      outline(add(new THREE.CylinderGeometry(h*.12, h*.95, h, 10), T(0x3a1c16), 0, h/2, 0, g), 1.02);
-      add(new THREE.CylinderGeometry(h*.1, h*.14, h*.04, 10), T(0xff8a3a, {emissive:0xff6a1a, emissiveIntensity:.8}), 0, h + .2, 0, g, false);
-      add(new THREE.CylinderGeometry(h*1.8, h*2.1, 4, 14), T(0x24461e), 0, 0, 0, g, false); }
+    // Pip's binoculars look right at them, so each is an island, not a cone: flanks swept up into a peak and
+    // cut by gullies, bare rock on top, forest below, a sandy shore and pale shallows round it
+    const peak = new THREE.Color(0x342624), flank = new THREE.Color(0x6a3c24), forest = new THREE.Color(0x266a28), sand = new THREE.Color(0xc8a45a);
+    for (const [x, z] of CHAIN) { const h = 30 + Math.abs(x)*.03, g = new THREE.Group(), s = x*.37; g.position.set(x, SEA, z); w.scene.add(g);
+      const rad = k => h*(.14 + 1.05*(1 - k)**1.4), rows = Array.from({length:16}, (_, j) => [rad(j/15), j ? h*j/15 : -1.5]);
+      // the gullies wander as they run down, so no rib is a straight line
+      const geo = revolve(rows, 72, (a, r, y, j, c) => { const k = Math.max(0, y/h), f = Math.sin(a*9 + s + 1.6*Math.sin(a*3 + s) + 2.4*Math.sin(k*4 + a*2)), dr = r*((.06*f + .03*Math.sin(a*23 + s))*(1 - k*.7) + .07*Math.sin(a*4 + s*2)*(1 - k));
+        c.copy(sand).lerp(forest, sm(.03, .09, k)).lerp(flank, sm(.3, .55, k)).lerp(peak, sm(.62, .85, k)).multiplyScalar(.88 + .16*f);
+        return [Math.cos(a)*(r + dr), y + (j && j < 15 ? h*.015*f*(1 - k) : 0), Math.sin(a)*(r + dr)]; });
+      // revolve() winds its faces inward, for the crater's inside; these are seen from outside
+      const ix = geo.index.array; for (let i = 0; i < ix.length; i += 3) [ix[i + 1], ix[i + 2]] = [ix[i + 2], ix[i + 1]]; geo.computeVertexNormals();
+      outline(add(geo, T(0xffffff, {vertexColors:true}), 0, 0, 0, g), 1.012);
+      for (let i = 0; i < 44; i++) { const a = fr(0, Math.PI*2), k = fr(.05, .3), t = fr(1.8, 3.2), rr = rad(k)*.93;
+        bAdd([0x1e4a20, 0x2a5a26, 0x183e1e][i % 3], new THREE.IcosahedronGeometry(t, 1), XF(x + Math.cos(a)*rr, SEA + k*h + t*.3, z + Math.sin(a)*rr, 1, fr(.8, 1.1), 1, 0, a, 0), {ink:.06}); }
+      add(new THREE.CylinderGeometry(h*.1, h*.12, h*.04, 12), T(0xff8a3a, {emissive:0xff6a1a, emissiveIntensity:.8}), 0, h - h*.01, 0, g, false);
+      const shallows = new THREE.CircleGeometry(h*1.5, 48), sp = shallows.attributes.position;
+      for (let i = 1; i < sp.count; i++) { const a = Math.atan2(sp.getY(i), sp.getX(i)), q = 1 + .12*Math.sin(a*4 + s*2) + .05*Math.sin(a*11 + s); sp.setXY(i, sp.getX(i)*q, sp.getY(i)*q); }
+      add(shallows, new THREE.MeshBasicMaterial({color:0x7ae0d0, transparent:true, opacity:.5, depthWrite:false}), 0, .15, 0, g, false).rotation.x = -Math.PI/2; }
     // the warm pool, with pale floating pumice round its edge
     const poolTex = tex(256, 256, (c, cw, ch) => { const g = c.createRadialGradient(cw/2, ch/2, cw*.1, cw/2, ch/2, cw*.5); g.addColorStop(0, '#16566a'); g.addColorStop(.75, '#237a80'); g.addColorStop(1, '#4fa89c'); c.fillStyle = g; c.fillRect(0, 0, cw, ch);
       c.strokeStyle = 'rgba(200,240,230,.3)'; c.lineWidth = 3; for (let i = 0; i < 7; i++) { const x = 60 + Math.random()*136, y = 60 + Math.random()*136, r = 8 + Math.random()*16; c.beginPath(); c.ellipse(x, y, r, r*.55, 0, 0, 7); c.stroke(); } });
@@ -367,8 +381,9 @@ export function buildRim(t){
 
   // ---------- what the class finds ----------
   const say = t.say;
-  // a tall phone screen sees a narrow slice, so the binoculars stand back to fit the whole row in
-  const far = (pos, look) => { if (innerWidth < innerHeight) { pos.x = look.x + (pos.x - look.x)*1.5; pos.z = look.z + (pos.z - look.z)*1.5; } };
+  // a tall phone screen sees a narrow slice, so the binoculars stand back to fit the whole row in; on a
+  // phone on its side the talk box fills the bottom half, so the binoculars sit high and the view tips down
+  const far = (pos, look) => { if (innerWidth < innerHeight) { pos.x = look.x + (pos.x - look.x)*1.5; pos.z = look.z + (pos.z - look.z)*1.5; } else if (innerHeight < 520) { pos.x = look.x + (pos.x - look.x)*1.3; pos.z = look.z + (pos.z - look.z)*1.3; look.y -= 30; } };
   cls.find('pip', {name:'row', at:[-1.4, CRATER + 1.3, Math.PI], pose:'peer', call:"Come see what's down there!", after:["Volcanoes all in a row. Like beads on a string!"],
     async scene(){
       await say([['pip', "{name}! Look down inside the crater. It's glowing!"]]);

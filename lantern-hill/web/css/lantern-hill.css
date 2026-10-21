@@ -235,12 +235,20 @@ button.snd:focus-visible,button.word:focus-visible{outline:3px solid #6d3b5e;out
 #goggles .count .lbl{display:block;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold)}
 #goggles .count b{font-family:var(--display);font-weight:400;font-size:26px;color:#ffd36b}
 #goggles .count i{font-style:normal}
+/* a phone's narrow view has no room for the corner boxes and the stick over the goggles' or binoculars' view */
+body:has(#goggles:not([hidden])) :is(.hud,#stick,#talk),body:has(#binoc:not([hidden])) :is(.hud,#stick,#talk){opacity:0}
 /* Binoculars: two round views of something far away */
 #binoc{position:fixed;inset:0;pointer-events:none;z-index:4;background:rgba(26,19,32,.97);
   -webkit-mask:radial-gradient(circle at 37% 50%,transparent 26vmin,#000 27vmin),radial-gradient(circle at 63% 50%,transparent 26vmin,#000 27vmin);-webkit-mask-composite:source-in;
   mask:radial-gradient(circle at 37% 50%,transparent 26vmin,#000 27vmin),radial-gradient(circle at 63% 50%,transparent 26vmin,#000 27vmin);mask-composite:intersect}
+@media (max-height:520px) and (orientation:landscape){#binoc{
+  -webkit-mask:radial-gradient(circle at 37% 32%,transparent 26vmin,#000 27vmin),radial-gradient(circle at 63% 32%,transparent 26vmin,#000 27vmin);-webkit-mask-composite:source-in;
+  mask:radial-gradient(circle at 37% 32%,transparent 26vmin,#000 27vmin),radial-gradient(circle at 63% 32%,transparent 26vmin,#000 27vmin);mask-composite:intersect}}
+/* a phone on its side: a smaller talk box, so it covers less than half the view */
+@media (max-height:520px) and (min-width:601px){#dialog{bottom:calc(8px + env(safe-area-inset-bottom,0px));min-height:0;padding:20px 18px 10px 112px}#dialog .tab{left:112px}
+  .bust{left:10px;bottom:10px;width:88px;height:88px}#dialog p{font-size:16px;line-height:1.4;min-height:2.8em}#dialog .choices{margin-top:8px;gap:8px}#dialog .choice{font-size:15px;padding:5px 12px}}
 /* Juniper's notebook: stickers of each place, stuck in as the trip goes */
-#notebook{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(20,12,28,.72);padding:16px;z-index:7;animation:fadein .3s ease-out}
+#notebook{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(20,12,28,.72);padding:calc(16px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));z-index:7;animation:fadein .3s ease-out}
 #notebook .page{width:min(860px,100%);box-sizing:border-box;background:#efe0bf;color:#1a1320;border:3px solid var(--gold);border-radius:20px;box-shadow:0 0 0 5px var(--ink),0 24px 50px rgba(0,0,0,.55);padding:16px 18px;display:flex;flex-direction:column;align-items:center;gap:10px;background-image:repeating-linear-gradient(transparent 0 27px,rgba(52,64,107,.14) 27px 28px)}
 #notebook .ch{font-family:var(--display);font-size:22px;color:#6d3b5e}
 #notebook .slots{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;width:100%}
@@ -264,5 +272,5 @@ button.snd:focus-visible,button.word:focus-visible{outline:3px solid #6d3b5e;out
 @media (prefers-reduced-motion: reduce){#notebook,#notebook .slot.new{animation:none}}
 #notebook .wbtn{flex:none;padding:8px 26px}
 /* a phone on its side: the stickers in one row, so the button stays on screen */
-@media (max-height:520px){#notebook{padding:8px}#notebook .page{width:min(860px,100%);padding:10px 14px;gap:6px}#notebook .ch{font-size:18px}
+@media (max-height:520px){#notebook{padding:8px max(8px,env(safe-area-inset-right,0px)) calc(8px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px))}#notebook .page{width:min(860px,100%);padding:10px 14px;gap:6px}#notebook .ch{font-size:18px}
   #notebook .slots{grid-template-columns:repeat(6,1fr);gap:8px}#notebook .slot,#notebook .slot:nth-child(3n+1):nth-last-child(2){grid-column:auto}#notebook .cap{font-size:11.5px}#notebook .cap b{font-size:14px}}

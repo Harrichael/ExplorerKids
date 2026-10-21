@@ -10,8 +10,8 @@ import { drawSlide } from './slides.js';
 
 const css = document.createElement('style');
 css.textContent = `
-#mscope{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(26,19,32,.6);z-index:20;animation:ifade .2s ease-out}
-#mscope .mwrap{width:min(780px,100%);max-height:100%;overflow-y:auto;background:#f6ecd6;color:#1a1320;border:3px solid var(--gold);border-radius:18px;box-shadow:0 0 0 4px var(--ink),0 14px 34px rgba(0,0,0,.45);padding:14px 18px 16px}
+#mscope{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:calc(16px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));background:rgba(26,19,32,.6);z-index:20;animation:ifade .2s ease-out}
+#mscope .mwrap{box-sizing:border-box;width:min(780px,100%);max-height:100%;overflow-y:auto;background:#f6ecd6;color:#1a1320;border:3px solid var(--gold);border-radius:18px;box-shadow:0 0 0 4px var(--ink),0 14px 34px rgba(0,0,0,.45);padding:14px 18px 16px}
 #mscope header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
 #mscope h2{margin:0;font-family:var(--display);font-weight:400;font-size:26px;color:var(--plum)}
 #mscope .count{font-weight:900;font-size:14px;color:#6d3b5e;margin-left:auto}
@@ -42,6 +42,7 @@ css.textContent = `
 #mscope .next{font-family:var(--display);font-size:17px;color:var(--parch);background:var(--plum);border:2.5px solid var(--gold);border-radius:14px;padding:8px 14px;box-shadow:0 0 0 3px var(--ink);cursor:pointer}
 #mscope .keyhint{margin-top:8px;color:#6d3b5e;font-size:12px;font-weight:800}
 #mscope kbd{font:inherit;opacity:.75}
+@media (max-height:520px) and (min-width:641px){#mscope .eye{flex-direction:row}#mscope .lens{width:calc(100vh - 190px);height:calc(100vh - 190px);min-width:150px;min-height:150px}#mscope .knobrow{flex-direction:column}}
 @media (max-width:640px){#mscope .mbody{flex-direction:column;align-items:center}#mscope .lens{width:220px;height:220px}#mscope .side{width:100%}}`;
 document.head.appendChild(css);
 
