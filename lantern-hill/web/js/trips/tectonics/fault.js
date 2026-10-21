@@ -276,7 +276,7 @@ export function buildFault(t){
   const slice = buildSlice(w);
   const bus = tripBus(w);
   const door = () => bus.door(.6);
-  const cls = classmates(w, t, [BUS[0] - 1.6, BUS[1] + 1.6]);
+  const cls = classmates(w, t, bus);
   const say = t.say;
   let snap = null, hop = -1;
   const sy = snack.position.y;

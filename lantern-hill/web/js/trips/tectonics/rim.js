@@ -296,7 +296,7 @@ export function buildRim(t){
   CHAIN.filter((p, i) => i !== 1).forEach(([x, z]) => plume(w, [x, SEA + 31 + Math.abs(x)*.03, z], {scale:3.4, burps:false, max:40, base:.5, top:18}));
   const bus = tripBus(w);
   const door = () => bus.door(.6);
-  const cls = classmates(w, t, [BUS[0] - 1.6, BUS[1] - 1.6]);
+  const cls = classmates(w, t, bus);
   let thrown = null, tossed = null;
   w.anims.push((dt, tt) => {
     if (thrown) { thrown.t += dt; const k = clamp01(thrown.t/.9);
@@ -618,8 +618,9 @@ export function buildRim(t){
       Sound.tone(330, {type:'triangle', dur:.12, vol:.08}); Sound.tone(494, {type:'triangle', t:.1, dur:.18, vol:.08});
       const [dx, dz] = door();
       t.cut((pos, look) => { pos.set(BUS[0] + 3, 11, BUS[1] + 15); look.set(BUS[0] - 12, 0, BUS[1] - 2); });
-      // beside the door, toward the nose, well clear of the bus's side
-      cls.arrive({sparks:[dx - .2, dz - 1.2, Math.PI*.85]});
+      // beside the door, toward the tail: the class heads off toward the crater, so she isn't left
+      // between the camera and them, filling the corner of the view
+      cls.arrive({sparks:[dx - .3, dz + 1.3, -Math.PI*.7]});
       await t.wait(2.6);
       await say([['sparks', "Here we are, class: the very top of a volcano! A real, live, active volcano."],
                  ['basil', "LIVE?! You mean it's ALIVE?!"],

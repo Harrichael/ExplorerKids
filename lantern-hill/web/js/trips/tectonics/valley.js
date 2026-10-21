@@ -152,7 +152,7 @@ export function buildValley(t){
   const crash = buildCutaway(w);
   const bus = tripBus(w);
   const door = () => bus.door(.6);
-  const cls = classmates(w, t, door());
+  const cls = classmates(w, t, bus);
   const say = t.say;
   // Juniper carries the picnic rug rolled up on her back, until she shakes it out
   {

@@ -2,7 +2,7 @@
 // one has found something, they call the explorer over, and talking to them plays out the find.
 // Nobody follows the explorer around: the explorer goes to them.
 //
-//   const cls = classmates(w, t, [busX, busZ]);
+//   const cls = classmates(w, t, bus);           // they hop off at its door, wherever it parks
 //   cls.find('juniper', {name:'rock', at:[x, z, facing], pose:'crouch', call:"Come feel this!",
 //     scene: async () => { ... }, after:["Still warm!"]});
 //   cls.hint = () => "...";                    // what Dr. Sparks says if asked
@@ -37,9 +37,9 @@ bang.wrapS = bang.wrapT = THREE.ClampToEdgeWrapping;
 const arrowEl = document.createElement('div'); arrowEl.id = 'callArrow'; arrowEl.hidden = true; document.body.append(arrowEl);
 const sp = new THREE.Vector3();
 
-export function classmates(w, t, door){
+export function classmates(w, t, ride){
   const n = {}, finds = [], found = new Set();
-  for (const id of CLASS) { n[id] = spawnNPC(w, id, door[0], door[1], 0); n[id].model.root.visible = false; n[id].label.visible = false; }
+  for (const id of CLASS) { n[id] = spawnNPC(w, id, 0, 0, 0); n[id].model.root.visible = false; n[id].label.visible = false; }
   const cls = {n, found, hint: () => "Look around, {name}! Somebody's sure to find something.",
     find(id, f){ f.id = id; f.who = n[id]; f.mark = new THREE.Sprite(new THREE.SpriteMaterial({map:bang, transparent:true, depthWrite:false}));
       f.mark.scale.set(.6, .6, 1); f.mark.visible = false; w.scene.add(f.mark); finds.push(f); return f; },
@@ -61,6 +61,7 @@ export function classmates(w, t, door){
     },
     // off the bus, everyone to their spot: the first find of each kid, or where they were told to stand
     arrive(spots = {}){
+      const door = ride.door(.6);
       CLASS.forEach((id, i) => {
         const k = n[id], f = finds.find(f => f.id === id), at = spots[id] || (f && f.at);
         ({x:k.x, z:k.z} = clear(door[0] + (i - 2)*.35, door[1])); k.model.root.position.set(k.x, w.ground(k.x, k.z), k.z); k.model.root.visible = true; k.label.visible = true;
@@ -69,7 +70,7 @@ export function classmates(w, t, door){
       });
     },
     // everyone back to the bus door to wait for the explorer
-    gather(at){ bus = at; },
+    gather(at){ meet = at; },
     // until the explorer climbs aboard; never in the middle of a find, whose scene would be left running.
     // The class files in through the door as they get there; the explorer climbing aboard calls in
     // anyone still out, then Dr. Sparks, then the explorer last of all.
@@ -88,7 +89,7 @@ export function classmates(w, t, door){
       await t.until(() => inside);
     },
   };
-  let bus = null, aboard = null, nextIn = 0;
+  let meet = null, aboard = null, nextIn = 0;
   // nobody stands where the explorer couldn't: inside the parked bus, a boulder
   const clear = (x, z) => {
     for (let pass = 0; pass < 3; pass++) { let moved = false;
@@ -99,6 +100,37 @@ export function classmates(w, t, door){
       if (!moved) break; }
     return {x, z};
   };
+  // The way round whatever stands between someone and where they're going: the parked bus, a boulder, a
+  // crater. A coarse grid search, run once when a walk is set and only if the straight line is blocked,
+  // so it costs nothing most frames. Whoever it can't find a way for walks straight, as they always did.
+  const R = .35, G = .5;
+  const free = (x, z) => (!w.bounds || w.bounds(x, z)) && !w.colliders.some(c => x > c.minX - R && x < c.maxX + R && z > c.minZ - R && z < c.maxZ + R && (y => y >= c.minY && y <= c.maxY)(w.ground(x, z)));
+  // a spot to stand may be just off the walkable ground (a ledge, a rock's edge), so the last of the way isn't checked
+  const line = (ax, az, bx, bz, slack = 0) => { const d = Math.hypot(bx - ax, bz - az); for (let s = .25; s < d - slack; s += .25) if (!free(ax + (bx - ax)*s/d, az + (bz - az)*s/d)) return false; return true; };
+  function route(k, g){
+    g.routed = true;
+    if (line(k.x, k.z, g.x, g.z, .6)) return;
+    const sx = k.x, sz = k.z, at = (i, j) => [sx + i*G, sz + j*G], id = (i, j) => (i + 2048)*4096 + j + 2048, memo = new Map();
+    const ok = (i, j) => { const q = id(i, j); let v = memo.get(q); if (v === undefined) memo.set(q, v = free(...at(i, j))); return v; };
+    const open = [[Math.hypot(g.x - sx, g.z - sz), 0, 0, 0]], from = new Map([[id(0, 0), null]]), cost = new Map([[id(0, 0), 0]]);
+    let end = null;
+    for (let m = 0; open.length && m < 1500 && !end; m++) {
+      let b = 0; for (let q = 1; q < open.length; q++) if (open[q][0] < open[b][0]) b = q;
+      const [, c, i, j] = open.splice(b, 1)[0], [x, z] = at(i, j), d = Math.hypot(g.x - x, g.z - z);
+      if (d < .8 || (d < 2.5 && line(x, z, g.x, g.z, .6))) { end = [i, j]; break; }
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const ni = i + di, nj = j + dj, q = id(ni, nj), nc = c + Math.hypot(di, dj)*G;
+        if (nc >= (cost.get(q) ?? Infinity) || !ok(ni, nj) || (di && dj && (!ok(i + di, j) || !ok(i, j + dj)))) continue;
+        cost.set(q, nc); from.set(q, id(i, j)); const [nx, nz] = at(ni, nj); open.push([nc + Math.hypot(g.x - nx, g.z - nz), nc, ni, nj]);
+      }
+    }
+    if (!end) return;
+    const cells = []; for (let q = id(...end); q !== null; q = from.get(q)) cells.unshift(at(Math.floor(q/4096) - 2048, q % 4096 - 2048));
+    // straight on wherever it's clear, rather than the grid's zigzag
+    const pts = []; for (let a = 0; a < cells.length - 1;) { let b = cells.length - 1; while (b > a + 1 && !line(...cells[a], ...cells[b])) b--; pts.push(cells[b]); a = b; }
+    let leg = g; for (const [x, z] of pts.reverse()) { const next = leg; leg = {x, z, run:g.run, routed:true, then: () => { k.goal = next; }}; }
+    k.goal = leg;
+  }
   const waving = () => [...new Set(finds.filter(f => !found.has(f) && (!f.when || f.when()) && f.id !== 'sparks').map(f => f.who.name))];
   // up to the door and in with a hop
   function goIn(k, run){
@@ -120,14 +152,17 @@ export function classmates(w, t, door){
   w.anims.push((dt, tt) => {
     let near = null, nd = Infinity;
     for (const id of CLASS) {
-      const k = n[id], f = finds.find(f => f.who === k && ready(f));
+      const k = n[id];
+      if (k.goal && !k.goal.routed) route(k, k.goal);
+      const f = finds.find(f => f.who === k && ready(f));
       if (k.in) { k.onTalk = null; k.calling = false; k.range = 0; continue; }
       // one who has just run to a new find stays by it, even in the beat before they spot it
-      if (bus && !f && !k.goal && !k.atBus && id !== 'sparks' && !finds.some(g => g.who === k && !found.has(g) && (!g.when || g.when()))) { const i = CLASS.indexOf(id); k.atBus = true; k.pose = null; k.goal = {...clear(bus[0] + (i - 2.5)*.8, bus[1] + (i % 2)*.6), angle:bus[2] || 0}; }
-      // with the bus here, those waiting file in one by one, and Dr. Sparks waits by the door for the explorer
+      if (meet && !f && !k.goal && !k.atBus && id !== 'sparks' && !finds.some(g => g.who === k && !found.has(g) && (!g.when || g.when()))) { const i = CLASS.indexOf(id); k.atBus = true; k.pose = null; k.goal = {...clear(meet[0] + (i - 2.5)*.8, meet[1] + (i % 2)*.6), angle:meet[2] || 0}; }
+      // with the bus here, those waiting file in one by one, and Dr. Sparks waits by the door for the explorer,
+      // a long step out from the side, where the queue walks
       if (aboard && k.atBus && !k.goal && id !== 'sparks' && tt > nextIn) { nextIn = tt + .6; goIn(k, false); continue; }
-      if (aboard && id === 'sparks' && !k.atBus && !f) { const a = aboard.root.rotation.y, [x, z] = aboard.door(.8);
-        k.atBus = true; k.pose = null; k.goal = {...clear(x + Math.cos(a)*1.1, z - Math.sin(a)*1.1), angle:a + Math.PI}; }
+      if (aboard && id === 'sparks' && !k.atBus && !f) { const a = aboard.root.rotation.y, [x, z] = aboard.door(1.5);
+        k.atBus = true; k.pose = null; k.goal = {...clear(x + Math.cos(a)*.9, z - Math.sin(a)*.9), angle:a + Math.PI}; }
       // whoever has something to show is talked to through it; the rest just chat
       k.onTalk = f ? () => play(f) : id === 'sparks' ? sparksHint : null;
       // mid-find, with the explorer handed the controls to do something, nobody calls or talks

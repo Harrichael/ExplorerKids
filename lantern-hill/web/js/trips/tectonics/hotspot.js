@@ -260,7 +260,7 @@ export function buildHotspot(t){
   const chain = buildChainSlice(w), swell = buildSwellSlice(w);
   const bus = tripBus(w);
   const door = () => bus.door(.6);
-  const cls = classmates(w, t, [BUS[0] - 1.6, BUS[1] - 1.6]);
+  const cls = classmates(w, t, bus);
   const say = t.say;
   // lava blobs tumbling off the edge of the new land into the sea
   const blobs = [0, 1, 2, 3].map(() => { const m = sph(.16, new THREE.MeshBasicMaterial({color:0xffa040}), 0, -99, 0, w.scene, 6, false); return {m, t:fr(0, 2)}; });

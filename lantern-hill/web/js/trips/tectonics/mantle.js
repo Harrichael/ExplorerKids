@@ -179,7 +179,7 @@ export function buildMantle(t){
     ring.material.opacity = .45 + Math.sin(tt*2)*.15;
   });
   const bus = tripBus(w);
-  const cls = classmates(w, t, [BUS[0] + 1.6, BUS[1] - 1.6]);
+  const cls = classmates(w, t, bus);
   const say = t.say;
 
   // ---------- what the class finds ----------

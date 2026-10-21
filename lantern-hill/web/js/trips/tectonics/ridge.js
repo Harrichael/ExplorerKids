@@ -184,7 +184,7 @@ export function buildRidge(t){
   const wind = cloud(60, .5, 0xd8f0ff, puffTex), gusts = []; wind.pts.visible = false;
   for (let i = 0; i < wind.n; i++) gusts.push({k:Math.random(), o:[fr(-.5, .5), fr(-.4, .4)]});
   const fanFrom = new THREE.Vector3(), fanTo = new THREE.Vector3(MOUTH[0] - 1, .8, MOUTH[1]);
-  const cls = classmates(w, t, [BUS[0] - 1.6, BUS[1] - 1.6]);
+  const cls = classmates(w, t, bus);
 
   // everyone wears a bubble helmet down here, with a lamp on its brow; only the explorer's lamp
   // is a real light, the others are glowing cones that cost next to nothing
