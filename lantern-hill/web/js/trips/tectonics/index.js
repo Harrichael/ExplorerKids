@@ -14,6 +14,7 @@ import { load, save } from '../../save.js';
 import { game } from '../../state.js';
 import { cabin } from '../cabin.js';
 import { notebook } from '../notebook.js';
+import { cheers, explorerCheck } from '../quiz.js';
 import { puffs } from '../stop-kit.js';
 import { diagram } from './diagram.js';
 import { buildMantle } from './mantle.js';
@@ -253,7 +254,18 @@ export const tectonics = {
                              ['sparks', "Right! Those lined up because the plate slid over the plume, like paper over a candle. Two different ways to make a row of volcanoes!"]]);
       S.melt = false;
       t.watch(cab.world, cab.shot('teacher'), seat);
-      await t.say([['sparks', "Splendid exploring, class. Wonder Bus, take us home!"]]);
+      await t.say([['sparks', "Splendid exploring, class!"]]);
+      // the Explorer Check: an optional last stop, on the way home, on the bus
+      const yes = await t.ask('sparks', "Before we land, {name}, the class has questions for you. Want to try my Explorer Check?", ["Yes! Hand it over!", "Maybe later"], {keep:true}) === 0;
+      if (yes) {
+        await t.say([['sparks', "Here's my clipboard! Every right answer on the first try gets a star."]]);
+        const r = await explorerCheck(quiz, quiz.found(s, t.heard), {done:'Back to my seat'});
+        t.cut(cab.shot('class'));
+        await t.say(cheers(r));
+        t.cut(cab.shot('teacher'));
+      }
+      else await t.say([['basil', "Phew. My brain is full of lava."], ['sparks', "Any time, {name}! Just ask me at the Wonder Bus."]]);
+      await t.say([['sparks', "Wonder Bus, take us home!"]]);
     }],
   ],
   outro: [['sparks', "Home sweet Lantern Hill! So, {name}: the ground shakes and mountains grow because Earth's crust is broken into plates."],

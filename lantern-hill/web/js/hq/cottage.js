@@ -380,7 +380,7 @@ for (const bx of [-.5,-.25]) { const bt = grp(bx,0,.05,0,benchE); box(.18,.35,.3
 col(9.1, 10, 4.2, 6.6, -5, .8);
 const boardTex = tex(512,384,(g,w,h)=>{ g.fillStyle='#a07a48'; g.fillRect(0,0,w,h);
   g.fillStyle='#e9d9b8'; g.save(); g.translate(150,150); g.rotate(-.05); g.fillRect(-110,-90,220,180); g.strokeStyle='#b5552f'; g.lineWidth=4; g.setLineDash([10,8]); g.beginPath(); g.moveTo(-80,50); g.bezierCurveTo(-30,-60,20,60,80,-40); g.stroke(); g.setLineDash([]); g.fillStyle='#b5552f'; g.font='900 40px sans-serif'; g.fillText('✕', 64, -26); g.restore();
-  g.fillStyle='#f3e3b0'; g.save(); g.translate(380,120); g.rotate(.06); g.fillRect(-80,-70,160,140); g.fillStyle='#2f5552'; g.font='800 24px "Nunito", sans-serif'; g.textAlign='center'; g.fillText('FIELD TRIPS', 0, -30); g.font='700 20px "Nunito", sans-serif'; g.fillText('Volcano', 0, 2); g.fillText('Coral reef', 0, 28); g.fillText('The Moon!', 0, 54); g.restore();
+  g.fillStyle='#f3e3b0'; g.save(); g.translate(380,120); g.rotate(.06); g.fillRect(-80,-70,160,140); g.fillStyle='#2f5552'; g.font='800 24px "Nunito", sans-serif'; g.textAlign='center'; g.fillText('I WONDER...', 0, -30); g.font='700 18px "Nunito", sans-serif'; g.fillText('Why do things fizz?', 0, 2); g.fillText("What's deep down?", 0, 28); g.fillText('Where do rocks go?', 0, 54); g.restore();
   g.fillStyle='#d36a8f'; g.fillRect(320,240,140,110); g.fillStyle='#1a1320'; g.font='800 22px "Nunito", sans-serif'; g.textAlign='center'; g.fillText('Be curious', 390, 300);
   ['#b5552f','#2f5552','#d9a441','#6d3b5e'].forEach((c,i)=>{ g.fillStyle=c; g.beginPath(); g.arc([150,380,390,90][i],[64,52,250,240][i],9,0,7); g.fill(); }); });
 box(.08, 1.4, 1.9, T(C.woodDk), 9.97, 2.1, 5.4, null, false);

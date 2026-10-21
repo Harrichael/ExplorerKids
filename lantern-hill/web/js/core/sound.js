@@ -241,6 +241,10 @@ export const Sound = (() => {
     updateIn(){ bell(midi(79), .9, 1, .04); bell(midi(84), 1.1, 1.6, .05); tone(midi(48), {type:'sine', t:1.1, dur:1.2, vol:.06, attack:.08}); },
     // a reloaded page may not have earned audio yet: browsers wait for a tap or key
     running(){ return !!ctx && ctx.state === 'running'; },
+    // an old bus horn: two reedy notes a third apart, a little flat as they start, with a buzzy body
+    honk({t = 0, dur = .34} = {}){
+      for (const [f, v] of [[349, .09], [440, .075]]) { tone(f*.96, {type:'sawtooth', t, dur, vol:v, f2:f, cut:1400, attack:.02, vib:[30, 3]}); tone(f/2, {type:'square', t, dur:dur*.9, vol:v*.35, cut:700, attack:.02}); }
+    },
     meow(){ tone(520, {type:'triangle', dur:.42, vol:.12, f2:820, cut:2200, vib:[7,18]}); tone(820, {type:'triangle', t:.28, dur:.3, vol:.08, f2:480, cut:2000}); }
   };
 })();

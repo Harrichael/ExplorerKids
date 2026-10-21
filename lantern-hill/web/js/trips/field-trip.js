@@ -26,7 +26,7 @@ import { game } from '../state.js';
 import { ask, endConvo, story } from '../ui/dialogue.js';
 import { $ } from '../ui/dom.js';
 import { pageTurn } from '../ui/page-turn.js';
-import { explorerCheck } from './quiz.js';
+import { cheers, explorerCheck } from './quiz.js';
 import { heroHopIn, hopIn, spawnNPC } from './stop-kit.js';
 
 const objEl = $('obj'), leaveBtn = $('leaveTrip');
@@ -35,8 +35,8 @@ export function objective(text){ objEl.hidden = !text; objEl.textContent = text 
 // ---------- the field trip ----------
 const TRIP = {on:false, chapter:null};
 let trip = null, vanAnim = null;
-// which trip is on, and its chapter: an index into trip.chapters, or null for the Explorer Check
-export const tripNow = () => TRIP.on ? {id:trip.id, chapter:TRIP.chapter, name:TRIP.chapter === null ? 'Explorer Check' : trip.chapters[TRIP.chapter][0]} : null;
+// which trip is on, and its chapter: an index into trip.chapters
+export const tripNow = () => TRIP.on ? {id:trip.id, chapter:TRIP.chapter, name:trip.chapters[TRIP.chapter][0]} : null;
 const VAN_HOME = {x:15.6, z:5.5, ry:-.3, dx:Math.cos(.3), dz:Math.sin(.3)};
 // takeoff: a hop, then a climbing left turn over the lily pond and off toward the moon, wide
 // enough of the treehouse that its canopy never hides the bus from the garden camera
@@ -166,7 +166,7 @@ function run(from = 0, seed){
   (async () => { for (let i = from; i < trip.chapters.length; i++) { TRIP.chapter = i; await trip.chapters[i][1](me, shared); } })()
     .then(() => { if (dir === me) returnHome(shared); }, e => { if (e !== GONE) throw e; });
 }
-function makeDirector({leave = true} = {}){
+function makeDirector(){
   let held = null;
   const d = {gone:false, heard:new Set(), ends:[() => { if (held) held.parent.remove(held); held = null; }]};
   const live = p => p.then(v => { if (d.gone) throw GONE; return v; });
@@ -184,12 +184,12 @@ function makeDirector({leave = true} = {}){
     play(w, spawn){
       if (game.world !== w) enterWorld(w, spawn || w.spawn);
       else if (spawn) { player.x = spawn[0]; player.z = spawn[1]; player.angle = spawn[2] ?? player.angle; }
-      game.cutscene = false; game.cutCam = null; hero.root.visible = true; blob.visible = true; leaveBtn.hidden = !leave;
+      game.cutscene = false; game.cutCam = null; hero.root.visible = true; blob.visible = true; leaveBtn.hidden = false;
     },
     say: lines => live(new Promise(ok => story(lines, ok))),
-    // a question with answers to pick from; resolves with the index of the one picked
-    // shown in a shuffled order, so the right answer isn't always first; resolves with its index as given
-    ask: (who, text, answers) => { const order = answers.map((a, i) => i).sort(() => Math.random() - .5);
+    // a question with answers to pick from, shown in a shuffled order so the right answer isn't always
+    // first, unless `keep` (an offer, say, with its yes first); resolves with the index of the one picked as given
+    ask: (who, text, answers, {keep = false} = {}) => { const order = answers.map((a, i) => i); if (!keep) order.sort(() => Math.random() - .5);
       return live(new Promise(ok => ask(who, text, order.map(i => answers[i]), j => ok(order[j])))); },
     // an extra the explorer can ask for or skip, its two answers always in the same places; resolves true if asked for.
     // What was asked for is kept in d.heard, for the Explorer Check.
@@ -229,7 +229,7 @@ function returnHome(shared){
     game.cutCam = (pos, look) => { pos.set(16.4, 4.4, 10.8); look.set(van.position.x, van.position.y + 1, van.position.z); };
     flyVan({mode:'land', t0:game.elapsed + .6, dur:3, done: () => {
       hero.root.visible = true; blob.visible = true; game.cutCam = null; game.cutscene = false;
-      story(trip.outro, () => { TRIP.on = false; showBadge(shared, trip.quiz && (() => offerCheck(trip, shared))); });
+      story(trip.outro, () => { TRIP.on = false; showBadge(shared); });
     }});
   }, null, ['The end of the trip', 'Home to Lantern Hill']);
 }
@@ -240,8 +240,7 @@ function leaveTrip(){
   pageTurn(() => { Sound.setTheme('home'); away(false); resetVan(); enterWorld(HQ, [16.2, 2.4, Math.PI]); hero.root.visible = true; blob.visible = true; leaveBtn.hidden = true; objective(''); }, null, ['', 'Back to Lantern Hill']);
 }
 leaveBtn.addEventListener('click', e => { e.stopPropagation(); leaveTrip(); });
-function showBadge(shared, then){
-  afterBadge = then || null;
+function showBadge(shared){
   const saved = load('trips'), done = saved && typeof saved === 'object' ? saved : {};
   done[trip.id] = true; save('trips', done);
   trip.badge.draw($('badgeCan'), shared); $('bTitle').textContent = trip.badge.title;
@@ -250,34 +249,15 @@ function showBadge(shared, then){
   [523, 659, 784, 1046, 1319].forEach((f, i) => Sound.tone(f, {type:'triangle', t:i*.1, dur:.45, vol:.09}));
   setTimeout(() => $('badgeOk').focus({preventScroll:true}), 80);
 }
-let afterBadge = null;
-$('badgeOk').addEventListener('click', () => { $('badge').hidden = true; game.cutscene = false; Sound.next(); const f = afterBadge; afterBadge = null; if (f) f(); });
+$('badgeOk').addEventListener('click', () => { $('badge').hidden = true; game.cutscene = false; Sound.next(); });
 
-// ---------- Dr. Sparks's Explorer Check, after a trip or any time from the bus ----------
-function offerCheck(t, shared){
-  ask('sparks', "Oh, {name}! Before you go… want to try my Explorer Check? It's up on a cloud!", ["Yes, let's go!", "Maybe later"],
-    i => i ? story([['sparks', "Any time! Just hop on the Wonder Bus and ask."]]) : startCheck(t, shared));
-}
-// shared: what the trip just played remembered, for its badge; none when started from the bus at HQ.
-// The questions come from what was found on every trip so far, so they're drawn the same way from either.
-export function startCheck(t, shared = null){
+// ---------- Dr. Sparks's Explorer Check, from the Wonder Bus at home ----------
+// The check is offered on the bus at the end of a trip; one put off till later, or tried again for more
+// stars, is the same sheet, handed over at the bus. It asks about what was found on every trip so far.
+export async function startCheck(t){
   if (TRIP.on || game.cutscene) return;
-  trip = t; TRIP.on = true; TRIP.chapter = null; Sound.setTheme('trip');
-  // the check's own way home is the Wonder Bus, parked on the cloud
-  const me = dir = makeDirector({leave:false});
-  pageTurn(() => { away(true); van.visible = false;
-    const qs = t.quiz.questions((load('trips') || {})[t.quiz.pool]);
-    explorerCheck(me, qs).then(stars => { if (dir === me) checkDone(t, shared, stars, qs.length); }, e => { if (e !== GONE) throw e; });
-  }, null, ['The Explorer Check', 'Up on a cloud']);
-}
-function checkDone(t, shared, stars, of){
-  const saved = load('trips') || {}, best = Math.max(saved[t.quiz.key] || 0, stars);
+  const r = await explorerCheck(t.quiz, (load('trips') || {})[t.quiz.pool], {done:'Hooray!'});
+  game.cutscene = false;
   // a first perfect score shows the badge again, with its new ring of stars
-  const newly = stars === of && (saved[t.quiz.key] || 0) < of;
-  save('trips', {[t.quiz.key]: best});
-  endTrip(dir); dir = null;
-  pageTurn(() => { Sound.setTheme('home'); away(false); resetVan(); enterWorld(HQ, [17.4, 2.4, -2.5]); hero.root.visible = true; blob.visible = true; leaveBtn.hidden = true; objective(''); },
-    () => { TRIP.on = false; game.cutscene = false;
-      if (newly) story([['sparks', "Wait, {name}! Look at your badge. A perfect Explorer Check earns it a ring of stars!"]], () => showBadge(shared, null)); },
-    ['', 'Home to Lantern Hill']);
+  story(cheers(r), () => { if (r.perfect) story([['sparks', "Wait, {name}! Look at your badge. A perfect Explorer Check earns it a ring of stars!"]], () => { trip = t; showBadge(null); }); });
 }

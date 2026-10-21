@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { C, T, add, clamp01, cyl, ease, occluder, outline } from '../core/kit.js';
 import { inWorld } from '../core/world.js';
-import { buildBus } from '../props/wonder-bus.js';
+import { BUS, buildBus } from '../props/wonder-bus.js';
 
 const tan = new THREE.Vector3(), tan2 = new THREE.Vector3();
 
@@ -28,7 +28,7 @@ export function tripBus(w, at){
     // fins, a tail and a propeller for under the sea
     fins = new THREE.Group(); body.add(fins);
     for (const sz of [-1, 1]) { const f = add(new THREE.BoxGeometry(1.4, .08, .9), T(0x2f8f8a), -.2, .75, sz*1.35, fins); f.rotation.y = sz*.25; outline(f, 1.05); }
-    const tail = add(new THREE.BoxGeometry(.9, 1.0, .08), T(0x2f8f8a), -2.55, 2.5, 0, fins); tail.rotation.z = .35; outline(tail, 1.05);
+    const tail = add(new THREE.BoxGeometry(.9, 1.0, .08), T(0x2f8f8a), -2.55, BUS.top + .3, 0, fins); tail.rotation.z = .35; outline(tail, 1.05);
     const prop = new THREE.Group(); prop.position.set(-2.95, 1.05, 0); fins.add(prop); fins.userData.prop = prop;
     for (let k = 0; k < 3; k++) { const b = add(new THREE.BoxGeometry(.06, .9, .2), T(C.gold), 0, 0, 0, prop); b.rotation.x = k*Math.PI*2/3; }
     cyl(.12, .12, .2, T(C.ink), -2.85, 1.05, 0, fins, 10).rotation.z = Math.PI/2;
@@ -36,7 +36,7 @@ export function tripBus(w, at){
     occluder(body);
   });
   bubble = new THREE.Mesh(new THREE.SphereGeometry(3.4, 32, 20), new THREE.MeshBasicMaterial({color:0x9fe8ff, transparent:true, opacity:.16, depthWrite:false, blending:THREE.AdditiveBlending}));
-  bubble.position.set(0, 1.3, 0); bubble.scale.set(1.15, .8, .85); body.add(bubble);
+  bubble.position.set(0, 1.5, 0); bubble.scale.set(1.15, .8, .85); body.add(bubble);
   const rim = new THREE.Mesh(new THREE.SphereGeometry(3.42, 32, 20), new THREE.MeshBasicMaterial({color:0xc8f4ff, transparent:true, opacity:.22, side:THREE.BackSide, depthWrite:false, blending:THREE.AdditiveBlending}));
   bubble.add(rim);
   const bus = {root, body, flight:null, spin:0,
@@ -52,17 +52,19 @@ export function tripBus(w, at){
       return new Promise(done => { bus.flight = {curve, dur, t:0, roll, easing, level, done}; });
     },
     // the door, on the bus's left side, in the place's coordinates
-    door(out = 0){ const a = root.rotation.y, lx = 1.62, lz = -.97 - out; return [root.position.x + lx*Math.cos(a) + lz*Math.sin(a), root.position.z - lx*Math.sin(a) + lz*Math.cos(a)]; },
+    door(out = 0){ const a = root.rotation.y, lx = BUS.door.x, lz = -.97 - out; return [root.position.x + lx*Math.cos(a) + lz*Math.sin(a), root.position.z - lx*Math.sin(a) + lz*Math.cos(a)]; },
     async boarding(t, when){
       const [x, z] = bus.door(.7);
       t.goal('Back to the Wonder Bus when you’re ready');
-      await t.use(w, {name:'Wonder Bus', x, z, verb:'Climb aboard the Wonder Bus', short:'Board', glow:[x, root.position.y + 2.6, z], when});
+      await t.use(w, {name:'Wonder Bus', x, z, verb:'Climb aboard the Wonder Bus', short:'Board', glow:[x, root.position.y + 2.9, z], when});
       t.goal('');
     },
   };
   let box = null;
   const solid = b => { if (box) w.colliders.splice(w.colliders.indexOf(box), 1); box = b; if (b) w.colliders.push(b); };
   bus.gear(null);
+  // hopping aboard (stop-kit.js) runs at this door
+  w.busDoor = {at: out => bus.door(out), top: () => root.position.y + body.position.y + BUS.door.y1};
   if (at) bus.park(at.x, at.y, at.z, at.ry || 0);
   w.anims.push((dt, t) => {
     if (drill.visible) drill.rotation.x += dt*14;

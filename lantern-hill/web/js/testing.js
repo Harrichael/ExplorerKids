@@ -58,10 +58,10 @@ loop.step = () => {
 };
 
 // ---------- anyone shown standing inside something solid (the parked bus, a boulder), told once each time they go in ----------
-const size = new WeakMap(), M = .12, ray = new THREE.Raycaster(), down = new THREE.Vector3(0, -1, 0), from = new THREE.Vector3();
+const M = .12, ray = new THREE.Raycaster(), down = new THREE.Vector3(0, -1, 0), from = new THREE.Vector3();
 let inside = new Map();
-// shrinking to fit the bus door is how everyone gets aboard; the doorway isn't in the bus's box
-const shrunk = m => { if (!size.has(m)) size.set(m, m.scale.x); return m.scale.x < size.get(m) - .01; };
+// someone hopping in through the bus door (trips/stop-kit.js)
+const boarding = m => !!m.userData.boarding;
 const shows = o => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
 // a box is only a rough footprint (a parked bus turned on the diagonal gets a box far bigger than itself),
 // so someone in one counts only if something drawn is above their waist too: the bus roof, the top of a rock,
@@ -75,7 +75,7 @@ function look(){
   const w = game.world, now = new Map();
   for (const n of w.npcs) {
     const m = n.model.root;
-    if (!m.visible || shrunk(m)) continue;
+    if (!m.visible) continue;
     const {x, y, z} = m.position;
     w.colliders.forEach((c, i) => {
       // HQ's residents each stand in a small box of their own, so the explorer can't walk through them
@@ -89,7 +89,7 @@ function look(){
   inside = now;
 }
 // what `dense` can name; any other key is a window of seconds into the chapter, '12-18'
-const WHEN = {door:() => shrunk(hero.root) || game.world.npcs.some(n => shrunk(n.model.root)), bus:() => game.world.title === 'The Wonder Bus', watch:() => control() === 'watch', clip:() => inside.size > 0};
+const WHEN = {door:() => boarding(hero.root) || game.world.npcs.some(n => boarding(n.model.root)), bus:() => game.world.title === 'The Wonder Bus', watch:() => control() === 'watch', clip:() => inside.size > 0};
 function spacing(){
   let e = P.every || Infinity;
   for (const [k, v] of Object.entries(P.dense)) { const [a, b] = k.split('-').map(Number); if (WHEN[k] ? WHEN[k]() : ct() >= a && ct() <= b) e = Math.min(e, v); }

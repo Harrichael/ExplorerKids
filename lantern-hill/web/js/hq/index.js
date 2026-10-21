@@ -23,7 +23,7 @@ import { openWardrobe } from '../ui/wardrobe.js';
 import { ARMCHAIRS, LAB_DESK, MICROSCOPE, WINDOW_SEAT } from './cottage.js';
 import { BED } from '../garden/bed.js';
 import { BENCH } from './garden-life.js';
-import { PLAT, groundAt } from './garden.js';
+import { PLAT, busDoor, groundAt } from './garden.js';
 import { npcs } from './residents.js';
 import { PLAY } from './toy-crane.js';
 import { sunFrom } from './daylight.js';
@@ -43,7 +43,7 @@ function areaFor(x, z, y){
 }
 
 export const HQ = {scene, colliders, occluders, occMeshes, npcs, usables:[], sun, sunFrom, cam:null, bounds:null,
-  ground:groundAt, surface:surfaceAt, area:areaFor, update:(dt, t) => hqAnims.forEach(f => f(dt, t))};
+  ground:groundAt, surface:surfaceAt, area:areaFor, busDoor, update:(dt, t) => hqAnims.forEach(f => f(dt, t))};
 
 async function openFlashcards(){
   const { openLearn } = await import('../learn/flashcards.js');
@@ -92,7 +92,7 @@ async function useMicroscope(){
 async function boardWonderBus(){
   const [{ startCheck, startTrip }, { tectonics }] = await Promise.all([import('../trips/field-trip.js'), import('../trips/tectonics/index.js')]);
   if (!load('trips')?.tectonics) { startTrip(tectonics); return; }
-  ask('sparks', "Where to, {name}?", ["The volcano trip!", "Your Explorer Check, on a cloud!", "Not right now"],
+  ask('sparks', "Where to, {name}?", ["The volcano trip!", "Your Explorer Check!", "Not right now"],
     i => i === 0 ? startTrip(tectonics) : i === 1 && startCheck(tectonics));
 }
 addUsable(HQ, {name:'Wardrobe', x:8.95, z:3.2, range:1.7, verb:'Open the wardrobe', short:'Open', glow:[8.9, 2.95, 3.2], action: () => openWardrobe(false)});
@@ -111,7 +111,7 @@ for (const c of ARMCHAIRS) addUsable(HQ, {name:'Armchair', x:c.x + Math.sin(c.ry
 addUsable(HQ, {name:'Toy crane', x:PLAY.x, z:PLAY.z + 1.2, range:1.4, verb:'Build a block tower', short:'Build', glow:[PLAY.x, 1.0, PLAY.z], action:openTower});
 addUsable(HQ, {name:'Experiment desk', x:LAB_DESK.x, z:LAB_DESK.z + 1.05, range:1.2, verb:'Do an experiment', short:'Lab', glow:[LAB_DESK.x, 1.35, LAB_DESK.z + .1], action:openLab});
 // the bus is just a parked bus until the first Fizzy Volcano; the trip is a surprise that eruption reveals (lab/index.js)
-addUsable(HQ, {name:'Wonder Bus', x:15.9, z:3.6, range:1.9, verb:'Board the Wonder Bus', short:'Board', glow:[15.6, 2.9, 5.5], action:boardWonderBus,
+addUsable(HQ, {name:'Wonder Bus', x:15.9, z:3.6, range:1.9, verb:'Board the Wonder Bus', short:'Board', glow:[15.6, 3.4, 5.5], action:boardWonderBus,
   when: () => (load('lab')?.done || []).includes('volcano')});
 // just furniture until a field trip turns up a sample to look at
 addUsable(HQ, {name:'Microscope', x:MICROSCOPE.x - .75, z:MICROSCOPE.z - .35, range:1.3, verb:'Look through the microscope', short:'Look', glow:[MICROSCOPE.x, 1.45, MICROSCOPE.z],

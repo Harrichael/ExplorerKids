@@ -39,30 +39,42 @@ export function spawnNPC(w, pid, x, z, ry, lines = []){
     blinkAt:1 + Math.random()*3, name:p.name, role:p.role, dot:p.dot, voice:p.voice, kind:p.kind, persona:p, lines, walk:0};
   w.npcs.push(n); return n;
 }
-// The Wonder Bus door is barely a metre high and everyone is taller, Dr. Sparks most of all. So they
-// shrink to fit as they hop up to it, magic-bus style, and their heads never go through the wall above.
-const DOOR = 1.0, smooth = k => (k = Math.min(1, Math.max(0, k)), k*k*(3 - 2*k));
-// with a little hop, up through a door at [x, y, z] just inside the wall, and gone from sight; resolves once they're in.
-// They start about half a metre out, so they've shrunk before they meet the wall.
-export function hopIn(n, [x, y, z], s = .45){
-  const x0 = n.x, y0 = n.y, z0 = n.z, t0 = game.elapsed, m = n.model.root, sc = m.scale.x, fit = Math.min(1, DOOR/(n.labelY - .25));
-  n.range = 0; n.label.visible = false; n.pose = null; m.rotation.y = n.baseAngle = Math.atan2(x - x0, z - z0);
-  Sound.tone(440, {type:'triangle', dur:.14, vol:.05, f2:880});
-  return frames(() => { const u = Math.min(1, (game.elapsed - t0)/s);
-    // high enough to clear the step, which is well off the ground
-    n.x = x0 + (x - x0)*u; n.z = z0 + (z - z0)*u; n.y = y0 + (y - y0)*u + Math.sin(u*Math.PI)*.45;
-    m.position.set(n.x, n.y, n.z); m.scale.setScalar(sc*(1 - (1 - fit)*smooth(u/.55)));
-    if (u < 1) return false; m.visible = false; m.scale.setScalar(sc); return true; });
+// Into the Wonder Bus through its door, at their own size. A world with the bus parked in it says where
+// the door is (w.busDoor, from trips/bus.js or hq/garden.js), so the last of the way runs straight at
+// the doorway, and anyone taller than it ducks. They're gone from sight as they cross the threshold,
+// front half already in the dark of the doorway, so nobody is ever seen standing inside the bus.
+const GONE = .25;
+function doorway([x, z], x0, z0){
+  const d = game.world.busDoor, [fx, fz] = d ? d.at(.55) : [x0, z0];
+  // stop short of the spot inside by the depth of the threshold
+  const dx = x - fx, dz = z - fz, l = Math.hypot(dx, dz) || 1;
+  return {fx, fz, vx:x - dx/l*GONE, vz:z - dz/l*GONE, top:d && d.top()};
 }
-// the explorer too: one bouncy leap from wherever they stand, shrinking to fit over the last stretch to the door
+// a curve from where they stand, bending through the spot in front of the door, to the threshold
+const along = (u, a, f, v) => (1 - u)*(1 - u)*a + 2*u*(1 - u)*f + u*u*v;
+// with a little hop up onto the step at [x, y, z], the spot just inside the door; resolves once they're in
+export function hopIn(n, [x, y, z], s = .45){
+  const x0 = n.x, y0 = n.y, z0 = n.z, t0 = game.elapsed, m = n.model.root, {fx, fz, vx, vz, top} = doorway([x, z], x0, z0);
+  const tall = n.labelY - .2, lean = top ? Math.acos(Math.max(.75, Math.min(1, 1 - (y + tall - top + .05)/tall))) : 0;
+  n.range = 0; n.label.visible = false; n.pose = null; m.rotation.order = 'YXZ'; m.userData.boarding = true;
+  Sound.tone(440, {type:'triangle', dur:.14, vol:.05, f2:880});
+  return frames(() => { const u = Math.min(1, (game.elapsed - t0)/s), a = Math.min(1, u*1.2);
+    n.x = along(u, x0, fx, vx); n.z = along(u, z0, fz, vz);
+    m.rotation.y = n.baseAngle = Math.atan2(along(a, x0, fx, vx) - n.x, along(a, z0, fz, vz) - n.z) || n.baseAngle;
+    // high enough to clear the step, landing in the doorway
+    n.y = y0 + (y - y0)*Math.min(1, u*1.6) + Math.sin(u*Math.PI)*.3;
+    m.position.set(n.x, n.y, n.z); m.rotation.x = lean*Math.min(1, u*1.5);
+    if (u < 1) return false; m.visible = m.userData.boarding = false; m.rotation.x = 0; return true; });
+}
+// the explorer too: one bouncy leap from wherever they stand, round to the door and in
 export function heroHopIn([x, z], s = .55){
-  const x0 = player.x, z0 = player.z, t0 = game.elapsed, sc = hero.root.scale.x, fit = DOOR/1.75;
-  player.angle = Math.atan2(x - x0, z - z0); player.y += .06; player.vy = 22*s/2;
+  const x0 = player.x, z0 = player.z, t0 = game.elapsed, {fx, fz, vx, vz} = doorway([x, z], x0, z0);
+  player.angle = Math.atan2(fx - x0, fz - z0); player.y += .06; player.vy = 22*s/2; hero.root.userData.boarding = true;
   Sound.tone(392, {type:'triangle', dur:.18, vol:.06, f2:880});
-  return frames(() => { const u = Math.min(1, (game.elapsed - t0)/s);
-    player.x = x0 + (x - x0)*u; player.z = z0 + (z - z0)*u;
-    hero.root.scale.setScalar(sc*(1 - (1 - fit)*smooth((1.2 - Math.hypot(x - player.x, z - player.z))/.75)));
-    if (u < 1) return false; hero.root.visible = blob.visible = false; hero.root.scale.setScalar(sc);
+  return frames(() => { const u = Math.min(1, (game.elapsed - t0)/s), a = Math.min(1, u + .1);
+    player.x = along(u, x0, fx, vx); player.z = along(u, z0, fz, vz);
+    player.angle = Math.atan2(along(a, x0, fx, vx) - player.x, along(a, z0, fz, vz) - player.z) || player.angle;
+    if (u < 1) return false; hero.root.visible = blob.visible = hero.root.userData.boarding = false;
     // the bus faded to show them climbing in; with them gone it's solid again at once
     game.world.occluders.forEach(o => { o.cur = 1; }); return true; });
 }

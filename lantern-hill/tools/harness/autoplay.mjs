@@ -24,13 +24,13 @@ try {
     if (s.errors.length) say('PAGE ERRORS ' + s.errors.join(' | '));
     for (const c of s.clips) say(`INSIDE ${c.who} at t ${c.t} in a ${c.box.w}×${c.box.d} m box at (${c.box.x}, ${c.box.z}), after picture ${c.after}`);
     const where = `${s.chapter || '-'} | ${s.place} | ${s.goal || ''}`; if (where !== last) { say(where); last = where; tries.clear(); }
-    if (s.overlays.includes('badge')) { say('badge'); await h.ok(); continue; }
+    // the badge is the trip's last word
+    if (s.overlays.includes('badge')) { say('badge'); await h.ok(); out = 'home'; break; }
     if (s.overlays.includes('notebook')) { await h.ok(); continue; }
     if (s.control === 'question') {
-      // after the badge, Dr. Sparks offers her Explorer Check; "maybe later" ends the run
+      // on the bus home, Dr. Sparks offers her Explorer Check; this says "maybe later"
       const cs = s.talk.choices, later = cs.findIndex(c => /maybe later/i.test(c)), n = later >= 0 ? later : Math.max(0, cs.findIndex(c => words.some(w => c.toLowerCase().includes(w))));
       say(`Q ${s.talk.who}: ${s.talk.line}  -> ${cs[n]}`); await h.pick(String(n + 1));
-      if (later >= 0) { out = 'home'; break; }
       continue;
     }
     if (s.control !== 'walk') continue;

@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { Sound } from '../core/sound.js';
 import { camera } from '../core/render.js';
 import { LAB_DESK } from '../hq/cottage.js';
+import { holdBus, van, wakeBus } from '../hq/garden.js';
 import { hqAnims, scene } from '../hq/scene.js';
 import { coarse, setSound } from '../input.js';
 import { blob, hero, player } from '../player.js';
@@ -160,9 +161,11 @@ function step(dt){
 }
 function leave(){
   if (!lab) return;
+  // stepping away before the bus has had its moment: it wakes up anyway, out in the garden
+  if (lab.wakes) wakeBus();
   if (convo) endConvo(true);
   clearDesk(); handsOff(); closeCabinet(); tipping.length = 0; setTipKey(0); setTipButton(false);
-  hud.hidden = book.hidden = true; document.documentElement.classList.remove('labbing');
+  hud.hidden = book.hidden = true; hud.style.visibility = ''; document.documentElement.classList.remove('labbing');
   hero.root.visible = true; blob.visible = true; game.cutCam = null; game.cutscene = false; lab = null;
   Sound.close();
 }
@@ -175,6 +178,7 @@ const dots = n => `<span class="lv" role="img" aria-label="Difficulty ${n} of 5"
 const trip = (f, short) => f ? `<span class="trip" role="img" aria-label="Found on the ${f.name} field trip">${f.icon} ${short ? f.short : f.name} trip</span>` : '';
 function openBook(){
   if (convo) endConvo(false);
+  reveal(false);
   lab.phase = 'book'; lab.run = null; clearDesk(); handsOff(); closeCabinet(); hud.hidden = true;
   const rec = record(), done = progress(), notes = rec.notes || {}, grid = $('lbGrid');
   // before anything is done, the first experiment is the new one
@@ -210,7 +214,7 @@ async function startRun(exp, quiet){
   // the physics engine downloads the first time; until it's here the book stays up, and if it never comes, step away
   try { await ready; } catch (e) { leave(); return; }
   if (!lab) return;
-  book.hidden = true;
+  reveal(false); book.hidden = true;
   hud.hidden = false; chooseEl.hidden = lockBtn.hidden = true;
   setupDesk(exp.setup, {endless: !!exp.free}); closeCabinet(); handsOn(root, exp.free ? reach : null);
   lab.phase = 'run'; lab.run = {exp, r:-1, notes:[]};
@@ -342,16 +346,34 @@ function finish(){
   stockCabinet(now);
   toast('Experiment complete!', fresh.length ? `New in the book: ${list(fresh.map(e => e.title))}` : got.length ? 'New supplies in your cabinet!' : exp.title);
   if (fresh.length) extra.push(['sparks', `You've opened up ${fresh.length > 1 ? 'new experiments' : 'a new experiment'} in my book: ${list(fresh.map(e => e.title))}!`]);
-  // the first eruption is what opens the Wonder Bus trip to the volcano (hq/index.js)
-  if (exp.id === 'volcano' && !before.has('volcano')) extra.push(['sparks', "That fizz gave me an idea, {name}! The Wonder Bus is ready to visit a REAL volcano. Hop aboard in the garden whenever you like!"]);
   if (freeNow) extra.push(['sparks', "And you've earned the Free Lab! Everything from this experiment is waiting in the cabinet behind the mat, to mix however you like."]);
   else if (got.length) extra.push(['sparks', `I've put the ${list(got.map(t => ITEMS[t].name.toLowerCase()))} in your cabinet for the Free Lab.`]);
   const after = $('lhAfter'); after.innerHTML = ''; after.hidden = false;
   EXPERIMENTS.filter(e => e.after.includes(exp.id) && opened(e, done) && !done.has(e.id))
     .forEach((e, i) => { const b = pill(`Next: ${e.title} →`, () => startRun(e)); if (!i) b.classList.add('go'); after.appendChild(b); });
   after.appendChild(pill('Experiment book', openBook));
-  story([...exp.explain, ...extra]);
+  // the first eruption is what opens the Wonder Bus trip to the volcano (hq/index.js), and nobody has
+  // said a word about it before: the bus outside wakes up and honks, and only then does Dr. Sparks explain
+  const woke = exp.id === 'volcano' && !before.has('volcano');
+  if (woke) { holdBus(); lab.wakes = true; }
+  story([...exp.explain, ...extra], woke ? () => busWakes(run) : undefined);
   drawHud();
+}
+// the card and buttons stay put but out of sight while the camera is out in the garden
+const reveal = on => { hud.style.visibility = on ? 'hidden' : ''; if (!on && lab && game.cutCam !== deskCam) { game.cutCam = deskCam; game.camSnap = true; } };
+async function busWakes(run){
+  const still = () => lab && lab.run === run, until = test => new Promise(ok => { const f = () => test() ? ok() : requestAnimationFrame(f); f(); });
+  if (!still()) return;
+  reveal(true);
+  const [from, to] = [[6.5, 2.4, -4.0], [1.2, 1.2, 0]].map(([x, y, z]) => van.localToWorld(new THREE.Vector3(x, y, z)));
+  game.cutCam = (pos, look) => { pos.copy(from); look.copy(to); return true; };
+  const t0 = game.elapsed; await until(() => game.elapsed > t0 + .5 || !still());
+  if (lab) lab.wakes = false;
+  await wakeBus();
+  if (!still()) return;
+  story([['sparks', "That fizz gave me an idea, {name}! The Wonder Bus is ready to visit a REAL volcano. Hop aboard in the garden whenever you like!"]]);
+  await until(() => !convo || !still());
+  if (still()) reveal(false);
 }
 
 function drawHud(){

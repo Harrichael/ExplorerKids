@@ -78,7 +78,11 @@ if the child gets to do things. Never cut content to make a trip shorter. Make i
   the backpack as unlabelled jars, a small mystery ("I wonder what it looks like?") that the
   microscope answers. The microscope shows "N of M" with empty slots, and stays hidden until
   the first sample.
-- **Quiz.** After the trip, Dr. Sparks offers an optional quiz. "Our first playtester ... really
+- **Quiz.** It is part of the trip, not a place of its own: "I don't like how the quiz is distinct
+  from the field trip and magically in the clouds - that was over the top. It should be an optional
+  fork at the end of a field trip and not in the clouds, just on the bus, and no need for walking
+  through arches or any 3d mode to do the quiz in, just question and answer (bring up a piece of
+  paper as the full screen and the quiz is on there, not scrolling dialogue)". "Our first playtester ... really
   enjoyed the quiz." Make it engaging. On the telescope he asked that kids can't just spam
   clicks through things: "require more clicks to prevent spam, not confirmation, thats weak".
   Build a big question pool and draw from what this explorer actually did: "It should sort of
@@ -106,8 +110,9 @@ if the child gets to do things. Never cut content to make a trip shorter. Make i
   what happened (`t.ask`, then `goggles()`, then `t.say`).
 - **Unlocks are surprises.** "We want to lead with surprise." A trip that waits on the lab is
   not announced beforehand: no one says "do the experiment and I'll take you on a field trip"
-  ("it's too contrived"), and the bus is just a parked bus with nothing to press. The reveal
-  comes the moment the experiment is done.
+  ("it's too contrived"), and the bus is just a parked bus with nothing to press ("the bus should
+  be present but not interactable before unlock"). The reveal comes the moment the experiment is
+  done, and "it can get a honk and headlights".
 - **Tie into the lab.** He wants trips and science-desk experiments to unlock each other.
   The tectonics trip waits until the Fizzy Volcano is done (`hq/index.js`) and saves
   `save('trips', {heatRises:true})` to open the heat-rises experiment. In the lab, "locked
@@ -126,7 +131,8 @@ if the child gets to do things. Never cut content to make a trip shorter. Make i
   standing inside the bus, heads in the roof, flickering trim (z-fighting).
 - Make it alive. Smoke that "burps" at random, lava you can "look down" at, rugs that get
   unrolled. Long or random loops, not a short repeat.
-- Show what happens. The kids run onto the bus and go in through the door, Sparks gets on
+- Show what happens. The kids run onto the bus and go in through the door ("The bus door should be
+  taller", so they fit through it rather than shrinking), Sparks gets on
   "excitedly".
 
 ## Building blocks

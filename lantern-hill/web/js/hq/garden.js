@@ -2,7 +2,9 @@
 
 import * as THREE from 'three';
 import { C, LEAF, T, XF, add, bAdd, barkGeo, box, col, cyl, fr, frand, glowM, glowTex, grp, leafCloud, mergeGeos, meshOf, occluder, outline, outlineMat, rand, rr, rrect, sph, tex } from '../core/kit.js';
-import { buildBus } from '../props/wonder-bus.js';
+import { BUS, buildBus } from '../props/wonder-bus.js';
+import { Sound } from '../core/sound.js';
+import { load } from '../save.js';
 import { daylight } from './daylight.js';
 import { hqAnims, scene } from './scene.js';
 
@@ -161,9 +163,46 @@ occluder(canopy);
 // ---------- Hover van ----------
 export const van = grp(15.6, 0, 5.5, -.3);
 export const vanBody = grp(0, 0, 0, 0, van);
-const hoverPads = buildBus(vanBody);
+const busParts = buildBus(vanBody), hoverPads = busParts.pads;
+// a soft halo on each headlamp, for once they're on
+const beams = busParts.lamps.map(l => { const s = new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex, color:0xfff0b0, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0}));
+  s.position.copy(l.position).x += .3; s.scale.setScalar(.75); vanBody.add(s); return s; });
 occluder(van);
 col(13.0, 18.2, 3.9, 7.1);
+// where hopping aboard runs (trips/stop-kit.js)
+const local = (x, z) => van.localToWorld(new THREE.Vector3(x, 0, z));
+export const busDoor = {at: out => { const p = local(BUS.door.x, -.97 - out); return [p.x, p.z]; }, top: () => van.position.y + vanBody.position.y + BUS.door.y1};
+
+// Until the first Fizzy Volcano the bus is just a parked bus, asleep on its wheels with its lamps out.
+// That eruption wakes it (lab/index.js): its lamps blink on, it honks twice, bouncing on its springs,
+// and it rises onto its hover pads, where it stays from then on, lamps lit, ready to go.
+const ready = () => (load('lab')?.done || []).includes('volcano');
+let awake = ready() ? 1 : 0, waking = null, lookAt = 0, held = false;
+// the lab has just saved the eruption, and wants the bus asleep until it cuts outside to show it waking
+export function holdBus(){ held = true; }
+export function wakeBus(){
+  held = false;
+  if (awake || waking) return Promise.resolve();
+  return new Promise(done => { waking = {t:0, honks:0, done}; });
+}
+// the wake-up, second by second: lamps that stutter on, two honks that rock the bus, then the lift
+const flicker = t => t < .6 ? 0 : t < .7 ? .8 : t < .82 ? .1 : t < .9 ? 1 : t < 1.15 ? .15 : Math.min(1, (t - 1.15)*5);
+const HONKS = [1.5, 1.95];
+const bounce = t => HONKS.reduce((s, at) => s + (t > at ? Math.exp(-(t - at)*6)*Math.sin((t - at)*22) : 0), 0);
+function wakeStep(dt){
+  const w = waking; w.t += dt;
+  while (w.honks < HONKS.length && w.t >= HONKS[w.honks]) { w.honks++; Sound.honk(); }
+  const lift = Math.min(1, Math.max(0, (w.t - 2.6)/1.1));
+  if (w.t > 3.9) { awake = 1; waking = null; w.done(); }
+  return {lamps:flicker(w.t), squash:bounce(w.t), lift:lift*lift*(3 - 2*lift)};
+}
+function busLook(lamps, lift){
+  for (const l of busParts.lamps) { l.material.emissiveIntensity = 1.3*lamps; l.material.color.setHex(lamps > .5 ? 0xfff0b0 : 0x8f8a78); }
+  beams.forEach(b => { b.material.opacity = .5*lamps; });
+  busParts.beacon.material.emissiveIntensity = 1.2*lift;
+  busParts.sign.material.emissiveIntensity = .1 + .3*lift;
+  return lift;
+}
 
 // ---------- fireflies + embers ----------
 // the embers rise from the hearth, but are built here so the seeded layout keeps its order
@@ -191,8 +230,11 @@ let vanDriver = null;
 export function driveVan(fn){ vanDriver = fn; }
 const glowList = [...deckLamps, ...postLamps, porch];
 hqAnims.push((dt, t) => {
-  if (vanDriver) vanDriver(); else { vanBody.position.y = Math.sin(t * 1.7) * .1; vanBody.rotation.z = Math.sin(t * 1.3) * .015; }
-  hoverPads.forEach((p, i) => p.material.emissiveIntensity = .9 + Math.sin(t * 6 + i) * .3);
+  // a save that already has the eruption (another tab, the harness) wakes it at once
+  if (!awake && !waking && !held && t > lookAt) { lookAt = t + 1; if (ready()) awake = 1; }
+  const k = waking ? wakeStep(dt) : {lamps:awake, squash:0, lift:awake}, up = busLook(k.lamps, k.lift);
+  if (vanDriver) vanDriver(); else { vanBody.position.y = (.1 + Math.sin(t * 1.7) * .1)*up; vanBody.rotation.z = Math.sin(t * 1.3) * .015*up; vanBody.rotation.x = k.squash*.03; vanBody.scale.y = 1 + k.squash*.05; }
+  hoverPads.forEach((p, i) => p.material.emissiveIntensity = (.9 + Math.sin(t * 6 + i) * .3)*up);
   flag.rotation.y = Math.sin(t * 3) * .3;
   bunting.forEach((b, i) => b.rotation.z = Math.sin(t * 2.4 + i) * .15);
   // the lamps are lit from dusk; by day they're just glass
