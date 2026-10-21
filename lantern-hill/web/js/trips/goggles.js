@@ -79,18 +79,21 @@ const skyTex = () => tex(1024, 512, (c, cw, ch) => {
     c.restore(); c.fillStyle = '#c4d2ee'; c.fillRect(x - 100*s, y + 4*s, 200*s, 6*s); };
   for (const [x, y, s] of [[150, 150, 1.1], [420, 90, .8], [640, 200, 1.3], [880, 120, .9], [300, 300, .7], [900, 290, .6]]) cloud(x, y, s);
 }, 1, 1);
+// draws a mark on a repeating tile again a tile over each way, so marks cut by one edge carry on past the
+// opposite one and the tiles meet without a seam
+const wrap = (c, cw, ch, draw) => { for (const dx of [-cw, 0, cw]) for (const dy of [-ch, 0, ch]) { c.save(); c.translate(dx, dy); draw(); c.restore(); } };
 const GROUNDS = {
   // the open sea, its swell drawn in little toon wave marks
   sea: () => tex(256, 256, (c, cw, ch) => { c.fillStyle = '#2b78b4'; c.fillRect(0, 0, cw, ch);
-    for (let i = 0; i < 18; i++) { c.fillStyle = i % 2 ? '#3a8cc6' : '#2468a2'; c.beginPath(); c.ellipse((i*83) % cw, (i*47) % ch, 46, 14, 0, 0, 7); c.fill(); }
+    for (let i = 0; i < 18; i++) { c.fillStyle = i % 2 ? '#3a8cc6' : '#2468a2'; wrap(c, cw, ch, () => { c.beginPath(); c.ellipse((i*83) % cw, (i*47) % ch, 46, 14, 0, 0, 7); c.fill(); }); }
     c.strokeStyle = 'rgba(232,248,255,.85)'; c.lineWidth = 4; c.lineCap = 'round';
-    for (let i = 0; i < 12; i++) { const x = (i*97) % cw, y = (i*59 + 20) % ch; c.beginPath(); c.arc(x, y + 12, 14, Math.PI*1.2, Math.PI*1.8); c.stroke(); } }, 24, 10),
+    for (let i = 0; i < 12; i++) { const x = (i*97) % cw, y = (i*59 + 20) % ch; wrap(c, cw, ch, () => { c.beginPath(); c.arc(x, y + 12, 14, Math.PI*1.2, Math.PI*1.8); c.stroke(); }); } }, 24, 10),
   // dry golden grass, in soft clumps
   grass: () => tex(256, 256, (c, cw, ch) => { c.fillStyle = '#d0a848'; c.fillRect(0, 0, cw, ch);
-    for (let i = 0; i < 40; i++) { c.fillStyle = ['#e0bc5a', '#b88e3a', '#c8a050', '#a8a04a'][i % 4]; c.beginPath(); c.ellipse((i*97) % cw, (i*61) % ch, 26, 10, i, 0, 7); c.fill(); } }, 30, 10),
+    for (let i = 0; i < 40; i++) { c.fillStyle = ['#e0bc5a', '#b88e3a', '#c8a050', '#a8a04a'][i % 4]; wrap(c, cw, ch, () => { c.beginPath(); c.ellipse((i*97) % cw, (i*61) % ch, 26, 10, i, 0, 7); c.fill(); }); } }, 30, 10),
   // old black lava, greening over
   lava: () => tex(256, 256, (c, cw, ch) => { c.fillStyle = '#3a3440'; c.fillRect(0, 0, cw, ch);
-    for (let i = 0; i < 30; i++) { c.fillStyle = ['#4a4250', '#2c2834', '#4e7a44', '#5e8a4a'][i % 4]; c.beginPath(); c.ellipse((i*97) % cw, (i*61) % ch, 28, 12, i, 0, 7); c.fill(); } }, 30, 10),
+    for (let i = 0; i < 30; i++) { c.fillStyle = ['#4a4250', '#2c2834', '#4e7a44', '#5e8a4a'][i % 4]; wrap(c, cw, ch, () => { c.beginPath(); c.ellipse((i*97) % cw, (i*61) % ch, 28, 12, i, 0, 7); c.fill(); }); } }, 30, 10),
 };
 // along the far edge: rolling hills, or for an island, its own shore and the sea beyond
 const farTex = kind => tex(1024, 128, (c, cw, ch) => {

@@ -161,7 +161,7 @@ export function buildMantle(t){
     const p = tall(); c.font = `${p ? 36 : 30}px Caprasimo, Georgia, serif`; c.textAlign = 'center'; c.lineWidth = 7; c.strokeStyle = 'rgba(26,19,32,.85)'; c.fillStyle = '#efe0bf';
     const label = (s, x, y) => s.split('\n').forEach((l, i) => { c.strokeText(l, x, y + i*38); c.fillText(l, x, y + i*38); });
     label('plate', 380, 40); label('plate', 760, 40);
-    if (S.labels) { label('hot rock rises', 512, 250); label(p ? 'cool rock\nsinks' : 'cool rock sinks', p ? 300 : 268, 330); label(p ? 'cool rock\nsinks' : 'cool rock sinks', p ? 724 : 756, 330); }
+    if (S.labels) { label('hot rock rises', 512, 250); label(p ? 'cool rock\nsinks' : 'cool rock sinks', p ? 300 : 284, 330); label(p ? 'cool rock\nsinks' : 'cool rock sinks', p ? 724 : 740, 330); }
     wallTex.needsUpdate = true;
   }
   let sag = null, curFlow = 0;

@@ -348,6 +348,7 @@ function landMaterial(){
   strata.wrapS = strata.wrapT = THREE.RepeatWrapping;
   const col = h => new THREE.Color(h).convertSRGBToLinear();
   const m = new THREE.MeshToonMaterial({color:0xffffff, gradientMap:grad});
+  m.extensions = {derivatives:true};
   m.onBeforeCompile = s => {
     Object.assign(s.uniforms, {strata:{value:strata}, gLo:{value:col(0x4f8a46)}, gHi:{value:col(0x76a554)}, gDry:{value:col(0x9aa860)}, gHigh:{value:col(0x5c7e62)},
       sand:{value:col(0xc9ae86)}, far:{value:col(0x6f8cb8)}, snow:{value:col(0xe4e8f0)}});
@@ -376,7 +377,10 @@ function landMaterial(){
       float crack = (1. - smoothstep(.03, .1, abs(sin(vWp.x*.9 + vWp.z*.7 + 1.6*sin(vWp.x*.37 - vWp.z*.52)))))*smoothstep(-.2, .4, sin(vWp.y*.8 + vWp.x*.6 + vWp.z*.3));
       rk *= mix(vec3(1.), vec3(.8, .75, .78)*(1. + .12*streak), face);
       rk = mix(rk, vec3(.12, .07, .08), crack*face*.8);
-      vec3 c = mix(gr, rk, smoothstep(.5, .58, steep + .03*mot));
+      // a rounded lip turns steep only slowly, so a fixed blend smears grass down the rock; one pixel wide, its
+      // edge stays crisp at any distance, and wavers so the grass hangs over in tufts
+      float lip = steep + .03*mot + .025*sin(vWp.x*1.6 + 1.3*sin(vWp.z*1.3))*sin(vWp.z*1.8 + vWp.x*.6), aw = max(fwidth(lip), .004);
+      vec3 c = mix(gr, rk, smoothstep(.54 - aw, .54 + aw, lip));
       // shade where a wall meets the floor, and a warm glint along each cliff's top edge
       c *= 1. - .4*smoothstep(.1, 1.1, vCav);
       c += vec3(.2, .12, .04)*smoothstep(.15, .9, -vCav)*(1. - .5*face);

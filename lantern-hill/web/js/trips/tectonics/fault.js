@@ -489,7 +489,7 @@ function buildSlice(w){
   diorama(g, {ground:'grass', back:-DZ, deep:0x8a3420, D:55});
   // the grassland behind the cut rolls on, in soft humps and trees, so it never reads as a painted floor
   for (let i = 0; i < 46; i++) { const x = ((i*37.3) % 120) - 60, z = -DZ - 3 - ((i*17.7) % 46), r = 2 + (i % 4)*1.2;
-    if (i % 3 === 0) { const hm = add(new THREE.SphereGeometry(r, 14, 8), T([0xc8a24a, 0xb8a050, 0xa8a454][i % 3]), x, -r*.72, z, g); hm.scale.y = .9; outline(hm, 1.02); continue; }
+    if (i % 3 === 0) { const hm = add(new THREE.SphereGeometry(r, 14, 8), T([0x9a7a30, 0x8e7e36, 0x82843c][i % 3]), x, -r*.72, z, g); hm.scale.y = .9; outline(hm, 1.02); continue; }
     outline(add(new THREE.CylinderGeometry(.06, .09, .5, 6), T(C.woodDk), x, .25, z, g, false), 1.1);
     outline(add(new THREE.ConeGeometry(.42, 1, 8), T(0x4f8a4a), x, .9, z, g, false), 1.08); }
   // the mantle: a deep orange slab, its top streaked with currents that creep each plate's own way

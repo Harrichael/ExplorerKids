@@ -124,8 +124,11 @@ const headAt = new THREE.Vector3();
 const VIEW = {desk:{w:.98, h:.64, y:-.02, z:.1, el:1.0}, free:{w:.98, h:.72, y:.1, z:-.12, el:.72}};
 function deskCam(pos, look){
   const v = lab && lab.run && lab.run.exp.free ? VIEW.free : VIEW.desk;
-  const tanV = Math.tan(camera.fov*Math.PI/360), D = Math.max(v.w/(tanV*camera.aspect), v.h/tanV);
-  look.set(LAB_DESK.x, LAB_DESK.y + v.y, LAB_DESK.z + v.z);
+  // on a wide, short screen the experiment card would sit over the desk's far edge, where the things wait,
+  // so the desk fits in below the card instead
+  const top = camera.aspect > 1 && !hud.hidden ? Math.min(.4, $('lhCard').getBoundingClientRect().bottom/innerHeight) : 0;
+  const tanV = Math.tan(camera.fov*Math.PI/360), D = Math.max(v.w/(tanV*camera.aspect), v.h/(tanV*(1 - top))), up = top*D*tanV;
+  look.set(LAB_DESK.x, LAB_DESK.y + v.y + up*Math.cos(v.el), LAB_DESK.z + v.z - up*Math.sin(v.el));
   pos.set(look.x, look.y + D*Math.sin(v.el), look.z + D*Math.cos(v.el));
 }
 let lab = null;

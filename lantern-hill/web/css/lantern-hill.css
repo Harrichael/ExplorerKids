@@ -230,7 +230,7 @@ button.snd:focus-visible,button.word:focus-visible{outline:3px solid #6d3b5e;out
 #dialog{z-index:5}
 /* Time goggles: a brass rim round the view and a counter of the years rushing by */
 #goggles{position:fixed;inset:0;pointer-events:none;z-index:4}
-#goggles .ring{position:absolute;inset:0;background:radial-gradient(ellipse 62% 70% at 50% 48%,transparent 82%,rgba(217,164,65,.9) 84%,#6b4430 90%,rgba(26,19,32,.96) 93%)}
+#goggles .ring{position:absolute;inset:0;background:radial-gradient(ellipse 62% 70% at 50% 48%,transparent 84%,rgba(217,164,65,.9) 86%,#6b4430 91%,rgba(26,19,32,.96) 94%)}
 #goggles .count{position:absolute;top:6%;left:50%;transform:translateX(-50%);background:rgba(26,19,32,.86);border:2.5px solid var(--gold);border-radius:16px;padding:6px 18px;color:var(--parch);font-weight:800;font-size:18px;text-align:center;box-shadow:0 0 0 3px var(--ink)}
 #goggles .count .lbl{display:block;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold)}
 #goggles .count b{font-family:var(--display);font-weight:400;font-size:26px;color:#ffd36b}
@@ -246,6 +246,7 @@ body:has(#goggles:not([hidden])) :is(.hud,#stick,#talk),body:has(#binoc:not([hid
   mask:radial-gradient(circle at 37% 32%,transparent 26vmin,#000 27vmin),radial-gradient(circle at 63% 32%,transparent 26vmin,#000 27vmin);mask-composite:intersect}}
 /* a phone on its side: a smaller talk box, so it covers less than half the view */
 @media (max-height:520px) and (min-width:601px){#dialog{bottom:calc(8px + env(safe-area-inset-bottom,0px));min-height:0;padding:20px 18px 10px 112px}#dialog .tab{left:112px}
+  .hud .plate{transition:opacity .3s}body:has(#dialog:not([hidden])) .hud .plate{opacity:0}
   .bust{left:10px;bottom:10px;width:88px;height:88px}#dialog p{font-size:16px;line-height:1.4;min-height:2.8em}#dialog .choices{margin-top:8px;gap:8px}#dialog .choice{font-size:15px;padding:5px 12px}}
 /* Juniper's notebook: stickers of each place, stuck in as the trip goes */
 #notebook{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(20,12,28,.72);padding:calc(16px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));z-index:7;animation:fadein .3s ease-out}
