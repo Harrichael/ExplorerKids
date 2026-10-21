@@ -1,0 +1,579 @@
+{
+ "ash": [
+  {
+   "file": "ash-1.jpg",
+   "w": 407,
+   "h": 267,
+   "by": "Unknown",
+   "license": "Public domain",
+   "page": "https://commons.wikimedia.org/wiki/File:Micrograph_of_Rockland_Ash.jpg",
+   "source": "Micrograph of Rockland Ash.jpg",
+   "kind": "Electron microscope",
+   "across": 0.4
+  },
+  {
+   "file": "ash-2.jpg",
+   "w": 800,
+   "h": 551,
+   "by": "A.M. Sarna-Wojcicki",
+   "license": "Public domain",
+   "page": "https://commons.wikimedia.org/wiki/File:SarnaSem_60-010_large.jpg",
+   "source": "SarnaSem 60-010 large.jpg",
+   "kind": "Electron microscope",
+   "across": 0.15
+  },
+  {
+   "file": "ash-3.jpg",
+   "w": 1800,
+   "h": 1798,
+   "by": "F. Martin Duncan",
+   "license": "Public domain",
+   "page": "https://commons.wikimedia.org/wiki/File:Volcanic_dust_Mount_Soufriere_YORYM-TA0019.jpg",
+   "source": "Volcanic dust Mount Soufriere YORYM-TA0019.jpg",
+   "kind": "Microscope",
+   "across": 2
+  }
+ ],
+ "sulfur": [
+  {
+   "file": "sulfur-1.jpg",
+   "w": 1800,
+   "h": 1202,
+   "by": "AlexmarPhoto",
+   "license": "CC BY 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Microscopic_image_of_crystals_growing_from_melted_sulfur_2.jpg",
+   "source": "Microscopic image of crystals growing from melted sulfur 2.jpg",
+   "kind": "Microscope",
+   "across": 2
+  },
+  {
+   "file": "sulfur-2.jpg",
+   "w": 1800,
+   "h": 1202,
+   "by": "AlexmarPhoto",
+   "license": "CC BY 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Microscopic_image_of_crystals_growing_from_melted_sulfur_3.jpg",
+   "source": "Microscopic image of crystals growing from melted sulfur 3.jpg",
+   "kind": "Microscope",
+   "across": 2
+  },
+  {
+   "file": "sulfur-3.jpg",
+   "w": 1800,
+   "h": 1202,
+   "by": "AlexmarPhoto",
+   "license": "CC BY 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Microscopic_image_of_crystals_growing_from_melted_sulfur.jpg",
+   "source": "Microscopic image of crystals growing from melted sulfur.jpg",
+   "kind": "Microscope",
+   "across": 2
+  }
+ ],
+ "olivine": [
+  {
+   "file": "olivine-1.jpg",
+   "w": 980,
+   "h": 860,
+   "by": "Islam90",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Olivine_in_polarizing_light.jpg",
+   "source": "Olivine in polarizing light.jpg",
+   "kind": "Microscope",
+   "across": 4
+  },
+  {
+   "file": "olivine-2.jpg",
+   "w": 1800,
+   "h": 1350,
+   "by": "TheRockGraduate",
+   "license": "CC BY 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Xenolith_Thin_Section.jpg",
+   "source": "Xenolith Thin Section.jpg",
+   "kind": "Microscope",
+   "across": 8
+  },
+  {
+   "file": "olivine-3.jpg",
+   "w": 1350,
+   "h": 1800,
+   "by": "Clayman8392",
+   "license": "CC BY 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Dunite_in_thin_section.jpg",
+   "source": "Dunite in thin section.jpg",
+   "kind": "Microscope",
+   "across": 6
+  }
+ ],
+ "foram": [
+  {
+   "file": "foram-1.jpg",
+   "w": 1776,
+   "h": 1800,
+   "by": "Hannes Grobe",
+   "license": "CC BY 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Foram-globigerina_hg.jpg",
+   "source": "Foram-globigerina hg.jpg",
+   "kind": "Electron microscope",
+   "across": 0.6
+  },
+  {
+   "file": "foram-2.jpg",
+   "w": 1501,
+   "h": 1501,
+   "by": "Photographer: Jessica Spear, U.S. Geological Survey",
+   "license": "Public domain",
+   "page": "https://commons.wikimedia.org/wiki/File:Planktic_Foraminifera_of_the_northern_Gulf_of_Mexico.jpg",
+   "source": "Planktic Foraminifera of the northern Gulf of Mexico.jpg",
+   "kind": "Microscope",
+   "across": 1.5
+  },
+  {
+   "file": "foram-3.jpg",
+   "w": 1024,
+   "h": 768,
+   "by": "No machine-readable author provided. Renee1137~commonswiki assumed (based on copyright claims).",
+   "license": "Public domain",
+   "page": "https://commons.wikimedia.org/wiki/File:Starsand_from_Japan.jpg",
+   "source": "Starsand from Japan.jpg",
+   "kind": "Microscope",
+   "across": 4
+  }
+ ],
+ "radiolarian": [
+  {
+   "file": "radiolarian-1.jpg",
+   "w": 1786,
+   "h": 1800,
+   "by": "Andreas Drews",
+   "license": "CC BY 2.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Radiolarian_-_Dorataspida_sp.jpg",
+   "source": "Radiolarian - Dorataspida sp.jpg",
+   "kind": "Microscope",
+   "across": 0.35
+  },
+  {
+   "file": "radiolarian-2.jpg",
+   "w": 1294,
+   "h": 1800,
+   "by": "Picturepest",
+   "license": "CC BY 2.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Radiolaria_-_Dictyoprora_(Sethamphora)_mongolfieri_-_400x_(46419193611).jpg",
+   "source": "Radiolaria - Dictyoprora (Sethamphora) mongolfieri - 400x (46419193611).jpg",
+   "kind": "Microscope",
+   "across": 0.25
+  },
+  {
+   "file": "radiolarian-3.jpg",
+   "w": 1271,
+   "h": 1800,
+   "by": "Picturepest",
+   "license": "CC BY 2.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Calocyclas_sp_-_Radiolaria_-_Magnification_400x_(50637072613).jpg",
+   "source": "Calocyclas sp - Radiolaria - Magnification 400x (50637072613).jpg",
+   "kind": "Microscope",
+   "across": 0.25
+  },
+  {
+   "file": "radiolarian-4.jpg",
+   "w": 1800,
+   "h": 1536,
+   "by": "Picturepest",
+   "license": "CC BY 2.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Radiolarian_-_Lampromitra_sp._(38359221331).jpg",
+   "source": "Radiolarian - Lampromitra sp. (38359221331).jpg",
+   "kind": "Microscope",
+   "across": 0.25
+  }
+ ],
+ "diatom": [
+  {
+   "file": "diatom-1.jpg",
+   "w": 1796,
+   "h": 1180,
+   "by": "Prof. Gordon T. Taylor, Stony Brook University",
+   "license": "Public domain",
+   "page": "https://commons.wikimedia.org/wiki/File:Diatoms_through_the_microscope.jpg",
+   "source": "Diatoms through the microscope.jpg",
+   "kind": "Microscope",
+   "across": 0.4
+  },
+  {
+   "file": "diatom-2.jpg",
+   "w": 1800,
+   "h": 1800,
+   "by": "Pavel.Somov",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Coscinodiscus_oculus-iridis_(Ehrenberg)_Ehrenberg_1840_diatom_shell._Colored_SEM_image.jpg",
+   "source": "Coscinodiscus oculus-iridis (Ehrenberg) Ehrenberg 1840 diatom shell. Colored SEM image.jpg",
+   "kind": "Electron microscope",
+   "across": 0.04
+  },
+  {
+   "file": "diatom-3.jpg",
+   "w": 1800,
+   "h": 1180,
+   "by": "CSIRO, CSIRO",
+   "license": "CC BY 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:CSIRO_ScienceImage_7632_SEM_diatom.jpg",
+   "source": "CSIRO ScienceImage 7632 SEM diatom.jpg",
+   "kind": "Electron microscope",
+   "across": 0.06
+  },
+  {
+   "file": "diatom-4.jpg",
+   "w": 1800,
+   "h": 1177,
+   "by": "CSIRO, CSIRO",
+   "license": "CC BY 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:CSIRO_ScienceImage_8289_SEM_diatom.jpg",
+   "source": "CSIRO ScienceImage 8289 SEM diatom.jpg",
+   "kind": "Electron microscope",
+   "across": 0.08
+  }
+ ],
+ "microbes": [
+  {
+   "file": "microbes-1.jpg",
+   "w": 1800,
+   "h": 1133,
+   "by": "Massimo Brizzi",
+   "license": "CC BY 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Beggiatoa_leptomitoformis_in_Phase_contrasto_microscopy_1000x.jpg",
+   "source": "Beggiatoa leptomitoformis in Phase contrasto microscopy 1000x.jpg",
+   "kind": "Microscope",
+   "across": 0.15
+  },
+  {
+   "file": "microbes-2.jpg",
+   "w": 580,
+   "h": 450,
+   "by": "NOAA",
+   "license": "Public domain",
+   "page": "https://commons.wikimedia.org/wiki/File:Bacterial_mat.jpg",
+   "source": "Bacterial mat.jpg",
+   "kind": "Close-up",
+   "across": 200
+  }
+ ],
+ "crinoid": [
+  {
+   "file": "crinoid-1.jpg",
+   "w": 1800,
+   "h": 1350,
+   "by": "Michael C. Rygel",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:BMR_Mml_108-5_50x_a_ppl_01.jpg",
+   "source": "BMR Mml 108-5 50x a ppl 01.jpg",
+   "kind": "Microscope",
+   "across": 2.4
+  },
+  {
+   "file": "crinoid-2.jpg",
+   "w": 1800,
+   "h": 1350,
+   "by": "Michael C. Rygel",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:R2614_PPL_PKSTST_inntra_crinoid_20x.jpg",
+   "source": "R2614 PPL PKSTST inntra crinoid 20x.jpg",
+   "kind": "Microscope",
+   "across": 6
+  }
+ ],
+ "nummulite": [
+  {
+   "file": "nummulite-1.jpg",
+   "w": 1800,
+   "h": 1504,
+   "by": "Leo Wehrli",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:ETH-BIB-Nummuliten-Breccie,_Fly_bei_Weesen,_Schliff_L._W._3-Dia_247-02324.tif",
+   "source": "ETH-BIB-Nummuliten-Breccie, Fly bei Weesen, Schliff L. W. 3-Dia 247-02324.tif",
+   "kind": "Microscope",
+   "across": 25
+  },
+  {
+   "file": "nummulite-2.jpg",
+   "w": 1203,
+   "h": 1203,
+   "by": "Vassil",
+   "license": "CC0",
+   "page": "https://commons.wikimedia.org/wiki/File:Nummulite_Naturhistorisches_Museum_Basel_27102013.jpg",
+   "source": "Nummulite Naturhistorisches Museum Basel 27102013.jpg",
+   "kind": "Close-up",
+   "across": 35
+  },
+  {
+   "file": "nummulite-3.jpg",
+   "w": 1000,
+   "h": 689,
+   "by": "Wilson44691",
+   "license": "Public domain",
+   "page": "https://commons.wikimedia.org/wiki/File:Nummulitids.jpg",
+   "source": "Nummulitids.jpg",
+   "kind": "Close-up",
+   "across": 114
+  }
+ ],
+ "trilobite": [
+  {
+   "file": "trilobite-1.jpg",
+   "w": 1800,
+   "h": 1200,
+   "by": "Parent Géry",
+   "license": "CC BY-SA 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Itagnostus_interstrictus_(White,_1874)_-_8_mm_1.JPG",
+   "source": "Itagnostus interstrictus (White, 1874) - 8 mm 1.JPG",
+   "kind": "Close-up",
+   "across": 16
+  },
+  {
+   "file": "trilobite-2.jpg",
+   "w": 1354,
+   "h": 927,
+   "by": "Ghedoghedo",
+   "license": "CC BY-SA 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Peronopsis_interstrictus_34.JPG",
+   "source": "Peronopsis interstrictus 34.JPG",
+   "kind": "Close-up",
+   "across": 100
+  }
+ ],
+ "snowalgae": [
+  {
+   "file": "snowalgae-1.jpg",
+   "w": 387,
+   "h": 638,
+   "by": "Ryo Matsuzaki, Hisayoshi Nozaki, Nozomu Takeuchi, Yoshiaki Hara & Masanobu Kawachi",
+   "license": "CC BY 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Chloromonas_miwae_cyst_1E.png",
+   "source": "Chloromonas miwae cyst 1E.png",
+   "kind": "Microscope",
+   "across": 0.025
+  },
+  {
+   "file": "snowalgae-2.jpg",
+   "w": 900,
+   "h": 1179,
+   "by": "ARSUSDA",
+   "license": "Public domain",
+   "page": "https://commons.wikimedia.org/wiki/File:Green_algal.jpg",
+   "source": "Green algal.jpg",
+   "kind": "Electron microscope",
+   "across": 0.03
+  }
+ ],
+ "daphnia": [
+  {
+   "file": "daphnia-1.jpg",
+   "w": 1199,
+   "h": 1800,
+   "by": "Janek Lass",
+   "license": "CC BY 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Kiivrik_(Daphnia).jpg",
+   "source": "Kiivrik (Daphnia).jpg",
+   "kind": "Microscope",
+   "across": 3
+  },
+  {
+   "file": "daphnia-2.jpg",
+   "w": 800,
+   "h": 600,
+   "by": "Nolelover",
+   "license": "CC BY-SA 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Daphnia_with_eggs.jpg",
+   "source": "Daphnia with eggs.jpg",
+   "kind": "Microscope",
+   "across": 3.5
+  },
+  {
+   "file": "daphnia-3.jpg",
+   "w": 1800,
+   "h": 1197,
+   "by": "Janeklass",
+   "license": "CC BY 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Vesikirbu_(Daphnia)_mikroskoopiline_portree.jpg",
+   "source": "Vesikirbu (Daphnia) mikroskoopiline portree.jpg",
+   "kind": "Microscope",
+   "across": 1.5
+  }
+ ],
+ "spirogyra": [
+  {
+   "file": "spirogyra-1.jpg",
+   "w": 1800,
+   "h": 1196,
+   "by": "Wiedehopf20",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:The_freshwater_alga_Spirogyra.jpg",
+   "source": "The freshwater alga Spirogyra.jpg",
+   "kind": "Microscope",
+   "across": 0.5
+  },
+  {
+   "file": "spirogyra-2.jpg",
+   "w": 1800,
+   "h": 1350,
+   "by": "Klaus Wagner",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Spirogyra_im_Duchlichtmikroskop.jpg",
+   "source": "Spirogyra im Duchlichtmikroskop.jpg",
+   "kind": "Microscope",
+   "across": 0.48
+  }
+ ],
+ "rotifer": [
+  {
+   "file": "rotifer-1.jpg",
+   "w": 1800,
+   "h": 1196,
+   "by": "Wiedehopf20",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:The_Rotifer_Notholca_sp.jpg",
+   "source": "The Rotifer Notholca sp.jpg",
+   "kind": "Microscope",
+   "across": 0.4
+  },
+  {
+   "file": "rotifer-2.jpg",
+   "w": 1000,
+   "h": 667,
+   "by": "Frank Fox",
+   "license": "CC BY-SA 3.0 de",
+   "page": "https://commons.wikimedia.org/wiki/File:Mikrofoto.de-Raedertier-14.jpg",
+   "source": "Mikrofoto.de-Raedertier-14.jpg",
+   "kind": "Microscope",
+   "across": 0.5
+  },
+  {
+   "file": "rotifer-3.jpg",
+   "w": 1800,
+   "h": 1201,
+   "by": "Juan Carlos Fonseca Mata",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Philodina_sp._(Class%CB%90_Bdelloidea)_-_Rotifera.jpg",
+   "source": "Philodina sp. (Classː Bdelloidea) - Rotifera.jpg",
+   "kind": "Microscope",
+   "across": 0.8
+  }
+ ],
+ "tardigrade": [
+  {
+   "file": "tardigrade-1.jpg",
+   "w": 1572,
+   "h": 1205,
+   "by": "Schokraie E, Warnken U, Hotz-Wagenblatt A, Grohme MA, Hengherr S, et al. (2012)",
+   "license": "CC BY 2.5",
+   "page": "https://commons.wikimedia.org/wiki/File:SEM_image_of_Milnesium_tardigradum_in_active_state_-_journal.pone.0045682.g001-2.png",
+   "source": "SEM image of Milnesium tardigradum in active state - journal.pone.0045682.g001-2.png",
+   "kind": "Electron microscope",
+   "across": 0.8
+  },
+  {
+   "file": "tardigrade-2.jpg",
+   "w": 1800,
+   "h": 1323,
+   "by": "Brandon Antonio Segura Torres & Priscilla Vieto Bonilla",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Tard%C3%ADgrado_g%C3%A9nero_Milnesium.jpg",
+   "source": "Tardígrado género Milnesium.jpg",
+   "kind": "Microscope",
+   "across": 1.6
+  }
+ ],
+ "limu": [
+  {
+   "file": "limu-1.jpg",
+   "w": 800,
+   "h": 500,
+   "by": "J.D. Griggs, USGS",
+   "license": "Public domain",
+   "page": "https://commons.wikimedia.org/wiki/File:Limu_o_Pele_Hawaii.jpg",
+   "source": "Limu o Pele Hawaii.jpg",
+   "kind": "Close-up",
+   "across": 100
+  }
+ ],
+ "urchin": [
+  {
+   "file": "urchin-1.jpg",
+   "w": 888,
+   "h": 1789,
+   "by": "ARetzler11",
+   "license": "CC BY-SA 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:MenuhaEchinoidSpine.jpg",
+   "source": "MenuhaEchinoidSpine.jpg",
+   "kind": "Microscope",
+   "across": 0.62
+  },
+  {
+   "file": "urchin-2.jpg",
+   "w": 469,
+   "h": 308,
+   "by": "Wooster09",
+   "license": "Public domain",
+   "page": "https://commons.wikimedia.org/wiki/File:Echinoid_Spines_Picture_-1_for_IS.jpg",
+   "source": "Echinoid Spines Picture -1 for IS.jpg",
+   "kind": "Close-up",
+   "across": 21
+  }
+ ],
+ "copepod": [
+  {
+   "file": "copepod-1.jpg",
+   "w": 1800,
+   "h": 1200,
+   "by": "Janeklass",
+   "license": "CC BY 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Freshwater_copepod_(Copepoda)_under_darkfield_microscopy.jpg",
+   "source": "Freshwater copepod (Copepoda) under darkfield microscopy.jpg",
+   "kind": "Microscope",
+   "across": 1.5
+  },
+  {
+   "file": "copepod-2.jpg",
+   "w": 1800,
+   "h": 1539,
+   "by": "Aidan Long",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Adult_Male_harpacticoid_copepod_Tigriopus_brevicornis.jpg",
+   "source": "Adult Male harpacticoid copepod Tigriopus brevicornis.jpg",
+   "kind": "Microscope",
+   "across": 1.7
+  },
+  {
+   "file": "copepod-3.jpg",
+   "w": 1800,
+   "h": 1200,
+   "by": "Janek Lass",
+   "license": "CC BY 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Hormikuline_(Calanoida).jpg",
+   "source": "Hormikuline (Calanoida).jpg",
+   "kind": "Microscope",
+   "across": 3
+  }
+ ],
+ "coralline": [
+  {
+   "file": "coralline-1.jpg",
+   "w": 1800,
+   "h": 1230,
+   "by": "Axel Munnecke",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Maerl_-_Sediment_from_Troms%C3%B8,_Norway_-_thin_section.jpg",
+   "source": "Maerl - Sediment from Tromsø, Norway - thin section.jpg",
+   "kind": "Microscope",
+   "across": 25
+  },
+  {
+   "file": "coralline-2.jpg",
+   "w": 1280,
+   "h": 960,
+   "by": "Martin Smith",
+   "license": "CC BY-SA 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Lithophyllum_underside.jpg",
+   "source": "Lithophyllum underside.jpg",
+   "kind": "Electron microscope",
+   "across": 0.43
+  }
+ ]
+}
