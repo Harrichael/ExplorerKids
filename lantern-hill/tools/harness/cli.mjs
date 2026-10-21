@@ -12,12 +12,13 @@
 //   node tools/harness/cli.mjs key e            any key: e r w t q y, Space, Enter, Escape, ArrowUp...
 //   node tools/harness/cli.mjs click '#leaveTrip'
 //   node tools/harness/cli.mjs pace --speed 2 --every .05   change speed, picture spacing or --read at any moment
+//   node tools/harness/cli.mjs pace --dense door=.05,bus=.25,12-18=.05   closer pictures at moments (see harness.mjs)
 //   node tools/harness/cli.mjs state | shot [file.png] | eval '<js in the page>'
 //   node tools/harness/cli.mjs close            stops the browser; prints where the picture log is
 //
 // open's options set where things start, and `pace` changes them later: --speed (game time per real
-// second), --every (seconds of game time per logged picture, 0 for none; 2 if not given), --read
-// (seconds a typed line stays before the talk moves on, 0 to press Space yourself). Only these stay
+// second), --every (seconds of game time per logged picture, 0 for none; 2 if not given), --dense,
+// --read (seconds a typed line stays before the talk moves on, 0 to press Space yourself). Only these stay
 // fixed for the session: --log (the folder), --minutes (closes itself after this long), --lock (a
 // directory, so only one browser runs at a time; or set LH_BROWSER_LOCK). HARNESS_SESSION names the session (default "h").
 
@@ -42,7 +43,7 @@ async function daemon(){
   const run = {
     start: (trip, chapter, seed, save) => h.start({trip, chapter: /^\d+$/.test(chapter) ? +chapter : chapter, seed: seed ? JSON.parse(seed) : undefined, save: save ? JSON.parse(save) : undefined}),
     state: () => null, wait: s => h.wait(s), walk: n => h.walk(n), talk: n => h.talkTo(n), use: n => h.use(n), pick: w => h.pick(w), ok: () => h.ok(),
-    key: async k => { await h.key(k); return 'pressed ' + k; }, click: s => h.click(s), shot: f => h.shot(f), pace: o => h.pace(Object.fromEntries(Object.entries(o || {}).map(([k, v]) => [k, +v]))), eval: js => h.eval(js),
+    key: async k => { await h.key(k); return 'pressed ' + k; }, click: s => h.click(s), shot: f => h.shot(f), pace: o => h.pace(Object.fromEntries(Object.entries(o || {}).map(([k, v]) => [k, k === 'dense' ? v : +v]))), eval: js => h.eval(js),
   };
   let busy = Promise.resolve();
   createServer((req, res) => { let body = ''; req.on('data', d => body += d); req.on('end', () => {
@@ -61,10 +62,11 @@ function show(s){
   return [`t ${s.t}  ${s.trip ? `TRIP ${s.trip} chapter ${s.chapter}  ` : ''}PLACE ${s.place} / ${s.area}  CONTROL ${s.control}` + (s.goal ? `  GOAL ${s.goal}` : ''),
     s.heard.length ? 'HEARD\n' + s.heard.map(l => `  ${l.who}: ${l.line}`).join('\n') : null,
     s.talk ? `TALK ${s.talk.who}: "${s.talk.line}"` + (s.talk.choices.length ? `\n  CHOICES ${s.talk.choices.map((c, i) => `${i + 1}) ${c}`).join('  ')}` : '') : null,
-    `YOU at (${s.you.x}, ${s.you.z})`,
+    `YOU at (${s.you.x}, ${s.you.z})  CAMERA ${s.shot}  PICTURES ${s.frames}`,
     `PEOPLE ${near(s.people, p => `${p.name} ${p.dist}m${p.calling ? ' CALLING YOU' : ''}${p.talk ? ' [Space to talk]' : ''}`)}`,
     `THINGS ${near(s.things, t => `${t.key ? `[${t.key}] ` : ''}${t.verb === t.name ? t.name : `${t.name}: ${t.verb}`} ${t.dist}m`)}`,
     s.overlays.length ? `ON SCREEN ${s.overlays.join(', ')}` : null,
+    s.clips.length ? 'INSIDE SOMETHING SOLID\n' + s.clips.map(c => `  ${c.who} at t ${c.t} in a ${c.box.w}×${c.box.d} m box at (${c.box.x}, ${c.box.z}), after picture ${c.after}`).join('\n') : null,
     s.errors.length ? `PAGE ERRORS ${s.errors.join(' || ')}` : null].filter(Boolean).join('\n');
 }
 

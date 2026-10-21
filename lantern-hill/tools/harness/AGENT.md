@@ -35,6 +35,17 @@ Commands:
 - `state`: just print the screen again.
 - `pace --speed 2 --every .1`: change how fast the game runs, or how often a picture is logged (seconds of
   game time), any time. Slow down and log densely around a moment you need to see closely, then speed up again.
+- `pace --dense door=.05,bus=.25`: pictures closer together while something is happening: `door` (someone
+  hopping through the bus door), `bus` (riding inside it), `watch` (a scene playing), `clip` (someone inside
+  something solid), or `12-18` (12 to 18 s into the chapter). Each `--dense` replaces the last; `none` clears it.
+
+`INSIDE SOMETHING SOLID` means a person is standing in a wall, rock or the bus. Report each one with its
+time and the picture number. `CAMERA` is the shot on screen (`follow`, or a cut such as `class`, `teacher`,
+`window`).
+
+To see more pictures between two you have (say from chapter 3, 12 s and 15 s in, the `ct` in the log):
+run `start tectonics 3` again with `pace --dense 11-16=.05`. Scripted scenes replay nearly the same;
+anything the explorer or chance drives will differ.
 
 Tips: after `talk`, run `wait 20` to hear the whole talk. If a walk says `gave up`, try another
 target or report it. Don't repeat the same failing command more than twice.

@@ -188,7 +188,7 @@ export function cabin(){
   // the shots ride with the bus as it tips, but the camera stays upright, so the cabin is seen tilted
   // the class shot stands out past the windshield, where the drill would be, so it leaves the drill out
   // and Dr. Sparks, by the door, is just out of its frame, but her arms and clipboard reach in when she spins or waves
-  const tip = name => (pos, look) => { SHOTS[name](pos, look); drill.visible = spin && name !== 'class'; sparks.model.root.visible = name !== 'class'; for (const p of [pos, look]) { const c = Math.cos(pitch), s = Math.sin(pitch), x = p.x, y = p.y; p.x = x*c - y*s; p.y = x*s + y*c; } };
+  const tip = name => Object.defineProperty((pos, look) => { SHOTS[name](pos, look); drill.visible = spin && name !== 'class'; sparks.model.root.visible = name !== 'class'; for (const p of [pos, look]) { const c = Math.cos(pitch), s = Math.sin(pitch), x = p.x, y = p.y; p.x = x*c - y*s; p.y = x*s + y*c; } }, 'name', {value:name});
   const SHOTS = {
     // from just out past the windshield frame: inside the cab the front row is too close to see their faces
     class:   (pos, look) => { pos.set(4.4, 1.6 + sway, .3); look.set(-3, .6, .7); },

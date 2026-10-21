@@ -4,15 +4,17 @@
 //
 //   node tools/harness/autoplay.mjs http://127.0.0.1:8000/ --answer ISLAND --speed 8 --every 1 --log runs/island
 //   node tools/harness/autoplay.mjs http://127.0.0.1:8000/ --chapter 5      (from the ridge on)
+//   node tools/harness/autoplay.mjs http://127.0.0.1:8000/ --every 3 --dense door=.05,bus=.25,watch=.5
 //
 // --answer picks, at any question, the first answer containing one of its words (comma separated),
-// so it steers forks. Prints each place, goal and question as it goes, and the time it took.
+// so it steers forks. Prints each place, goal and question as it goes, anyone inside something solid,
+// and the time it took.
 
 import { harness } from './harness.mjs';
 
 const argv = process.argv.slice(2), opt = (k, d) => { const i = argv.indexOf('--' + k); return i >= 0 ? argv[i + 1] : d; };
 const url = argv.find(a => /^https?:/.test(a)) || 'http://127.0.0.1:8000/', words = opt('answer', '').split(',').filter(Boolean).map(w => w.toLowerCase());
-const h = await harness(url, {speed: +opt('speed', 8), every: +opt('every', 2), log: opt('log'), minutes: +opt('minutes', 8)});
+const h = await harness(url, {speed: +opt('speed', 8), every: +opt('every', 2), dense: opt('dense'), log: opt('log'), minutes: +opt('minutes', 8)});
 const t0 = Date.now(), say = m => console.log(`${((Date.now() - t0)/1000).toFixed(0).padStart(4)}s  ${m}`);
 let last = '', tries = new Map(), out = 'gave up after 400 turns';
 try {
@@ -20,6 +22,7 @@ try {
   for (let turn = 0; turn < 400; turn++) {
     const why = await h.wait(40), s = await h.state();
     if (s.errors.length) say('PAGE ERRORS ' + s.errors.join(' | '));
+    for (const c of s.clips) say(`INSIDE ${c.who} at t ${c.t} in a ${c.box.w}×${c.box.d} m box at (${c.box.x}, ${c.box.z}), after picture ${c.after}`);
     const where = `${s.chapter || '-'} | ${s.place} | ${s.goal || ''}`; if (where !== last) { say(where); last = where; tries.clear(); }
     if (s.overlays.includes('badge')) { say('badge'); await h.ok(); continue; }
     if (s.overlays.includes('notebook')) { await h.ok(); continue; }

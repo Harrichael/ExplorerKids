@@ -452,7 +452,8 @@ export function buildHotspot(t){
     // up over the sea and away
     async depart(){
       for (const id in cls.n) { cls.n[id].model.root.visible = false; cls.n[id].label.visible = false; }
-      t.watch(w, (pos, look) => { pos.set(6, 7, 16); look.copy(bus.root.position); });
+      // up over the forest's edge, clear of the trees, so the bus lifts off across the beach and out to sea
+      t.watch(w, (pos, look) => { pos.set(8, 15, 16); look.copy(bus.root.position); });
       Sound.hiss({dur:3, vol:.1, type:'bandpass', freq:900, q:.6});
       await bus.fly([[BUS[0], ground(...BUS), BUS[1]], [BUS[0] - 2, 3, BUS[1] - 4], [-6, 12, -20], [-30, 26, -60], [-70, 40, -110]], 4.4, {roll:.6});
     },

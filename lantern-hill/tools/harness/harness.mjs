@@ -7,27 +7,39 @@
 //   await h.start({trip: 'tectonics', chapter: 'adventure', seed: {pick: 'hotspot'}});
 //   await h.wait(60);                  // talk reads on by itself; back when the explorer has control
 //   console.log(await h.talkTo('Basil'), (await h.state()).heard);
-//   await h.close();                   // the log: runs/basil/f00001.jpg..., index.jsonl, index.html
+//   await h.close();                   // the log: runs/basil/f00001.jpg..., index.jsonl, index.html,
+//                                      // clips.jsonl, sheets/s0001.jpg (16 labelled pictures each)
 //
 // Every option and method is below. Game time drives everything: a picture every `every` seconds of
 // game time, with the game held still while it is taken, so the spacing is exact at any speed.
 // Pictures are taken only while the world runs, so none during a storybook page turn.
 //
+// `dense` takes closer pictures at chosen moments, 'door=.05,bus=.25,12-18=.05': while someone hops
+// through the bus door, while on the bus, or 12 to 18 s into the chapter (each picture's `ct`). Each
+// `dense` replaces the last; 'none' clears it. There's no replaying a run exactly (the game isn't
+// seeded), so to see more between two pictures, start their chapter again with a window round their ct:
+// scripted scenes come out nearly the same, anything the explorer or chance drives won't.
+//
+// Anyone shown standing inside something solid is logged to clips.jsonl, with the picture just before.
+//
 // Only one headless Chrome should run on a machine at a time; pass `lock` (a directory path) and
 // harnesses take turns. Each holds it for `minutes` at most, then closes itself.
 
 import { spawn } from 'node:child_process';
-import { appendFileSync, mkdirSync, rmSync, rmdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, rmSync, rmdirSync, writeFileSync } from 'node:fs';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// a hung page must not keep the browser, and the lock, held forever
+const within = (ms, p) => Promise.race([p, sleep(ms).then(() => { throw new Error('the page stopped answering'); })]);
+const denseOf = d => typeof d !== 'string' ? d || {} : Object.fromEntries(d.split(',').filter(w => w && w !== 'none').map(w => w.split('=')).map(([k, v]) => [k.trim(), +v]));
 
-export async function harness(url, {speed = 1, read = 1.2, every = 2, log = join(tmpdir(), 'lh-runs', new Date().toISOString().replace(/[:.]/g, '-')),
+export async function harness(url, {speed = 1, read = 1.2, every = 2, dense, log = join(tmpdir(), 'lh-runs', new Date().toISOString().replace(/[:.]/g, '-')),
   width = 1280, height = 800, lock = process.env.LH_BROWSER_LOCK, minutes = 8} = {}){
-  const now = {speed, read, every};
+  const now = {speed, read, every, dense:denseOf(dense)};
   if (lock) { for (let said = false; ; said = true) { try { mkdirSync(lock); break; } catch { if (!said) console.error('waiting for the browser lock', lock); await sleep(5000); } } }
   mkdirSync(log, {recursive: true});
   const profile = await mkdtemp(join(tmpdir(), 'lh-harness-'));
@@ -45,11 +57,12 @@ export async function harness(url, {speed = 1, read = 1.2, every = 2, log = join
   const [page] = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).filter(t => t.type === 'page');
   const ws = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((ok, fail) => { ws.onopen = ok; ws.onerror = fail; });
-  let next = 0, frames = 0; const waiting = new Map(), errors = [];
+  let next = 0, frames = 0, runs = 0, closing = false, taking = Promise.resolve(); const waiting = new Map(), errors = [], clips = [];
   ws.onmessage = e => {
     const m = JSON.parse(e.data);
     if (m.id && waiting.has(m.id)) { const {ok, fail} = waiting.get(m.id); waiting.delete(m.id); m.error ? fail(new Error(m.error.message)) : ok(m.result); }
-    else if (m.method === 'Runtime.bindingCalled' && m.params.name === 'harnessFrame') picture(JSON.parse(m.params.payload));
+    else if (m.method === 'Runtime.bindingCalled' && m.params.name === 'harnessFrame') taking = picture(JSON.parse(m.params.payload));
+    else if (m.method === 'Runtime.bindingCalled' && m.params.name === 'harnessClip') clip(JSON.parse(m.params.payload));
     else if (m.method === 'Runtime.exceptionThrown') errors.push(m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text);
     else if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') errors.push(m.params.args.map(a => a.value ?? a.description).join(' '));
   };
@@ -57,15 +70,19 @@ export async function harness(url, {speed = 1, read = 1.2, every = 2, log = join
   const ev = async js => { const r = await send('Runtime.evaluate', {expression: js, awaitPromise: true, returnByValue: true});
     if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
   await send('Runtime.enable'); await send('Page.enable');
-  await send('Runtime.addBinding', {name: 'harnessFrame'});
+  await send('Runtime.addBinding', {name: 'harnessFrame'}); await send('Runtime.addBinding', {name: 'harnessClip'});
   await send('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
 
   // the game is holding still for this one; let it go once it's on disk
   async function picture(info){
+    if (closing) return;
     const file = `f${String(++frames).padStart(5, '0')}.jpg`;
     try { const {data} = await send('Page.captureScreenshot', {format: 'jpeg', quality: 70});
-      writeFileSync(join(log, file), Buffer.from(data, 'base64')); appendFileSync(join(log, 'index.jsonl'), JSON.stringify({frame: frames, file, ...info}) + '\n'); }
+      writeFileSync(join(log, file), Buffer.from(data, 'base64')); appendFileSync(join(log, 'index.jsonl'), JSON.stringify({frame: frames, run: runs, file, ...info}) + '\n'); }
     finally { ev('harness.go()').catch(() => {}); }
+  }
+  function clip({t, ct, chapter, place, who, at, box, shot}){
+    const c = {who, t, ct, chapter, place, at, box, shot, after: frames, run: runs}; clips.push(c); appendFileSync(join(log, 'clips.jsonl'), JSON.stringify(c) + '\n');
   }
 
   const KEYS = {Space: [' ', 'Space', 32], Enter: ['Enter', 'Enter', 13], Escape: ['Escape', 'Escape', 27],
@@ -87,13 +104,15 @@ export async function harness(url, {speed = 1, read = 1.2, every = 2, log = join
       await sleep(1500);
       await clickAt(width/2, height/2); await sleep(800);
       if (await ev(`document.documentElement.classList.contains('dressing')`)) { await key('Escape'); await sleep(600); }
-      await ev(`import(document.baseURI + 'js/testing.js')`);
+      await ev(`import(document.baseURI + 'js/testing.js')`); runs++;
       await ev(`harness.pace(${JSON.stringify(now)})`);
       return ev(`harness.start(${JSON.stringify(opts)})`);
     },
-    async state(){ const s = await ev('harness.state()'); s.errors = errors.splice(0); s.frames = frames; return s; },
-    // speed, read and every can change at any moment; a fresh start keeps whatever they are now
-    pace: o => { Object.assign(now, o); return ev(`harness.pace(${JSON.stringify(o)})`).catch(() => now); },
+    // clips are those since the last state, like heard
+    async state(){ const s = await ev('harness.state()'); s.errors = errors.splice(0); s.frames = frames; s.clips = clips.splice(0); return s; },
+    // speed, read, every and dense can change at any moment; a fresh start keeps whatever they are now
+    async pace(o){ o = {...o}; if ('dense' in o) o.dense = denseOf(o.dense);
+      const r = await ev(`window.harness ? harness.pace(${JSON.stringify(o)}) : null`); Object.assign(now, o); return r || now; },
     wait: (s = 10) => ev(`harness.wait(${+s})`),
     walk: name => ev(`harness.walk(${JSON.stringify(name)})`),
     async talkTo(name){ const r = await h.walk(name); if (r !== 'arrived') return r; await key('Space'); return 'talking to ' + name; },
@@ -117,13 +136,41 @@ export async function harness(url, {speed = 1, read = 1.2, every = 2, log = join
     async shot(file = join(log, `shot-${Date.now()}.png`)){ const {data} = await send('Page.captureScreenshot', {format: 'png'}); writeFileSync(file, Buffer.from(data, 'base64')); return file; },
     eval: ev,
     async close(){
-      if (closed) return log; clearTimeout(limit);
-      // a contact sheet, to look over a run by eye
-      const rows = await readFile(join(log, 'index.jsonl'), 'utf8').then(t => t.trim().split('\n').map(l => JSON.parse(l)), () => []), esc = s => String(s).replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
-      writeFileSync(join(log, 'index.html'), '<!doctype html><meta charset="utf-8"><title>Frames</title><style>body{font:13px system-ui;margin:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}img{width:100%}</style>\n' +
-        rows.map(f => `<figure><img loading="lazy" src="${f.file}"><figcaption><b>${f.frame}</b> t ${f.t} · ${esc(f.place)} / ${esc(f.area)}${f.talk ? '<br>' + esc(f.talk) : ''}</figcaption></figure>`).join('\n'));
+      if (closed) return log; clearTimeout(limit); closing = true; await within(5000, taking).catch(() => {});
+      const rows = await readFile(join(log, 'index.jsonl'), 'utf8').then(t => t.trim().split('\n').map(l => JSON.parse(l)), () => []);
+      const all = await readFile(join(log, 'clips.jsonl'), 'utf8').then(t => t.trim().split('\n').map(l => JSON.parse(l)), () => []);
+      writeFileSync(join(log, 'index.html'), html(rows, all));
+      // the page draws them, since ffmpeg here can't draw text
+      mkdirSync(join(log, 'sheets'), {recursive: true});
+      for (let i = 0, ok = true; ok && i < rows.length; i += 16) {
+        const tiles = rows.slice(i, i + 16).map(f => ({src: 'data:image/jpeg;base64,' + readFileSync(join(log, f.file)).toString('base64'), label: label(f), inside: (f.inside || []).join(', ')}));
+        const jpg = await within(15000, ev(`(${sheet})(${JSON.stringify(tiles)})`)).catch(() => ok = false);
+        if (jpg) writeFileSync(join(log, 'sheets', `s${String(i/16 + 1).padStart(4, '0')}.jpg`), Buffer.from(jpg, 'base64'));
+      }
       ws.close(); kill(); process.off('exit', kill); return log;
     },
   };
   return h;
+}
+
+const esc = s => String(s).replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
+const label = f => `#${f.frame}  t ${f.t}${f.chapter ? `  ch ${/^\d+/.exec(f.chapter)?.[0] ?? f.chapter} +${f.ct}` : ''}  ${f.shot || ''}`;
+// every picture with what was going on, to look over a run by eye; clips first, each linked to the picture before it
+function html(rows, clips){
+  return '<!doctype html><meta charset="utf-8"><title>Frames</title><style>body{font:13px system-ui;margin:16px}main{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}img{width:100%}.in{color:#c00}figure:target{outline:3px solid #c00}</style>\n' +
+    (clips.length ? `<h3 class="in">Inside something solid</h3><ul>${clips.map(c => `<li><a href="#f${c.after}">after #${c.after}</a> t ${c.t} · ${esc(c.place)} · ${esc(c.who)} at (${c.at}) in a ${c.box.w}×${c.box.d} m box at (${c.box.x}, ${c.box.z})</li>`).join('')}</ul>` : '') +
+    '<main>' + rows.map(f => `<figure id="f${f.frame}"><img loading="lazy" src="${f.file}"><figcaption><b>${esc(label(f))}</b> · ${esc(f.place)} / ${esc(f.area)}${f.inside?.length ? `<br><b class="in">inside something: ${esc(f.inside.join(', '))}</b>` : ''}${f.talk ? '<br>' + esc(f.talk) : ''}</figcaption></figure>`).join('\n') + '</main>';
+}
+// runs in the page: a 4×4 sheet with each picture's number, time and shot under it, red where someone is inside something
+async function sheet(tiles){
+  const W = 400, H = 250, L = 22, P = 4, c = document.createElement('canvas'), g = c.getContext('2d');
+  c.width = 4*W + 5*P; c.height = Math.ceil(tiles.length/4)*(H + L + P) + P; g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+  for (const [i, t] of tiles.entries()) {
+    const im = new Image(); im.src = t.src; await im.decode();
+    const x = P + (i % 4)*(W + P), y = P + Math.floor(i/4)*(H + L + P);
+    g.drawImage(im, x, y, W, H); g.font = 'bold 14px system-ui'; g.textBaseline = 'middle';
+    if (t.inside) { g.strokeStyle = '#d00'; g.lineWidth = 4; g.strokeRect(x + 2, y + 2, W - 4, H - 4); }
+    g.fillStyle = t.inside ? '#d00' : '#222'; g.fillText(t.label + (t.inside ? '  IN: ' + t.inside : ''), x + 2, y + H + L/2, W - 4);
+  }
+  return c.toDataURL('image/jpeg', .8).split(',')[1];
 }
