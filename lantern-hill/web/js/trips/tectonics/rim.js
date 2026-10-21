@@ -116,7 +116,8 @@ function revolve(rows, segs, at, a0 = 0, a1 = Math.PI*2){
 }
 
 export function buildRim(t){
-  const w = tripWorld({title:'The Volcano Rim', bg:0x9a86c0, sky:0xe0d0f4, groundCol:0x3a2a30, hemi:.78, sunCol:0xffd2a2, sunI:.85, fogNear:80, fogFar:460,
+  // a warm haze, thin enough that the sea stays blue far out; a lavender one turned the whole view mauve from the air
+  const w = tripWorld({title:'The Volcano Rim', bg:0xf0cdb2, sky:0xe0d0f4, groundCol:0x3a2a30, hemi:.78, sunCol:0xffd2a2, sunI:.85, fogNear:120, fogFar:900,
     cam:{oy:7.4, oz:9.2, oyP:9.4, ozP:10.6}});
   w.far = 600;
   const ring = (x, z) => Math.hypot(x, z);
@@ -181,16 +182,16 @@ export function buildRim(t){
     add(wallGeo, T(0xffffff, {vertexColors:true, flatShading:true, side:THREE.DoubleSide}), 0, 0, 0, null, false);
     // the cone's outside: ribbed with ridges and gullies running down to the sea, dark rock high up, green below
     // rows close together near the top, so the shoulder's edges come out soft
-    const high = new THREE.Color(0x4a3a44), low = new THREE.Color(0x6a4a4a), green = new THREE.Color(0x4e7a4e);
+    const high = new THREE.Color(0x4a3a3c), low = new THREE.Color(0x7a4a36), green = new THREE.Color(0x4e7a3e);
     const coneRows = [...Array.from({length:Math.ceil((TR + 4 - RIM)/.6)}, (_, i) => RIM + .3 + i*.6), ...slope.filter(p => p.x > TR + 4.3).map(p => p.x)].map(r => [r, coneY(r)]);
     const coneGeo = revolve(coneRows, 200, (a, r, y, j, c) => {
       const {m, amp, f} = ribs(a, r), rr = r + amp*.4*f, x = Math.cos(a)*rr, z = Math.sin(a)*rr;
-      c.copy(high).lerp(low, clamp01((r - RIM)/50)).lerp(green, clamp01((r - 66)/20)).multiplyScalar(.9 + .14*Math.sin(r*.35) + .16*f);
+      c.copy(high).lerp(low, clamp01((r - RIM)/50)).lerp(green, clamp01((r - 66)/20)).multiplyScalar(.9 + .14*Math.sin(r*.35) + .16*f).convertSRGBToLinear();
       // older rock out on the shoulder, crusted with moss and lichen
       return [x, coneAt(a, r) - .3*m, z]; });
     // pale blotches only, so the vertex colours keep the hue; stretched down the slope they read as gullies
     const slopeTex = tex(256, 256, (c, cw, ch) => { c.fillStyle = '#ffffff'; c.fillRect(0, 0, cw, ch);
-      for (let i = 0; i < 14; i++) { const x = Math.random()*cw, y = Math.random()*ch, r = 24 + Math.random()*40; c.fillStyle = i % 2 ? '#e8e0e6' : '#d4c8d2';
+      for (let i = 0; i < 14; i++) { const x = Math.random()*cw, y = Math.random()*ch, r = 24 + Math.random()*40; c.fillStyle = i % 2 ? '#ece2d6' : '#d8c8b6';
         for (const dx of [-cw, 0, cw]) for (const dy of [-ch, 0, ch]) { c.beginPath(); c.ellipse(x + dx, y + dy, r, r*.6, i, 0, 7); c.fill(); } } }, 18, 3);
     cone = add(coneGeo, T(0xffffff, {side:THREE.DoubleSide, vertexColors:true, map:slopeTex}), 0, 0, 0, null, false);
 
@@ -248,7 +249,7 @@ export function buildRim(t){
       add(new THREE.CircleGeometry(.28, 9), T(0x1a1320), hx, hy + 1.21, hz, null, false).rotation.x = -Math.PI/2; }
 
     // the sea far below, and the coast's other volcanoes standing in a line across it
-    const sea = add(new THREE.PlaneGeometry(1400, 1400), T(0x3a6a9a, {emissive:0x10304a, emissiveIntensity:.4}), 0, SEA, 0, null, false); sea.rotation.x = -Math.PI/2;
+    const sea = add(new THREE.PlaneGeometry(1400, 1400), T(0x13467a), 0, SEA, 0, null, false); sea.rotation.x = -Math.PI/2;
     // Pip's binoculars look right at them, so each is an island, not a cone: flanks swept up into a peak and
     // cut by gullies, bare rock on top, forest below, a sandy shore and pale shallows round it
     const peak = new THREE.Color(0x342624), flank = new THREE.Color(0x6a3c24), forest = new THREE.Color(0x266a28), sand = new THREE.Color(0xc8a45a);

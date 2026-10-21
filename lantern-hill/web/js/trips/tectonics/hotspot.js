@@ -16,7 +16,7 @@ import { player } from '../../player.js';
 import { game } from '../../state.js';
 import { tripBus } from '../bus.js';
 import { classmates } from '../class.js';
-import { goggles } from '../goggles.js';
+import { diorama, goggles, label, tall } from '../goggles.js';
 import { curio, puffs, sample, tripWorld } from '../stop-kit.js';
 import { storySky } from '../sky.js';
 import { flock, soarer } from './land-life.js';
@@ -40,7 +40,8 @@ const CHAIN = [{at:[-80, -130], r:34, h:28, age:.4}, {at:[-195, -150], r:32, h:1
 const ATOLL = [-410, -135], SEAMOUNT = [42, -46];
 const POOLS = [[-14.4, -9.3, 1], [-12.6, -10.4, .75], [-16.2, -10.6, .7]];
 // the time goggles' and the cutaway's models sit deep under the island, where nothing above can be seen
-const CUT = [0, -140, 0], CUT2 = [90, -140, 0];
+// far apart, so neither's sky and sea show behind the other
+const CUT = [0, -140, 0], CUT2 = [700, -140, 0];
 
 const sm = (a, b, v) => { const k = clamp01((v - a)/(b - a)); return k*k*(3 - 2*k); };
 const hump = (x, z, [cx, cz], r) => Math.exp(-((x - cx)**2 + (z - cz)**2)/(r*r));
@@ -278,7 +279,10 @@ export function buildHotspot(t){
   });
 
   // ---------- what the class finds ----------
-  const far = (pos, look) => { if (innerWidth < innerHeight) { pos.x = look.x + (pos.x - look.x)*1.5; pos.z = look.z + (pos.z - look.z)*1.5; } };
+  // a tall screen can't hold the whole row at once, so the view walks along it while Pip counts, from the
+  // nearest island out to the ring, and comes back to the row's middle; backing off instead would leave the hummock
+  const along = t0 => { if (!tall()) return [-230, -150]; const s = game.elapsed - t0, u = s < 9 ? ease(clamp01((s - 1)/7)) : 1 - .55*ease(clamp01((s - 9)/4));
+    return [CHAIN[0].at[0] + (ATOLL[0] - CHAIN[0].at[0])*u, CHAIN[0].at[1] + (ATOLL[1] - CHAIN[0].at[1])*u]; };
   const hy = ground(...HUMMOCK);
   cls.find('pip', {name:'chain', at:[HUMMOCK[0] + .6, HUMMOCK[1] + .4, -2.3], pose:'peer', call:"Islands! A whole row of them!",
     after:["Black and new at this end, green and old at that end. Like a row of birthday candles!"],
@@ -286,7 +290,7 @@ export function buildHotspot(t){
       await say([['pip', "{name}! Look out there, along the sea. Count with me!"]]);
       // up on the hummock, looking along the row, the haze pulled back so the far ones show
       const fog = w.scene.fog, haze = [fog.near, fog.far]; fog.near = 400; fog.far = 1800;
-      t.cut((pos, look) => far(pos.set(HUMMOCK[0] + 4, hy + 5, HUMMOCK[1] + 7), look.set(-230, 0, -150)));
+      const t0 = game.elapsed; t.cut((pos, look) => { pos.set(HUMMOCK[0] + 4, hy + 5, HUMMOCK[1] + 7); look.set(along(t0)[0], 0, along(t0)[1]); });
       await t.wait(1);
       await say([['pip', "One, two, three… and a ring, way out at the end. A whole row of islands!"],
                  ['pip', "Just like the row of volcanoes this morning!"],
@@ -300,7 +304,7 @@ export function buildHotspot(t){
                  ['sparks', "I said some plumes come up right in the middle of a plate. Well, class… we're standing on top of one!"],
                  ['basil', "We're standing on a WHAT?"],
                  ['sparks', "Time goggles on, {name}! X-ray mode, so we can see down through the plate."]]);
-      await goggles(t, {shot:chain.shot, years:5e6, dur:11, step:chain.step});
+      await goggles(t, {shot:chain.shot, wide:chain.wide, years:5e6, dur:11, step:chain.step});
       t.cut(null);
       await say([['pip', old === 0 ? "You were right! The far one is oldest." : "It's the far one! The far one is the oldest."],
                  ['sparks', "The plume stays put, deep down. The plate slides over it, like a sheet of paper sliding slowly over a candle."],
@@ -347,7 +351,7 @@ export function buildHotspot(t){
       await say([['basil', "That was an EARTHQUAKE! But there's no plate edge here! What made it shake?"]]);
       const why = await t.ask('basil', "What do you think shook the island?", ["Magma moving underneath", "Plates bumping together", "The volcano sneezed"]);
       await say([['sparks', "Let's look under the volcano. Goggles on, {name}!"]]);
-      await goggles(t, {shot:swell.shot, years:4, dur:10, step:swell.step});
+      await goggles(t, {shot:swell.shot, wide:swell.wide, years:4, dur:10, step:swell.step});
       t.cut((pos, look) => { pos.set(STATION[0] - 3, sty + 3.4, STATION[1] + 5); look.set(STATION[0], sty + 1, STATION[1]); });
       await say([['basil', why === 0 ? "You got it! Magma moving underneath." : why === 2 ? "Not a sneeze. Magma, moving underneath!" : "Not plates this time. Magma, moving underneath!"],
                  ['sparks', "Magma from the plume squeezes into the cracks under the volcano, and the ground swells up, like blowing up a balloon."],
@@ -497,19 +501,19 @@ function buildFar(w){
   w.anims.push((dt, tt) => breakers.forEach((m, i) => { const k = (tt*.18 + i/3) % 1; m.scale.setScalar(1.5 + k*6); m.material.opacity = .9*Math.sin(k*Math.PI)*(1 - k*.5); }));
 }
 
-// The time goggles' model, a slice of the Earth on a parchment table: the plume rising, fixed, out of the
+// The time goggles' slice of the Earth, cut out of the open sea: the plume rising, fixed, out of the deep
 // mantle; the plate sliding over it; each time, a new volcano punched up through the plate, which then
 // rides away, cools, wears down and sinks, its coral left as a ring at the sea's surface.
 function buildChainSlice(w){
   const g = new THREE.Group(); g.position.set(...CUT); w.scene.add(g);
   const basic = o => new THREE.MeshBasicMaterial(Object.assign({fog:false}, o));
-  const ink = basic({color:0x1a1320}), L = 36, DZ = 6, D = 12, PX = 7, SEA_H = 1.4;
+  // the slice runs on past the screen's edges; islands carried past EDGE have sunk out of the story
+  const ink = basic({color:0x1a1320}), L = 80, EDGE = -16.8, DZ = 6, D = 12, PX = 7, SEA_H = 1.4;
   const plane = (wd, h, m, x, y, z, rx = 0, parent = g) => { const o = new THREE.Mesh(new THREE.PlaneGeometry(wd, h), m); o.position.set(x, y, z); o.rotation.x = rx; parent.add(o); return o; };
-  plane(120, 90, basic({color:0xeed8b6}), 0, -7, -14, -Math.PI/2);
-  plane(120, 60, basic({color:0xf2e2c4}), 0, 14, -16);
+  diorama(g, {ground:'sea', back:-DZ/2, top:SEA_H, deep:0x8a2c1c});
   // the mantle: a deep orange block, swirled
   const front = tex(512, 128, (c, cw, ch) => { const gr = c.createLinearGradient(0, 0, 0, ch); gr.addColorStop(0, '#e86a2c'); gr.addColorStop(1, '#8a2a20'); c.fillStyle = gr; c.fillRect(0, 0, cw, ch);
-    c.strokeStyle = 'rgba(255,200,120,.4)'; c.lineWidth = 5; for (let i = 0; i < 9; i++) { c.beginPath(); c.arc(30 + i*60, 70, 22 + (i % 3)*8, Math.PI*.1, Math.PI*1.3); c.stroke(); } }, 2, 1);
+    c.strokeStyle = 'rgba(255,200,120,.4)'; c.lineWidth = 5; for (let i = 0; i < 9; i++) { c.beginPath(); c.arc(30 + i*60, 70, 22 + (i % 3)*8, Math.PI*.1, Math.PI*1.3); c.stroke(); } }, L/18, 1);
   const mant = new THREE.Mesh(new THREE.BoxGeometry(L, 5.5, DZ), [basic({color:0xa83a24}), basic({color:0xa83a24}), basic({color:0xd8582a}), basic({color:0xa83a24}), basic({map:front}), basic({color:0xa83a24})]);
   mant.position.set(0, -3.6, 0); g.add(mant);
   for (const y of [-.85, -6.35]) plane(L, .06, ink, 0, y, DZ/2 + .01);
@@ -517,12 +521,14 @@ function buildChainSlice(w){
   const pt = tex(64, 256, (c, cw, ch) => { const gr = c.createLinearGradient(0, 0, cw, 0); gr.addColorStop(0, 'rgba(255,150,60,0)'); gr.addColorStop(.3, 'rgba(255,190,90,.9)'); gr.addColorStop(.5, 'rgba(255,240,170,1)'); gr.addColorStop(.7, 'rgba(255,190,90,.9)'); gr.addColorStop(1, 'rgba(255,150,60,0)');
     c.fillStyle = gr; c.fillRect(0, 0, cw, ch); c.fillStyle = 'rgba(255,255,220,.6)'; for (let i = 0; i < 8; i++) { c.beginPath(); c.ellipse(cw/2, i*32 + 10, 8, 12, 0, 0, 7); c.fill(); } }, 1, 2);
   const stem = plane(2.2, 5.4, basic({map:pt, transparent:true, depthWrite:false}), PX, -3.6, DZ/2 + .05);
+  // and on below the slice, from far deeper down
+  const root = plane(2.2, 30, basic({map:pt.clone(), transparent:true, depthWrite:false}), PX, -21.35, DZ/2 + .05); root.material.map.repeat.set(1, 11); root.material.map.needsUpdate = true;
   const head = new THREE.Mesh(new THREE.CircleGeometry(1, 32), basic({color:0xffc060, transparent:true, opacity:.9})); head.scale.set(2.6, .7, 1); head.position.set(PX, -1.2, DZ/2 + .06); g.add(head);
   const headInk = new THREE.Mesh(new THREE.RingGeometry(.94, 1.04, 32), ink); headInk.scale.copy(head.scale); headInk.position.set(PX, -1.2, DZ/2 + .07); g.add(headInk);
   // the plate: crust, with the sea floor on top, sliding to the left; its volcanoes ride along with it
-  const crust = tex(256, 32, (c, cw, ch) => { c.fillStyle = '#6a5a52'; c.fillRect(0, 0, cw, ch); c.fillStyle = '#7a6a5e'; c.fillRect(0, 8, cw, 8); c.fillStyle = '#4e4440'; c.fillRect(0, 22, cw, 10); }, 6, 1);
+  const crust = tex(256, 32, (c, cw, ch) => { c.fillStyle = '#6a5a52'; c.fillRect(0, 0, cw, ch); c.fillStyle = '#7a6a5e'; c.fillRect(0, 8, cw, 8); c.fillStyle = '#4e4440'; c.fillRect(0, 22, cw, 10); }, L*2.2/13, 1);
   const plate = new THREE.Group(); g.add(plate);
-  const slab = new THREE.Mesh(new THREE.BoxGeometry(L*2.2, .85, DZ), [basic({color:0x5a4a44}), basic({color:0x5a4a44}), basic({color:0x4a4048}), basic({color:0x5a4a44}), basic({map:crust}), basic({color:0x5a4a44})]);
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(L*2.2, .85, DZ), [basic({color:0x5a4a44}), basic({color:0x5a4a44}), basic({color:0xc8b07a}), basic({color:0x5a4a44}), basic({map:crust}), basic({color:0x5a4a44})]);
   slab.position.set(L*.5, -.42, 0); plate.add(slab);
   // a gold arrow on the plate, to show which way it goes
   const arrowGeo = new THREE.ShapeGeometry(new THREE.Shape([[-.9, .3], [.2, .3], [.2, .62], [1, 0], [.2, -.62], [.2, -.3], [-.9, -.3]].map(([x, y]) => new THREE.Vector2(x, y))));
@@ -531,7 +537,8 @@ function buildChainSlice(w){
   // the magma's path, from the plume's head up through the plate, which stays over the plume as the plate moves
   const pipe = plane(.35, 1.3, basic({color:0xffb040}), PX, -.45, DZ/2 + .08);
   // the sea: see-through blue over the plate
-  const sea = new THREE.Mesh(new THREE.BoxGeometry(L, SEA_H, DZ), basic({color:0x3a8ac8, transparent:true, opacity:.25, depthWrite:false})); sea.position.set(0, SEA_H/2, 0); g.add(sea);
+  const sea = new THREE.Mesh(new THREE.BoxGeometry(L, SEA_H, DZ), basic({color:0x1f6aa8, transparent:true, opacity:.55, depthWrite:false})); sea.position.set(0, SEA_H/2, 0); g.add(sea);
+  plane(L, SEA_H, basic({color:0x1a4a7a}), 0, SEA_H/2, -DZ/2 - .01);
   plane(L, .05, basic({color:0xe8f6ff}), 0, SEA_H, DZ/2 + .01);
   // the volcanoes: when each is born, and its pieces
   const black = new THREE.Color(0x2a2430), brown = new THREE.Color(0x6a5040), green = new THREE.Color(0x5e9a4a);
@@ -541,17 +548,17 @@ function buildChainSlice(w){
     const lava = new THREE.Mesh(new THREE.SphereGeometry(.24, 12, 8), basic({color:0xff7a2a})); o.add(lava);
     const reef = new THREE.Mesh(new THREE.TorusGeometry(.8, .12, 6, 24), basic({color:0xf27a7a})); reef.rotation.x = -Math.PI/2; reef.position.y = SEA_H; o.add(reef);
     return {b, o, cone, coneInk, lava, reef, m}; });
-  const label = (text, s, cw0 = 512) => { const tx = tex(cw0, 128, (c, cw, ch) => { c.font = '64px Caprasimo, Georgia, serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 12; c.strokeStyle = 'rgba(26,19,32,.9)'; c.strokeText(text, cw/2, ch/2); c.fillStyle = '#fff4dc'; c.fillText(text, cw/2, ch/2); });
-    tx.wrapS = tx.wrapT = THREE.ClampToEdgeWrapping; const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:tx, transparent:true, depthWrite:false, depthTest:false, fog:false})); sp.scale.set(s*cw0/128, s, 1); g.add(sp); return sp; };
-  const plumeL = label('the hot plume stays put', .62, 1024), plateL = label('the plate slides', .62, 768), newL = label('a new volcano!', .9, 768), oldL = label('old', .7, 256), youngL = label('new', .7, 256);
-  plumeL.position.set(PX, -4.6, DZ/2 + .4); plateL.position.set(-6, -1.5, DZ/2 + .4); newL.position.set(PX, 4.6, .4); oldL.position.set(-14, 3.6, .4); youngL.position.set(PX - 1, 3.6, .4);
+  const plumeL = label(g, 'the hot plume stays put', 1, [PX, -4.6, DZ/2 + .4], {text:'the hot plume\nstays put', at:[PX - 3, -10.5, DZ/2 + .4]}),
+    plateL = label(g, 'the plate slides', 1, [-6, -1.5, DZ/2 + .4], {text:'the plate\nslides', at:[-9, -3.6, DZ/2 + .4]}),
+    newL = label(g, 'a new volcano!', 1.3, [PX, 4.8, .4], {text:'a new\nvolcano!', at:[PX - 2.5, 7.5, .4]}),
+    oldL = label(g, 'old', 1.3, [-14, 3.6, .4], {at:[-13.5, 4.6, .4]}), youngL = label(g, 'new', 1.3, [PX - 1, 3.6, .4], {at:[PX - 1, 4.6, .4]});
   let born = 0, bornAt = -9;
   const c = new THREE.Color();
   function step(k){
     plate.position.x = -D*k; pipe.position.x = PX;
     let n = 0;
     for (const s of isles) { const dist = (k - s.b)*D, wx = PX + s.b*D - D*k;
-      s.o.visible = dist >= 0 && wx > -L/2 + 1.2; if (!s.o.visible) continue; if (s.b >= 0) n++;
+      s.o.visible = dist >= 0 && wx > EDGE; if (!s.o.visible) continue; if (s.b >= 0) n++;
       // it grows while the plume feeds it, then wears down and sinks as it rides away
       const grown = ease(clamp01(dist/1.4)), hgt = Math.max(.05, 2.9*grown - .2*Math.max(0, dist - 1.4)), wd = .7 + .4*grown;
       s.cone.scale.set(wd, hgt, wd); s.cone.position.y = hgt/2; s.coneInk.scale.copy(s.cone.scale); s.coneInk.position.y = hgt/2;
@@ -560,11 +567,12 @@ function buildChainSlice(w){
       s.reef.visible = hgt < SEA_H + .3 && hgt > SEA_H - .9 && dist > 4; }
     if (k === 0) { born = n; bornAt = -9; }
     if (n > born) { born = n; bornAt = game.elapsed; Sound.tone(523, {type:'triangle', dur:.15, vol:.06}); Sound.tone(784, {type:'triangle', t:.1, dur:.25, vol:.06}); }
-    const since = game.elapsed - bornAt; newL.material.opacity = clamp01(1.4 - since); newL.scale.set(5.4*(1 + .2*clamp01(1 - since*3)), .9*(1 + .2*clamp01(1 - since*3)), 1);
-    stem.material.map.offset.y = -k*6; head.scale.set(2.6 + .1*Math.sin(k*40), .7, 1);
+    const since = game.elapsed - bornAt; newL.set(clamp01(1.4 - since), 1 + .2*clamp01(1 - since*3)); [plumeL, plateL, oldL, youngL].forEach(l => l.set());
+    stem.material.map.offset.y = root.material.map.offset.y = -k*6; head.scale.set(2.6 + .1*Math.sin(k*40), .7, 1);
   }
   step(0);
-  return {step, shot: (pos, look) => { pos.set(CUT[0] - 1, CUT[1] + 5.4, CUT[2] + 25); look.set(CUT[0] - 1, CUT[1] - .4, CUT[2]); return true; }};
+  // a tall screen centres on the row of islands and the plume, and backs off to fit them in
+  return {step, wide:13.8, shot: (pos, look) => { const x = CUT[0] + (tall() ? -3.5 : -1); pos.set(x, CUT[1] + 5.4, CUT[2] + 25); look.set(x, CUT[1] - .4, CUT[2]); return true; }};
 }
 
 // The cutaway under the volcano, for the time goggles: magma from the plume fills a chamber under it, the
@@ -575,20 +583,19 @@ function buildSwellSlice(w){
   const basic = o => new THREE.MeshBasicMaterial(Object.assign({fog:false}, o));
   const ink = basic({color:0x1a1320}), FZ = 2.6;
   const plane = (wd, h, m, x, y, z, rx = 0) => { const o = new THREE.Mesh(new THREE.PlaneGeometry(wd, h), m); o.position.set(x, y, z); o.rotation.x = rx; g.add(o); return o; };
-  plane(120, 90, basic({color:0xeed8b6}), 0, -9, -14, -Math.PI/2);
-  plane(120, 60, basic({color:0xf2e2c4}), 0, 14, -16);
+  diorama(g, {ground:'lava', back:-FZ, deep:0x9a3a1e});
   // the rock: banded old flows, drawn on the block's face, with the plume's glow below
-  const rockTex = tex(512, 256, (c, cw, ch) => { const cols = ['#5a4a52', '#6a5458', '#4e4248', '#72605e', '#584850'];
+  const rockTex = tex(512, 256, (c, cw, ch) => { const cols = ['#5a4640', '#6e564a', '#4a3c38', '#7a6052', '#5e4a42'];
     for (let y = 0, i = 0; y < ch; i++) { const bh = 18 + (i*13) % 22; c.fillStyle = cols[i % 5]; c.beginPath(); c.moveTo(0, y); for (let x = 0; x <= cw; x += 16) c.lineTo(x, y + 3*Math.sin(x*.05 + i)); c.lineTo(cw, ch); c.lineTo(0, ch); c.fill(); y += bh; }
-    const gr = c.createLinearGradient(0, ch*.7, 0, ch); gr.addColorStop(0, 'rgba(232,106,44,0)'); gr.addColorStop(1, 'rgba(232,106,44,.9)'); c.fillStyle = gr; c.fillRect(0, 0, cw, ch); });
+    const gr = c.createLinearGradient(0, ch*.7, 0, ch); gr.addColorStop(0, 'rgba(232,106,44,0)'); gr.addColorStop(1, 'rgba(232,106,44,.9)'); c.fillStyle = gr; c.fillRect(0, 0, cw, ch); }, 1.7, 1);
   // the block itself bulges: every layer of rock above the magma is pushed up, most at the top, none at the
   // bottom, so the bands bend into the volcano's hump
-  const bg = new THREE.BoxGeometry(26, 8, FZ*2, 90, 10, 1), bp = bg.attributes.position, rest = Float32Array.from(bp.array);
-  const block = new THREE.Mesh(bg, [basic({color:0x4e4248}), basic({color:0x4e4248}), basic({color:0x3a3440}), basic({color:0x4e4248}), basic({map:rockTex}), basic({color:0x4e4248})]);
+  const bg = new THREE.BoxGeometry(44, 8, FZ*2, 150, 10, 1), bp = bg.attributes.position, rest = Float32Array.from(bp.array);
+  const block = new THREE.Mesh(bg, [basic({color:0x4a3c38}), basic({color:0x4a3c38}), basic({color:0x3a302c}), basic({color:0x4a3c38}), basic({map:rockTex}), basic({color:0x4a3c38})]);
   block.position.set(0, -4, 0); g.add(block);
   const blockInk = new THREE.Mesh(bg, basic({color:0x1a1320, side:THREE.BackSide})); blockInk.scale.set(1.006, 1.012, 1.02); block.add(blockInk);
   const rise = k => { for (let i = 0; i < bp.count; i++) { const x = rest[i*3], y = rest[i*3 + 1]; bp.setY(i, y + (y + 4)/8*(1 + 1.3*k)*Math.exp(-((x/4.8)**2))); } bp.needsUpdate = true; };
-  plane(26, .06, ink, 0, -8, FZ + .01);
+  plane(44, .06, ink, 0, -8, FZ + .01);
   // the GPS station, riding on top
   const gps = new THREE.Group(); g.add(gps);
   for (const sx of [-.3, .3]) { const l = new THREE.Mesh(new THREE.CylinderGeometry(.04, .04, 1, 5), basic({color:0x8a8a96})); l.position.set(sx, .5, 0); l.rotation.z = -sx*.4; gps.add(l); }
@@ -597,16 +604,15 @@ function buildSwellSlice(w){
   const glowM = basic({color:0xff6a1a}), chamber = new THREE.Mesh(new THREE.CircleGeometry(1, 40), glowM); chamber.position.set(0, -3.6, FZ + .03); g.add(chamber);
   const chamberInk = new THREE.Mesh(new THREE.RingGeometry(.92, 1.06, 40), ink); chamberInk.position.set(0, -3.6, FZ + .04); g.add(chamberInk);
   const feed = plane(.9, 3.6, basic({color:0xff8a2a}), 0, -6.2, FZ + .02);
+  plane(.9, 30, basic({color:0xff8a2a}), 0, -23, -FZ + .05);
   // cracks in the rock above the chamber, and fingers of magma squeezing off sideways into them
   const zig = (pts, wd, m, z) => { const o = new THREE.Group(); o.position.z = z; g.add(o);
     for (let i = 0; i < pts.length - 1; i++) { const [x0, y0] = pts[i], [x1, y1] = pts[i + 1], l = Math.hypot(x1 - x0, y1 - y0), s = new THREE.Mesh(new THREE.PlaneGeometry(l + wd, wd), m);
       s.position.set((x0 + x1)/2, (y0 + y1)/2, 0); s.rotation.z = Math.atan2(y1 - y0, x1 - x0); o.add(s); } return o; };
   const cracks = [[[-.6, -2.6], [-1.3, -1.9], [-1.1, -1.2], [-1.9, -.4]], [[.7, -2.7], [1.5, -2.2], [1.4, -1.4], [2.4, -.8], [2.6, -.2]], [[0, -2.4], [.3, -1.6], [-.2, -.9]]].map(p => zig(p, .09, ink, FZ + .05));
   const sills = [[[-.9, -3.8], [-2.6, -3.5], [-4.2, -3.9], [-5.6, -3.6]], [[.9, -3.7], [2.6, -4.1], [4.4, -3.8], [6, -4.2]]].map(p => zig(p, .26, glowM, FZ + .035));
-  const label = (text, s, cw0 = 512) => { const tx = tex(cw0, 128, (c, cw, ch) => { c.font = '64px Caprasimo, Georgia, serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 12; c.strokeStyle = 'rgba(26,19,32,.9)'; c.strokeText(text, cw/2, ch/2); c.fillStyle = '#fff4dc'; c.fillText(text, cw/2, ch/2); });
-    tx.wrapS = tx.wrapT = THREE.ClampToEdgeWrapping; const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:tx, transparent:true, depthWrite:false, depthTest:false, fog:false})); sp.scale.set(s*cw0/128, s, 1); g.add(sp); return sp; };
-  const magmaL = label('magma', .8), crackL = label('CRACK!', 1.3), upL = label('puffs up', 1), downL = label('sinks back', 1);
-  magmaL.position.set(-3.4, -5.4, FZ + .4); crackL.position.set(0, 1.3, FZ + .4); upL.position.set(6.4, 2.4, .4); downL.position.set(6.4, 2.4, .4);
+  const magmaL = label(g, 'magma', .9, [-3.4, -5.4, FZ + .4], {at:[-2.6, -6, FZ + .4]}), crackL = label(g, 'CRACK!', 1.3, [0, 1.3, FZ + .4], {at:[0, 1.6, FZ + .4]}),
+    upL = label(g, 'puffs up', 1.1, [6.4, 2.4, .4], {at:[0, 5.2, .4]}), downL = label(g, 'sinks back', 1.1, [6.4, 2.4, .4], {at:[0, 5.2, .4]});
   const CRACKS = [.3, .36, .42];
   let snapped = 0, crackAt = -9;
   function step(k){
@@ -619,11 +625,11 @@ function buildSwellSlice(w){
     if (n > snapped) { snapped = n; crackAt = game.elapsed; game.camShake = 2.2; Sound.tone(70, {dur:.4, vol:.14, f2:40}); Sound.hiss({dur:.3, vol:.1, type:'highpass', freq:1800}); }
     cracks.forEach((c, i) => { c.visible = n > i; });
     const sq = clamp01((k - .45)/.17); sills.forEach(s => { s.visible = sq > 0; s.scale.set(sq, 1, 1); });
-    const since = game.elapsed - crackAt; crackL.material.opacity = clamp01(1.2 - since);
-    upL.material.opacity = k < .45 || k > .7 ? 1 : 0; downL.material.opacity = k > .47 && k < .62 ? 1 : 0;
+    const since = game.elapsed - crackAt; crackL.set(clamp01(1.2 - since)); magmaL.set();
+    upL.set(k < .45 || k > .7 ? 1 : 0); downL.set(k > .47 && k < .62 ? 1 : 0);
   }
   step(0);
-  return {step, shot: (pos, look) => { pos.set(CUT2[0], CUT2[1] + 1.5, CUT2[2] + 25); look.set(CUT2[0], CUT2[1] - 1.8, CUT2[2]); return true; }};
+  return {step, wide:8.2, shot: (pos, look) => { pos.set(CUT2[0], CUT2[1] + 1.5, CUT2[2] + 25); look.set(CUT2[0], CUT2[1] - 1.8, CUT2[2]); return true; }};
 }
 
 // ---------- things to look closer at, for anyone who goes exploring ----------

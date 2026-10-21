@@ -13,7 +13,7 @@ import { save } from '../../save.js';
 import { game } from '../../state.js';
 import { tripBus } from '../bus.js';
 import { classmates } from '../class.js';
-import { goggles } from '../goggles.js';
+import { goggles, tall } from '../goggles.js';
 import { curio, puffs, sample, tripWorld } from '../stop-kit.js';
 import { wonders } from './wonders.js';
 
@@ -157,10 +157,11 @@ export function buildMantle(t){
     for (const [x0, dir] of [[400, -1], [460, -1], [570, 1], [640, 1], [760, 1]]) { const x = x0 + dir*S.apart*70; c.fillStyle = '#2f5537'; c.beginPath(); c.moveTo(x - 9, 9); c.lineTo(x, -14); c.lineTo(x + 9, 9); c.fill(); }
     // the left plate's end, cooled and heavy, sinking back down
     c.save(); c.translate(edge + 4, 8); c.rotate(1.05); c.fillStyle = '#3a2a30'; c.fillRect(0, -24, 120 + S.apart*150, 46); c.strokeRect(0, -24, 120 + S.apart*150, 46); c.restore();
-    c.font = '30px Caprasimo, Georgia, serif'; c.textAlign = 'center'; c.lineWidth = 7; c.strokeStyle = 'rgba(26,19,32,.85)'; c.fillStyle = '#efe0bf';
-    const label = (s, x, y) => { c.strokeText(s, x, y); c.fillText(s, x, y); };
+    // a tall screen sees less of the wall's width, so its words are bigger and the outer ones come in
+    const p = tall(); c.font = `${p ? 36 : 30}px Caprasimo, Georgia, serif`; c.textAlign = 'center'; c.lineWidth = 7; c.strokeStyle = 'rgba(26,19,32,.85)'; c.fillStyle = '#efe0bf';
+    const label = (s, x, y) => s.split('\n').forEach((l, i) => { c.strokeText(l, x, y + i*38); c.fillText(l, x, y + i*38); });
     label('plate', 380, 40); label('plate', 760, 40);
-    if (S.labels) { label('hot rock rises', 512, 250); label('cool rock sinks', 268, 330); label('cool rock sinks', 756, 330); }
+    if (S.labels) { label('hot rock rises', 512, 250); label(p ? 'cool rock\nsinks' : 'cool rock sinks', p ? 300 : 268, 330); label(p ? 'cool rock\nsinks' : 'cool rock sinks', p ? 724 : 756, 330); }
     wallTex.needsUpdate = true;
   }
   let sag = null, curFlow = 0;
@@ -214,14 +215,16 @@ export function buildMantle(t){
                  ['pip', "Look at the cliff. That's the mantle, cut open."]]);
       const pick = await t.ask('pip', "What will the hot rock near the bottom do?", ["Rise up", "Sink down", "Stay still"]);
       S.lapse = true; const p0 = S.phase;
-      await goggles(t, {shot:(pos, look) => { pos.set(0, 4.2, 7.5); look.set(0, 4, CLIFF); }, years:1e8, dur:8,
+      // far enough back that the plates along the wall's top clear the goggles' year counter
+      const wall = (pos, look) => { pos.set(0, 5.6, 12); look.set(0, 5.3, CLIFF); };
+      const back = await goggles(t, {shot:wall, wide:14, room:BACK - 2 - 12, stay:true, years:1e8, dur:8,
         step: k => { S.phase = p0 + k*Math.PI*2; S.apart = k; S.labels = k > .25; }});
       await say([['pip', pick === 0 ? "You guessed it! The hot rock rose up." : "Whoa! The hot rock rose up."],
                  ['pip', "Then it cooled off at the top and sank. Round and round!"],
                  ['basil', "And look on the side! A cool slab of plate sank down."],
                  ['sparks', "The moving mantle drags the plates along. That's why plates move!"],
                  ['sparks', "Hot things rise. Hot air does it too! Try it at the science desk when we get home."]]);
-      save('trips', {heatRises:true});
+      back(); t.cut(null); save('trips', {heatRises:true});
     }});
   cls.find('mo', {name:'heat', at:[13, 6.5, -2.2], pose:'cheer', call:"Phew! Come here!", after:["Hot like the sun. Wow."],
     async scene(){

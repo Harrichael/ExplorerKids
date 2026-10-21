@@ -7,7 +7,7 @@ import { T, XF, add, bAdd, bFlush, clamp01, ease, fr, frand, glowTex, grad, leaf
 import { Sound } from '../../core/sound.js';
 import { inWorld } from '../../core/world.js';
 import { flower, grassTuft } from '../../hq/wider.js';
-import { player } from '../../player.js';
+import { hero, player } from '../../player.js';
 import { game } from '../../state.js';
 import { tripBus } from '../bus.js';
 import { classmates } from '../class.js';
@@ -246,8 +246,14 @@ export function buildValley(t){
                  ['sparks', "Rain, ice, and this little stream carry bits of mountain away. Pick a pebble out of the water, {name}."]]);
       const [bx, by, bz] = pebble.position.toArray();
       await t.free(t.use(w, {name:'Pebble', x:bx, z:bz, y:by, range:1.4, verb:'Pick up the round pebble', short:'Pick up', glow:[bx, by + .4, bz]}), 'Pick a pebble out of the stream');
-      t.hold(pebble); Sound.tone(660, {type:'triangle', dur:.12, vol:.06}); Sound.hiss({dur:.3, vol:.05, type:'highpass', freq:2400});
-      t.cut((pos, look) => { pos.set(player.x - 3.4, player.y + 2.4, player.z + 3.4); look.set(player.x + .5, player.y + .8, player.z - .3); });
+      // the explorer holds the pebble up, seen from in front and a little to the side, whichever way they face;
+      // the hand scales what it holds, so the pebble is sized back up to a real pebble's size, and sits out past
+      // the fist, which is near its colour
+      t.hold(pebble); const k = 1.6/hero.armR.getWorldScale(new THREE.Vector3()).x; pebble.scale.set(1.25*k, .7*k, k); pebble.position.y = -.8;
+      Sound.tone(660, {type:'triangle', dur:.12, vol:.06}); Sound.hiss({dur:.3, vol:.05, type:'highpass', freq:2400});
+      player.pose = 'point'; t.onEnd(() => { player.pose = null; });
+      t.cut((pos, look) => { const fx = Math.sin(player.angle), fz = Math.cos(player.angle);
+        pos.set(player.x + fx*3 - fz*1.4, player.y + 1.5, player.z + fz*3 + fx*1.4); look.set(player.x + fx*.3, player.y + 1.2, player.z + fz*.3); });
       const pick = await t.ask('basil', "Why is the pebble so round and smooth?", ["The water rolled it along and rubbed it smooth", "Somebody polished it", "It grew that way"]);
       await say([['basil', pick === 0 ? "Yes! It tumbled all the way down from the mountain, bumping and rolling." : "I bet it was the water! It tumbled all the way down from the mountain, bumping and rolling."],
                  ['sparks', "Every pebble in this stream was once a bit of mountain."],
@@ -258,7 +264,7 @@ export function buildValley(t){
                    ['sparks', "Only a few millimeters a year. Slower than your fingernails grow!"],
                    ['basil', "Slow mountains. Okay. I can handle slow."]]);
       await say([['basil', "Can I keep it? For my rock collection."]]);
-      t.drop(); pebble.visible = false;
+      player.pose = null; t.drop(); pebble.visible = false;
       t.cut(null);
     }});
   cls.find('mo', {name:'picnic', at:[ROCK[0] - .1, ROCK[1] - .05, 0], pose:'sit', call:"Picnic time! Over here!", after:["Mountains on one side, snacks on the other. Perfect."],
@@ -359,7 +365,10 @@ function landMaterial(){
       float peb = sin(vWp.x*5.1 + sin(vWp.z*3.7)*2.)*sin(vWp.z*4.3 + sin(vWp.x*2.9)*2.);
       gr = mix(gr, sand*(.9 + .1*smoothstep(.4, .9, peb)), vTint);
       float b = vWp.y - fold(vWp);
-      vec3 rk = sRGBToLinear(texture2D(strata, vec2(fract((vWp.x + vWp.z)*.1), b/9.6))).rgb;
+      // the bands run across a face along whichever way it faces, so a wall seen edge-on doesn't smear them
+      // into streaks; two looks blended by how much the face turns toward x or toward z
+      float wz = smoothstep(.25, .75, abs(n.x)/(abs(n.x) + abs(n.z) + .001));
+      vec3 rk = mix(sRGBToLinear(texture2D(strata, vec2(fract(vWp.x*.1), b/9.6))).rgb, sRGBToLinear(texture2D(strata, vec2(fract(vWp.z*.1 + .37), b/9.6))).rgb, wz);
       // steep faces a shade darker and cooler than the tops, streaked and cracked by patterns of x and z
       // alone, so every mark runs straight up and down the face
       float face = smoothstep(.55, .95, steep);

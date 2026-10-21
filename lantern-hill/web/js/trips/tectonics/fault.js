@@ -14,7 +14,7 @@ import { player } from '../../player.js';
 import { game } from '../../state.js';
 import { tripBus } from '../bus.js';
 import { classmates } from '../class.js';
-import { goggles } from '../goggles.js';
+import { diorama, goggles, label } from '../goggles.js';
 import { curio, puffs, sample, tripWorld } from '../stop-kit.js';
 import { storySky } from '../sky.js';
 import { butterflies, duck, flock, groundSquirrel, soarer } from './land-life.js';
@@ -301,7 +301,7 @@ export function buildFault(t){
                  ['pip', "The WHOLE ground slid? What could drag something that big?"]]);
       const why = await t.ask('basil', "What do you think drags the plates along?", ["The slow, hot mantle underneath", "The wind blowing on them", "Cars driving over them"]);
       await say([['sparks', "Let's find out! Time goggles on, {name}. X-ray mode, so we can see under the ground."]]);
-      await goggles(t, {shot:slice.shot, years:450, dur:10, step:slice.step});
+      await goggles(t, {shot:slice.shot, wide:slice.wide, years:450, dur:10, step:slice.step});
       t.cut(roadShot);
       await say([['basil', why === 0 ? "You were right! The mantle creeps along underneath, and drags the plates with it." : "It wasn't that. The mantle creeps along underneath, and drags the plates with it."],
                  ['sparks', "Remember the mantle, turning over ever so slowly? Under this plate it creeps one way, and under that one, the other."],
@@ -480,13 +480,18 @@ function leafBoats(w, t){
 
 // The ground cut open for the time goggles, with x-ray to see through the plates: the slow, hot mantle
 // creeping one way under each plate drags them past each other, the rock at the crack sticks, the road
-// across it bends, and every so often it all SNAPS. A model on a parchment table, painted, with ink.
+// across it bends, and every so often it all SNAPS. Painted, with ink, and set in the grassland it was cut from.
 function buildSlice(w){
   const g = new THREE.Group(); g.position.set(...CUT); w.scene.add(g);
   const basic = o => new THREE.MeshBasicMaterial(Object.assign({fog:false}, o));
   const plane = (wd, h, m, x, y, z, rx = 0, parent = g) => { const o = new THREE.Mesh(new THREE.PlaneGeometry(wd, h), m); o.position.set(x, y, z); o.rotation.x = rx; parent.add(o); return o; };
-  const ink = basic({color:0x1a1320}), L = 30, DZ = 5, D = 3, SNAPS = [.3, .6, .9];
-  plane(90, 70, basic({color:0xeed8b6}), 0, -3.3, -10, -Math.PI/2);
+  const ink = basic({color:0x1a1320}), L = 60, DZ = 5, D = 3, SNAPS = [.3, .6, .9];
+  diorama(g, {ground:'grass', back:-DZ, deep:0x8a3420, D:55});
+  // the grassland behind the cut rolls on, in soft humps and trees, so it never reads as a painted floor
+  for (let i = 0; i < 46; i++) { const x = ((i*37.3) % 120) - 60, z = -DZ - 3 - ((i*17.7) % 46), r = 2 + (i % 4)*1.2;
+    if (i % 3 === 0) { const hm = add(new THREE.SphereGeometry(r, 14, 8), T([0xc8a24a, 0xb8a050, 0xa8a454][i % 3]), x, -r*.72, z, g); hm.scale.y = .9; outline(hm, 1.02); continue; }
+    outline(add(new THREE.CylinderGeometry(.06, .09, .5, 6), T(C.woodDk), x, .25, z, g, false), 1.1);
+    outline(add(new THREE.ConeGeometry(.42, 1, 8), T(0x4f8a4a), x, .9, z, g, false), 1.08); }
   // the mantle: a deep orange slab, its top streaked with currents that creep each plate's own way
   const flow = dir => { const tx = tex(256, 128, (c, cw, ch) => { c.fillStyle = '#d8582a'; c.fillRect(0, 0, cw, ch);
       for (let i = 0; i < 14; i++) { c.fillStyle = i % 2 ? 'rgba(240,140,60,.6)' : 'rgba(160,50,30,.4)'; c.beginPath(); c.ellipse((i*53) % cw, (i*37) % ch, 40, 12, 0, 0, 7); c.fill(); }
@@ -496,7 +501,7 @@ function buildSlice(w){
   const nearFlow = flow(-1), farFlow = flow(1);
   plane(L, DZ, basic({map:nearFlow}), 0, -.55, DZ/2, -Math.PI/2); plane(L, DZ, basic({map:farFlow}), 0, -.55, -DZ/2, -Math.PI/2);
   const front = tex(512, 128, (c, cw, ch) => { const gr = c.createLinearGradient(0, 0, 0, ch); gr.addColorStop(0, '#e86a2c'); gr.addColorStop(1, '#8a2a20'); c.fillStyle = gr; c.fillRect(0, 0, cw, ch);
-    c.strokeStyle = 'rgba(255,200,120,.45)'; c.lineWidth = 5; for (let i = 0; i < 9; i++) { c.beginPath(); c.arc(30 + i*60, 70, 22 + (i % 3)*8, Math.PI*.1, Math.PI*1.3); c.stroke(); } }, 2, 1);
+    c.strokeStyle = 'rgba(255,200,120,.45)'; c.lineWidth = 5; for (let i = 0; i < 9; i++) { c.beginPath(); c.arc(30 + i*60, 70, 22 + (i % 3)*8, Math.PI*.1, Math.PI*1.3); c.stroke(); } }, L/15, 1);
   plane(L, 2.5, basic({map:front}), 0, -1.8, DZ);
   const crust = tex(256, 32, (c, cw, ch) => { c.fillStyle = '#8a5a3e'; c.fillRect(0, 0, cw, ch); c.fillStyle = '#a8784e'; c.fillRect(0, 8, cw, 8); c.fillStyle = '#6a4434'; c.fillRect(0, 22, cw, 10);
     c.fillStyle = '#5a9a4a'; c.fillRect(0, 0, cw, 4); }, L/4, 1);
@@ -525,10 +530,8 @@ function buildSlice(w){
     const o = new THREE.Mesh(geo, m); o.frustumCulled = false; o.userData = {sd, wd, y}; g.add(o); return o; };
   const roads = [1, -1].flatMap(sd => [strip(sd, .5, .08, rim), strip(sd, .4, .09, roadM)]);
   const dash = [1, -1].map(sd => strip(sd, .05, .1, basic({color:0xe9d9b8, side:THREE.DoubleSide})));
-  const label = (text, s, cw0 = 512) => { const tx = tex(cw0, 128, (c, cw, ch) => { c.font = '64px Caprasimo, Georgia, serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 12; c.strokeStyle = 'rgba(26,19,32,.9)'; c.strokeText(text, cw/2, ch/2); c.fillStyle = '#fff4dc'; c.fillText(text, cw/2, ch/2); });
-    tx.wrapS = tx.wrapT = THREE.ClampToEdgeWrapping; const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:tx, transparent:true, depthWrite:false, depthTest:false, fog:false})); sp.scale.set(s*cw0/128, s, 1); g.add(sp); return sp; };
-  const mantleL = label('the slow, hot mantle', .7, 1024), stuck = label('stuck!', .8), snapL = label('SNAP!', 1.3);
-  mantleL.position.set(0, -1.25, DZ + .3); stuck.position.set(1.6, 1.3, .4); snapL.position.set(0, 1.7, .2);
+  const mantleL = label(g, 'the slow, hot mantle', .85, [0, -1.25, DZ + .3], {text:'the slow,\nhot mantle', at:[0, -2.4, DZ + .3]}),
+    stuck = label(g, 'stuck!', .9, [1.6, 1.3, .4], {at:[1.8, 1.8, .4]}), snapL = label(g, 'SNAP!', 1.3, [0, 1.7, .2], {at:[0, 2.6, .2]});
   let last = 0, snapAt = -9;
   function step(k){
     const Dk = D*k, n = SNAPS.filter(s => k >= s).length, slipped = n*D*.3, strain = Dk - slipped;
@@ -542,11 +545,11 @@ function buildSlice(w){
         pa.setXYZ(i*2, x - wd/2/l, y, z + wd/2*dx/l); pa.setXYZ(i*2 + 1, x + wd/2/l, y, z - wd/2*dx/l); }
       pa.needsUpdate = true; }
     const since = game.elapsed - snapAt;
-    stuck.material.opacity = since > .7 ? clamp01(strain/(D*.3)*2 - .5) : 0;
-    snapL.material.opacity = clamp01(1 - since/1.1); snapL.scale.set(5.2*(1 + .3*clamp01(1 - since*3)), 1.3*(1 + .3*clamp01(1 - since*3)), 1);
+    stuck.set(since > .7 ? clamp01(strain/(D*.3)*2 - .5) : 0); mantleL.set();
+    snapL.set(clamp01(1 - since/1.1), 1 + .3*clamp01(1 - since*3));
   }
   step(0);
-  return {step, shot: (pos, look) => { pos.set(CUT[0], CUT[1] + 7.2, CUT[2] + 14.2); look.set(CUT[0], CUT[1] - 1.2, CUT[2] - .2); return true; }};
+  return {step, wide:6.8, shot: (pos, look) => { pos.set(CUT[0], CUT[1] + 5.8, CUT[2] + 15.4); look.set(CUT[0], CUT[1] - 1.2, CUT[2] - .2); return true; }};
 }
 
 // ---------- things to find, for anyone who goes exploring ----------
