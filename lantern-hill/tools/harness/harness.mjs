@@ -20,6 +20,12 @@
 // seeded), so to see more between two pictures, start their chapter again with a window round their ct:
 // scripted scenes come out nearly the same, anything the explorer or chance drives won't.
 //
+// `view` is the screen, and can change at any moment too: 'desktop' (1280×800), 'phone' (an iPhone 15
+// held upright: touch, notch, home bar), 'phone-land', any device in tools/phone.mjs ('pixel-7',
+// 'pixel-7-land'), or '900x600' for a desktop window that size. Phones draw at 2x. The game picks its
+// touch controls (the stick, the Use button) when the page loads, so after a switch between touch and
+// mouse those follow at the next start(); the size, the layout and the notch change at once.
+//
 // Anyone shown standing inside something solid is logged to clips.jsonl, with the picture just before.
 //
 // Only one headless Chrome should run on a machine at a time; pass `lock` (a directory path) and
@@ -30,21 +36,30 @@ import { appendFileSync, mkdirSync, readFileSync, rmSync, rmdirSync, writeFileSy
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DEVICES, emulate } from '../phone.mjs';
 
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 // a hung page must not keep the browser, and the lock, held forever
 const within = (ms, p) => Promise.race([p, sleep(ms).then(() => { throw new Error('the page stopped answering'); })]);
+function screenOf(view){
+  const [, w, h] = /^(\d+)x(\d+)$/.exec(view === 'desktop' ? '1280x800' : view) || [], [, name, land] = /^(.+?)(-land)?$/.exec(view);
+  if (w) return {view, w: +w, h: +h, touch: false};
+  const device = name === 'phone' ? 'iphone-15' : name, d = DEVICES[device];
+  if (!d) throw new Error(`no screen ${view}; try desktop, phone, phone-land, ${Object.keys(DEVICES).join(', ')} (each may end -land), or 900x600`);
+  return {view, device, landscape: !!land, w: land ? d.h : d.w, h: land ? d.w : d.h, touch: true};
+}
 const denseOf = d => typeof d !== 'string' ? d || {} : Object.fromEntries(d.split(',').filter(w => w && w !== 'none').map(w => w.split('=')).map(([k, v]) => [k.trim(), +v]));
 
 export async function harness(url, {speed = 1, read = 1.2, every = 2, dense, log = join(tmpdir(), 'lh-runs', new Date().toISOString().replace(/[:.]/g, '-')),
-  width = 1280, height = 800, lock = process.env.LH_BROWSER_LOCK, minutes = 8} = {}){
+  view = 'desktop', lock = process.env.LH_BROWSER_LOCK, minutes = 8} = {}){
   const now = {speed, read, every, dense:denseOf(dense)};
+  let scr = screenOf(view), loadedTouch = null;
   if (lock) { for (let said = false; ; said = true) { try { mkdirSync(lock); break; } catch { if (!said) console.error('waiting for the browser lock', lock); await sleep(5000); } } }
   mkdirSync(log, {recursive: true});
   const profile = await mkdtemp(join(tmpdir(), 'lh-harness-'));
   const chrome = spawn(CHROME, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--no-first-run', '--mute-audio',
-    `--window-size=${width},${height}`, 'about:blank'], {stdio: 'ignore'});
+    `--window-size=${scr.w},${scr.h}`, 'about:blank'], {stdio: 'ignore'});
   let closed = false;
   const kill = () => { if (closed) return; closed = true; chrome.kill('SIGKILL'); try { rmSync(profile, {recursive: true, force: true}); } catch {} if (lock) try { rmdirSync(lock); } catch {} };
   // a signal skips 'exit' handlers unless it is turned into an exit; Chrome and the lock must not outlive us
@@ -71,7 +86,7 @@ export async function harness(url, {speed = 1, read = 1.2, every = 2, dense, log
     if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
   await send('Runtime.enable'); await send('Page.enable');
   await send('Runtime.addBinding', {name: 'harnessFrame'}); await send('Runtime.addBinding', {name: 'harnessClip'});
-  await send('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
+  await emulate(send, {...scr, dpr: scr.touch ? 2 : 1});
 
   // the game is holding still for this one; let it go once it's on disk
   async function picture(info){
@@ -102,17 +117,19 @@ export async function harness(url, {speed = 1, read = 1.2, every = 2, dense, log
       await send('Page.navigate', {url});
       for (let i = 0; i < 100 && !await ev(`!!document.querySelector('#start') && document.readyState === 'complete'`).catch(() => false); i++) await sleep(100);
       await sleep(1500);
-      await clickAt(width/2, height/2); await sleep(800);
+      loadedTouch = scr.touch; await clickAt(scr.w/2, scr.h/2); await sleep(800);
       if (await ev(`document.documentElement.classList.contains('dressing')`)) { await key('Escape'); await sleep(600); }
       await ev(`import(document.baseURI + 'js/testing.js')`); runs++;
       await ev(`harness.pace(${JSON.stringify(now)})`);
       return ev(`harness.start(${JSON.stringify(opts)})`);
     },
     // clips are those since the last state, like heard
-    async state(){ const s = await ev('harness.state()'); s.errors = errors.splice(0); s.frames = frames; s.clips = clips.splice(0); return s; },
+    async state(){ const s = await ev('harness.state()'); s.errors = errors.splice(0); s.frames = frames; s.clips = clips.splice(0); s.screen = `${scr.view} ${scr.w}×${scr.h}`; return s; },
     // speed, read, every and dense can change at any moment; a fresh start keeps whatever they are now
     async pace(o){ o = {...o}; if ('dense' in o) o.dense = denseOf(o.dense);
       const r = await ev(`window.harness ? harness.pace(${JSON.stringify(o)}) : null`); Object.assign(now, o); return r || now; },
+    async view(v){ const next = screenOf(v); await emulate(send, {...next, dpr: next.touch ? 2 : 1}); scr = next;
+      return `screen ${v}, ${scr.w}×${scr.h}` + (loadedTouch !== null && loadedTouch !== scr.touch ? `; ${scr.touch ? 'touch' : 'mouse'} controls come with the next start` : ''); },
     wait: (s = 10) => ev(`harness.wait(${+s})`),
     walk: name => ev(`harness.walk(${JSON.stringify(name)})`),
     async talkTo(name){ const r = await h.walk(name); if (r !== 'arrived') return r; await key('Space'); return 'talking to ' + name; },
@@ -167,8 +184,8 @@ async function sheet(tiles){
   c.width = 4*W + 5*P; c.height = Math.ceil(tiles.length/4)*(H + L + P) + P; g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
   for (const [i, t] of tiles.entries()) {
     const im = new Image(); im.src = t.src; await im.decode();
-    const x = P + (i % 4)*(W + P), y = P + Math.floor(i/4)*(H + L + P);
-    g.drawImage(im, x, y, W, H); g.font = 'bold 14px system-ui'; g.textBaseline = 'middle';
+    const x = P + (i % 4)*(W + P), y = P + Math.floor(i/4)*(H + L + P), k = Math.min(W/im.width, H/im.height), iw = im.width*k, ih = im.height*k;
+    g.fillStyle = '#eee'; g.fillRect(x, y, W, H); g.drawImage(im, x + (W - iw)/2, y + (H - ih)/2, iw, ih); g.font = 'bold 14px system-ui'; g.textBaseline = 'middle';
     if (t.inside) { g.strokeStyle = '#d00'; g.lineWidth = 4; g.strokeRect(x + 2, y + 2, W - 4, H - 4); }
     g.fillStyle = t.inside ? '#d00' : '#222'; g.fillText(t.label + (t.inside ? '  IN: ' + t.inside : ''), x + 2, y + H + L/2, W - 4);
   }

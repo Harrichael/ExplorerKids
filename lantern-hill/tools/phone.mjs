@@ -19,11 +19,14 @@
 //   await p.shot('after.png');
 //   await p.close();
 //
+// Only one headless Chrome should run on a machine at a time: pass `lock` (a directory path), or set
+// LH_BROWSER_LOCK, and it waits its turn, as tools/harness does.
+//
 // What it can't tell you: frame rate (it renders on this computer's GPU, much faster than a phone's),
 // how big things feel under a thumb, and iOS Safari quirks. Use a real phone on the LAN for those.
 
 import { spawn } from 'node:child_process';
-import { rmSync } from 'node:fs';
+import { mkdirSync, rmdirSync, rmSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -39,20 +42,37 @@ export const DEVICES = {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-export async function phone(url, {device = 'iphone-15', landscape = false, dpr} = {}){
+// Turns a page into the device, or back into a desktop (no device) at w×h. tools/harness switches screens
+// mid-session with it. True means env(safe-area-inset-*) took; it's experimental in Chrome, and without
+// it notches go unchecked.
+export async function emulate(send, {device, landscape = false, dpr, w, h}){
+  const d = device && DEVICES[device];
+  if (device && !d) throw new Error(`unknown device ${device}; try ${Object.keys(DEVICES).join(', ')}`);
+  if (d) [w, h] = landscape ? [d.h, d.w] : [d.w, d.h];
+  const i = {top: 0, bottom: 0, left: 0, right: 0, ...(d ? landscape ? d.insetLand : d.inset : {})};
+  await send('Emulation.setDeviceMetricsOverride', {width: w, height: h, deviceScaleFactor: dpr ?? (d ? d.dpr : 1), mobile: !!d,
+    ...d && {screenOrientation: landscape ? {type: 'landscapePrimary', angle: 90} : {type: 'portraitPrimary', angle: 0}}});
+  await send('Emulation.setTouchEmulationEnabled', {enabled: !!d, maxTouchPoints: d ? 5 : 1});
+  return send('Emulation.setSafeAreaInsetsOverride', {insets: {top: i.top, topMax: i.top, bottom: i.bottom, bottomMax: i.bottom,
+    left: i.left, leftMax: i.left, right: i.right, rightMax: i.right}}).then(() => true, () => false);
+}
+
+export async function phone(url, {device = 'iphone-15', landscape = false, dpr, lock = process.env.LH_BROWSER_LOCK} = {}){
   const d = DEVICES[device];
   if (!d) throw new Error(`unknown device ${device}; try ${Object.keys(DEVICES).join(', ')}`);
-  const [w, h] = landscape ? [d.h, d.w] : [d.w, d.h], inset = landscape ? d.insetLand : d.inset;
+  const [w, h] = landscape ? [d.h, d.w] : [d.w, d.h];
+  if (lock) for (let said = false; ; said = true) { try { mkdirSync(lock); break; } catch { if (!said) console.error('waiting for the browser lock', lock); await sleep(5000); } }
+  const free = () => { if (lock) try { rmdirSync(lock); } catch {} };
   const profile = await mkdtemp(join(tmpdir(), 'phone-'));
   const chrome = spawn(CHROME, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--no-first-run', '--mute-audio',
     `--window-size=${w},${h}`, 'about:blank'], {stdio: 'ignore'});
   // a script that throws or is interrupted never reaches close(); don't leave Chrome running behind it
-  const orphan = () => { chrome.kill('SIGKILL'); try { rmSync(profile, {recursive: true, force: true}); } catch {} };
-  process.once('exit', orphan); process.once('SIGINT', () => process.exit(130));
+  const orphan = () => { chrome.kill('SIGKILL'); try { rmSync(profile, {recursive: true, force: true}); } catch {} free(); };
+  process.once('exit', orphan); for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.once(sig, () => process.exit(130));
 
   let port = null;
   for (let i = 0; i < 100 && !port; i++) { await sleep(100); port = await readFile(join(profile, 'DevToolsActivePort'), 'utf8').then(s => s.split('\n')[0], () => null); }
-  if (!port) throw new Error('Chrome did not start');
+  if (!port) { orphan(); throw new Error('Chrome did not start'); }
   const [page] = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).filter(t => t.type === 'page');
   const ws = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((ok, fail) => { ws.onopen = ok; ws.onerror = fail; });
@@ -67,13 +87,7 @@ export async function phone(url, {device = 'iphone-15', landscape = false, dpr} 
   const send = (method, params = {}) => new Promise((ok, fail) => { const id = ++next; waiting.set(id, {ok, fail}); ws.send(JSON.stringify({id, method, params})); });
 
   await send('Runtime.enable');
-  await send('Emulation.setDeviceMetricsOverride', {width: w, height: h, deviceScaleFactor: dpr ?? d.dpr, mobile: true,
-    screenOrientation: landscape ? {type: 'landscapePrimary', angle: 90} : {type: 'portraitPrimary', angle: 0}});
-  await send('Emulation.setTouchEmulationEnabled', {enabled: true, maxTouchPoints: 5});
-  const i = {top: 0, bottom: 0, left: 0, right: 0, ...inset};
-  // experimental in Chrome; without it env(safe-area-inset-*) stays 0 and notches go unchecked
-  const insets = await send('Emulation.setSafeAreaInsetsOverride', {insets: {top: i.top, topMax: i.top, bottom: i.bottom, bottomMax: i.bottom,
-    left: i.left, leftMax: i.left, right: i.right, rightMax: i.right}}).then(() => true, () => false);
+  const insets = await emulate(send, {device, landscape, dpr});
   await send('Page.enable');
   await send('Page.navigate', {url});
   await sleep(500);
@@ -104,7 +118,7 @@ export async function phone(url, {device = 'iphone-15', landscape = false, dpr} 
     async shot(file){ const {data} = await send('Page.captureScreenshot', {format: 'png'}); await writeFile(file, Buffer.from(data, 'base64')); return file; },
     // Chrome keeps writing to its profile for a moment after the signal, so wait for it to exit
     async close(){ process.off('exit', orphan); ws.close(); const gone = new Promise(r => chrome.exitCode !== null ? r() : chrome.once('exit', r));
-      chrome.kill(); await gone; await rm(profile, {recursive: true, force: true, maxRetries: 5}); },
+      chrome.kill(); await gone; await rm(profile, {recursive: true, force: true, maxRetries: 5}); free(); },
   };
   return p;
 }

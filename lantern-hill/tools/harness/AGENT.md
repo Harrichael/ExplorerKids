@@ -39,6 +39,10 @@ Commands:
   hopping through the bus door), `bus` (riding inside it), `watch` (a scene playing), `clip` (someone inside
   something solid), or `12-18` (12 to 18 s into the chapter). Each `--dense` replaces the last; `none` clears it.
 
+- `view phone`: change the screen, any time: `desktop`, `phone`, `phone-land`, `pixel-7`, `pixel-7-land`, or
+  a size like `900x600`. `SCREEN` shows which one is on. The game picks touch or keyboard controls when it
+  loads, so after switching between a phone and a desktop, run `start` again to see the right controls.
+
 `INSIDE SOMETHING SOLID` means a person is standing in a wall, rock or the bus. Report each one with its
 time and the picture number. `CAMERA` is the shot on screen (`follow`, or a cut such as `class`, `teacher`,
 `window`).

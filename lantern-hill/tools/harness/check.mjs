@@ -1,7 +1,7 @@
 // Checks the harness itself, and shows how to use it: land on the hotspot island at eight times
 // speed, wait out the arrival, walk round the rocks to a classmate, talk, log pictures closer
 // together for a while, and find the whole visit in the picture log. Then put Mo inside the parked
-// bus on purpose, to see the clip log catch it.
+// bus on purpose, to see the clip log catch it. Last, turn the screen into a phone mid-visit.
 //
 //   node tools/harness/check.mjs http://127.0.0.1:8000/
 //
@@ -43,6 +43,12 @@ try {
   await new Promise(ok => setTimeout(ok, 1000));
   s = await h.state();
   expect(s.clips.some(c => c.who === 'Mo'), `Mo, moved into the biggest solid box, is caught there (${s.clips.map(c => c.who).join(', ') || 'nobody'})`);
+
+  await h.view('phone');
+  const png = readFileSync(await h.shot()), size = [png.readUInt32BE(16), png.readUInt32BE(20)];
+  s = await h.state();
+  expect(size.join('x') === '786x1704' && await h.eval('innerWidth') === 393, `a phone picture mid-visit is 393×852 at 2x (${size.join('×')})`);
+  expect(s.trip === 'tectonics' && s.people.length && s.screen.startsWith('phone'), `the game still reads on the phone (${s.screen}, ${s.control}, ${s.people.length} people)`);
 
   const log = readFileSync(join(h.log, 'index.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l)), gap = (f, i) => i && f.t - log[i - 1].t;
   expect(log.length > 10 && log.every((f, i) => !i || f.t <= closer || gap(f, i) < 1.2), `${log.length} pictures, about one a second of game time`);
